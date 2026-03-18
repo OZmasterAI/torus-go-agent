@@ -196,6 +196,13 @@ func (d *DAG) CurrentBranchInfo() (branchID, branchName, headNode string, msgCou
 	return
 }
 
+// ResetHead clears the current branch's head, so the next message starts a fresh
+// chain on the same branch. Existing nodes remain in the DB but won't be traversed.
+func (d *DAG) ResetHead() error {
+	_, err := d.db.Exec("UPDATE branches SET head_node_id = '' WHERE id = ?", d.branchID)
+	return err
+}
+
 // Branch creates a new branch continuing from fromNodeID (prompt includes ancestor history).
 func (d *DAG) Branch(fromNodeID, name string) (string, error) {
 	id := "br_" + genID()

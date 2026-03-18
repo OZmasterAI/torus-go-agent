@@ -20,6 +20,13 @@ const (
 	HookOnAgentEnd         HookPoint = "on_agent_end"
 	HookOnTurnStart        HookPoint = "on_turn_start"
 	HookOnTurnEnd          HookPoint = "on_turn_end"
+	HookOnStopFailure      HookPoint = "on_stop_failure"
+	HookPreCompact         HookPoint = "pre_compact"
+	HookPostCompact        HookPoint = "post_compact"
+	HookBeforeNewBranch    HookPoint = "before_new_branch"
+	HookAfterNewBranch     HookPoint = "after_new_branch"
+	HookPreClear           HookPoint = "pre_clear"
+	HookPostClear          HookPoint = "post_clear"
 )
 
 type HookData struct {

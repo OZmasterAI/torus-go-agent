@@ -67,7 +67,13 @@ func (a *Agent) Run(ctx context.Context, userMessage string) (string, error) {
 
 		// Compaction: check if context exceeds threshold
 		if a.compaction.Mode != CompactionOff && NeedsCompaction(messages, a.compaction) {
-			log.Printf("[loop] compaction triggered (%d messages)", len(messages))
+			preCount := len(messages)
+			log.Printf("[loop] compaction triggered (%d messages)", preCount)
+			a.hooks.Fire(ctx, HookPreCompact, &HookData{
+				AgentID:  "main",
+				Messages: messages,
+				Meta:     map[string]any{"mode": string(a.compaction.Mode), "message_count": preCount},
+			})
 			switch a.compaction.Mode {
 			case CompactionSliding:
 				messages = CompactSliding(messages, a.compaction.KeepLastN)
@@ -80,6 +86,14 @@ func (a *Agent) Run(ctx context.Context, userMessage string) (string, error) {
 					messages = compacted
 				}
 			}
+			a.hooks.Fire(ctx, HookPostCompact, &HookData{
+				AgentID: "main",
+				Meta: map[string]any{
+					"mode":           string(a.compaction.Mode),
+					"messages_before": preCount,
+					"messages_after":  len(messages),
+				},
+			})
 		}
 
 		// Fire before context build
@@ -210,6 +224,14 @@ func (a *Agent) Run(ctx context.Context, userMessage string) (string, error) {
 
 		a.hooks.Fire(ctx, HookOnTurnEnd, &HookData{AgentID: "main", Response: resp})
 		_ = userNodeID // used above
+	}
+
+	// Fire stop failure if loop exhausted without a final response
+	if finalText == "" {
+		a.hooks.Fire(ctx, HookOnStopFailure, &HookData{
+			AgentID: "main",
+			Meta:    map[string]any{"reason": "max_turns_exhausted", "max_turns": a.config.MaxTurns},
+		})
 	}
 
 	// Fire agent end

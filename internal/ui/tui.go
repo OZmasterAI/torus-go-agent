@@ -160,10 +160,37 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, tea.Quit
 			}
 			if input == "/new" {
-				// Start fresh branch with empty head — no history carried over
-				m.agent.DAG().NewBranch(fmt.Sprintf("session-%d", time.Now().Unix()))
+				oldBranch := m.agent.DAG().CurrentBranchID()
+				m.agent.Hooks().Fire(context.Background(), core.HookBeforeNewBranch, &core.HookData{
+					AgentID: "main",
+					Meta:    map[string]any{"old_branch": oldBranch},
+				})
+				newBranch, _ := m.agent.DAG().NewBranch(fmt.Sprintf("session-%d", time.Now().Unix()))
+				m.agent.Hooks().Fire(context.Background(), core.HookAfterNewBranch, &core.HookData{
+					AgentID: "main",
+					Meta:    map[string]any{"old_branch": oldBranch, "new_branch": newBranch},
+				})
 				m.messages = m.messages[:0]
 				m.messages = append(m.messages, displayMsg{role: "assistant", text: "New conversation started (previous preserved on old branch)."})
+				m.totalTokensIn = 0
+				m.totalTokensOut = 0
+				m.totalCost = 0
+				m.input = ""
+				return m, nil
+			}
+			if input == "/clear" {
+				branchID := m.agent.DAG().CurrentBranchID()
+				m.agent.Hooks().Fire(context.Background(), core.HookPreClear, &core.HookData{
+					AgentID: "main",
+					Meta:    map[string]any{"branch": branchID},
+				})
+				m.agent.DAG().ResetHead()
+				m.agent.Hooks().Fire(context.Background(), core.HookPostClear, &core.HookData{
+					AgentID: "main",
+					Meta:    map[string]any{"branch": branchID},
+				})
+				m.messages = m.messages[:0]
+				m.messages = append(m.messages, displayMsg{role: "assistant", text: "Context cleared on current branch."})
 				m.totalTokensIn = 0
 				m.totalTokensOut = 0
 				m.totalCost = 0
