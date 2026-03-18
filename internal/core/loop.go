@@ -163,6 +163,27 @@ func (a *Agent) Run(ctx context.Context, userMessage string) (string, error) {
 		// Check for tool use
 		if !HasToolUse(resp) {
 			finalText = ExtractText(resp)
+
+			// before_loop_exit: hooks can inject follow-up messages + set Block to force another turn
+			exitData := &HookData{
+				AgentID:  "main",
+				Response: resp,
+				Messages: nil, // hooks populate this with follow-up messages
+				Meta:     map[string]any{"final_text": finalText},
+			}
+			a.hooks.Fire(ctx, HookBeforeLoopExit, exitData)
+
+			if exitData.Block && len(exitData.Messages) > 0 {
+				// Hook wants another turn — add follow-up messages to DAG
+				for _, msg := range exitData.Messages {
+					fHead, _ := a.dag.GetHead()
+					a.dag.AddNode(fHead, msg.Role, msg.Content, "", "", 0)
+				}
+				finalText = "" // reset — we're continuing
+				a.hooks.Fire(ctx, HookOnTurnEnd, &HookData{AgentID: "main", Response: resp})
+				continue // back to top of loop
+			}
+
 			a.hooks.Fire(ctx, HookOnTurnEnd, &HookData{AgentID: "main", Response: resp})
 			break
 		}
@@ -233,6 +254,21 @@ func (a *Agent) Run(ctx context.Context, userMessage string) (string, error) {
 				IsError:   result.IsError,
 			}}
 			a.dag.AddNode(toolHead, RoleTool, toolContent, "", "", 0)
+		}
+
+		// after_tool_result: fires after ALL tool results are in DAG, before next LLM turn.
+		// Hooks can inject steering messages to guide the LLM's next reasoning step.
+		steerData := &HookData{
+			AgentID:  "main",
+			Response: resp,
+			Messages: nil, // hooks populate this with steering messages
+		}
+		a.hooks.Fire(ctx, HookAfterToolResult, steerData)
+		if len(steerData.Messages) > 0 {
+			for _, msg := range steerData.Messages {
+				sHead, _ := a.dag.GetHead()
+				a.dag.AddNode(sHead, msg.Role, msg.Content, "", "", 0)
+			}
 		}
 
 		a.hooks.Fire(ctx, HookOnTurnEnd, &HookData{AgentID: "main", Response: resp})
