@@ -156,9 +156,10 @@ func main() {
 			APIKey:    key,
 			MaxTokens: cfg.Agent.MaxTokens,
 		},
-		SystemPrompt: soul,
-		Tools:        tools,
-		MaxTurns:     30,
+		SystemPrompt:  soul,
+		Tools:         tools,
+		MaxTurns:      30,
+		ContextWindow: cfg.Agent.ContextWindow,
 	}, prov, hooks, dag)
 
 	// Add spawn tool (needs agent reference, so added after agent creation)

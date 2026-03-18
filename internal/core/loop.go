@@ -31,7 +31,7 @@ func NewAgent(config AgentConfig, provider Provider, hooks *HookRegistry, dag *D
 			Mode:          CompactionLLM,
 			Threshold:     80,
 			KeepLastN:     10,
-			ContextWindow: config.Provider.MaxTokens,
+			ContextWindow: config.ContextWindow,
 		},
 	}
 }
@@ -77,6 +77,9 @@ func (a *Agent) Run(ctx context.Context, userMessage string) (string, error) {
 		if err != nil {
 			return "", fmt.Errorf("build context: %w", err)
 		}
+
+		// Sanitize messages: remove empty blocks, dedup identical blocks, merge consecutive same-role
+		messages = sanitizeMessages(messages)
 
 		// Compaction: check if context exceeds threshold
 		if a.compaction.Mode != CompactionOff && NeedsCompaction(messages, a.compaction) {
@@ -152,6 +155,10 @@ func (a *Agent) Run(ctx context.Context, userMessage string) (string, error) {
 		}
 		if llmErr != nil {
 			a.hooks.Fire(ctx, HookOnError, &HookData{AgentID: "main", Meta: map[string]any{"error": llmErr.Error()}})
+			// Roll back the user node to prevent dangling orphans in the DAG
+			if turn == 0 {
+				a.dag.RemoveNode(userNodeID)
+			}
 			return "", fmt.Errorf("llm call: %w", llmErr)
 		}
 

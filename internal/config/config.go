@@ -33,7 +33,8 @@ type TelegramConfig struct {
 type AgentConfig struct {
 	Provider          string `json:"provider"`
 	Model             string `json:"model"`
-	MaxTokens         int    `json:"maxTokens"`
+	MaxTokens         int    `json:"maxTokens"`     // max output tokens per response
+	ContextWindow     int    `json:"contextWindow"` // model's full context window size
 	Compaction        string `json:"compaction"`
 	CompactionModel   string `json:"compactionModel"`
 	SmartRouting      bool   `json:"smartRouting"`
@@ -58,6 +59,9 @@ func LoadConfig(path string) (*Config, error) {
 	// Defaults
 	if cfg.Agent.MaxTokens == 0 {
 		cfg.Agent.MaxTokens = 8192
+	}
+	if cfg.Agent.ContextWindow == 0 {
+		cfg.Agent.ContextWindow = 128000 // safe default for most models
 	}
 	if cfg.Agent.Compaction == "" {
 		cfg.Agent.Compaction = "llm"

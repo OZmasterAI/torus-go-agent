@@ -207,6 +207,22 @@ func (d *DAG) CurrentBranchInfo() (branchID, branchName, headNode string, msgCou
 	return
 }
 
+// RemoveNode deletes a node from the DAG and rewinds the branch head to the node's parent.
+// Used to roll back a dangling user node when an LLM call fails.
+func (d *DAG) RemoveNode(nodeID string) error {
+	var parentID sql.NullString
+	if err := d.db.QueryRow("SELECT parent_id FROM nodes WHERE id = ?", nodeID).Scan(&parentID); err != nil {
+		return fmt.Errorf("find node: %w", err)
+	}
+	newHead := ""
+	if parentID.Valid {
+		newHead = parentID.String
+	}
+	d.db.Exec("DELETE FROM nodes WHERE id = ?", nodeID)
+	d.db.Exec("UPDATE branches SET head_node_id = ? WHERE id = ?", newHead, d.branchID)
+	return nil
+}
+
 // ResetHead clears the current branch's head, so the next message starts a fresh
 // chain on the same branch. Existing nodes remain in the DB but won't be traversed.
 func (d *DAG) ResetHead() error {

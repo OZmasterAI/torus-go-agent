@@ -3,7 +3,8 @@
   "agent": {
     "provider": "nvidia",
     "model": "z-ai/glm4.7",
-    "maxTokens": 16384
+    "maxTokens": 16384,
+    "contextWindow": 262144
   },
   "data": { "dir": "../data" }
 }

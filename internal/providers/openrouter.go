@@ -439,6 +439,7 @@ func (p *OpenRouterProvider) parseOpenAISSE(ctx context.Context, resp *http.Resp
 		toolArgs   []strings.Builder // accumulated arguments per tool call index
 		usage      t.Usage
 		stopReason string
+		finished   bool // guard against duplicate finish chunks
 	)
 
 	send := func(ev t.StreamEvent) bool {
@@ -537,6 +538,10 @@ func (p *OpenRouterProvider) parseOpenAISSE(ctx context.Context, resp *http.Resp
 		}
 
 		if choice.FinishReason != nil && *choice.FinishReason != "" {
+			if finished {
+				continue // ignore duplicate finish chunks
+			}
+			finished = true
 			stopReason = *choice.FinishReason
 		}
 	}

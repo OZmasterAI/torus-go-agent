@@ -105,6 +105,7 @@ type AgentConfig struct {
 	SystemPrompt      string         `json:"system_prompt"`
 	Tools             []Tool         `json:"-"`
 	MaxTurns          int            `json:"max_turns"`
+	ContextWindow     int            `json:"context_window"` // model's full context window for compaction threshold
 	CompactionModel   string         `json:"compaction_model,omitempty"`
 	SmartRouting      bool           `json:"smart_routing"`
 	SmartRoutingModel string         `json:"smart_routing_model,omitempty"`

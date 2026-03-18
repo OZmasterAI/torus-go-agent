@@ -313,3 +313,44 @@ func nodesToMessages(nodes []Node) []Message {
 	}
 	return msgs
 }
+
+// sanitizeMessages cleans up a message slice before sending to a provider:
+//   - Filters out empty text blocks (text: "")
+//   - Deduplicates identical text blocks within the same message
+//   - Merges consecutive messages with the same role
+func sanitizeMessages(messages []Message) []Message {
+	// Pass 1: clean blocks within each message
+	for i := range messages {
+		var cleaned []ContentBlock
+		seen := map[string]bool{}
+		for _, b := range messages[i].Content {
+			// Skip empty text blocks
+			if b.Type == "text" && b.Text == "" {
+				continue
+			}
+			// Dedup identical text blocks
+			if b.Type == "text" {
+				if seen[b.Text] {
+					continue
+				}
+				seen[b.Text] = true
+			}
+			cleaned = append(cleaned, b)
+		}
+		messages[i].Content = cleaned
+	}
+
+	// Pass 2: merge consecutive same-role messages (skip tool messages — they must stay separate)
+	var merged []Message
+	for _, m := range messages {
+		if len(m.Content) == 0 {
+			continue
+		}
+		if len(merged) > 0 && merged[len(merged)-1].Role == m.Role && m.Role != RoleTool {
+			merged[len(merged)-1].Content = append(merged[len(merged)-1].Content, m.Content...)
+		} else {
+			merged = append(merged, m)
+		}
+	}
+	return merged
+}
