@@ -1,0 +1,315 @@
+package core
+
+import (
+	"encoding/json"
+	"fmt"
+	"strings"
+)
+
+// CompactionMode controls how the context window is managed when it fills up.
+type CompactionMode string
+
+const (
+	// CompactionOff disables all compaction — the loop will error or truncate at provider limits.
+	CompactionOff CompactionMode = "off"
+
+	// CompactionSliding drops middle messages, keeping the first and last N.
+	CompactionSliding CompactionMode = "sliding"
+
+	// CompactionLLM summarises dropped messages via an LLM call before compacting.
+	CompactionLLM CompactionMode = "llm"
+)
+
+// CompactionConfig configures the compaction pipeline.
+type CompactionConfig struct {
+	// Mode selects which compaction strategy to use.
+	Mode CompactionMode
+
+	// Threshold is the percent of the ContextWindow at which compaction triggers (0–100).
+	// Default: 80
+	Threshold int
+
+	// KeepLastN is the number of recent messages to preserve verbatim after compaction.
+	// Default: 10
+	KeepLastN int
+
+	// ContextWindow is the token ceiling for the model in use (e.g. 200000 for claude-3-5-sonnet).
+	ContextWindow int
+
+	// CompactionModel is the model ID used for LLM-mode summarisation.
+	// Falls back to extractKeyContent if empty or if the summarise call fails.
+	CompactionModel string
+}
+
+// defaultCompactionConfig fills in zero-value fields with sensible defaults.
+func defaultCompactionConfig(cfg CompactionConfig) CompactionConfig {
+	if cfg.Threshold == 0 {
+		cfg.Threshold = 80
+	}
+	if cfg.KeepLastN == 0 {
+		cfg.KeepLastN = 10
+	}
+	if cfg.ContextWindow == 0 {
+		cfg.ContextWindow = 200_000
+	}
+	return cfg
+}
+
+// estimateTokens returns a rough token count for a slice of messages.
+// Uses the same len/3.5 heuristic as the rest of the codebase — good enough
+// for a threshold check without a round-trip to a tokenizer.
+func estimateTokens(messages []Message) int {
+	b, err := json.Marshal(messages)
+	if err != nil {
+		// Fallback: sum character lengths
+		var n int
+		for _, m := range messages {
+			for _, c := range m.Content {
+				n += len(c.Text) + len(c.Content)
+			}
+		}
+		return int(float64(n) / 3.5)
+	}
+	return int(float64(len(b)) / 3.5)
+}
+
+// NeedsCompaction returns true when the estimated token count of messages
+// exceeds cfg.Threshold percent of cfg.ContextWindow.
+func NeedsCompaction(messages []Message, cfg CompactionConfig) bool {
+	cfg = defaultCompactionConfig(cfg)
+	if cfg.Mode == CompactionOff {
+		return false
+	}
+	tokens := estimateTokens(messages)
+	limit := cfg.ContextWindow * cfg.Threshold / 100
+	return tokens >= limit
+}
+
+// CompactSliding keeps the first message (system / initial user turn) and the
+// last keepLastN messages. Everything in between is dropped.
+//
+// If len(messages) <= keepLastN+1 the slice is returned unchanged.
+func CompactSliding(messages []Message, keepLastN int) []Message {
+	if keepLastN <= 0 {
+		keepLastN = 10
+	}
+	if len(messages) <= keepLastN+1 {
+		return messages
+	}
+	result := make([]Message, 0, keepLastN+1)
+	result = append(result, messages[0]) // always keep the first
+	tail := messages[len(messages)-keepLastN:]
+	result = append(result, tail...)
+	return result
+}
+
+// CompactLLM summarises the dropped messages via an LLM call, then returns:
+//
+//	[ messages[0], <summary assistant message>, ...last-N messages ]
+//
+// The summarize callback receives the key content extracted from the middle
+// messages and must return a human-readable summary string.
+//
+// Falls back to extractKeyContent (no LLM call) when:
+//   - summarize is nil
+//   - the summarize call returns an error
+func CompactLLM(messages []Message, keepLastN int, summarize func(string) (string, error)) ([]Message, error) {
+	if keepLastN <= 0 {
+		keepLastN = 10
+	}
+	if len(messages) <= keepLastN+1 {
+		return messages, nil
+	}
+
+	// The "middle" is everything after the first message and before the last N.
+	middle := messages[1 : len(messages)-keepLastN]
+	keyContent := extractKeyContent(middle)
+
+	var summary string
+	if summarize != nil {
+		var err error
+		summary, err = summarize(keyContent)
+		if err != nil {
+			// Graceful fallback — use raw key content as the summary body.
+			summary = keyContent
+		}
+	} else {
+		summary = keyContent
+	}
+
+	summaryMsg := Message{
+		Role: RoleAssistant,
+		Content: []ContentBlock{{
+			Type: "text",
+			Text: fmt.Sprintf("[Context Summary]\n\n%s", summary),
+		}},
+	}
+
+	tail := messages[len(messages)-keepLastN:]
+	result := make([]Message, 0, 2+len(tail))
+	result = append(result, messages[0])
+	result = append(result, summaryMsg)
+	result = append(result, tail...)
+	return result, nil
+}
+
+// extractKeyContent walks messages and builds a concise textual representation
+// of the conversation, prefixed with speaker labels. The result is truncated
+// to 2000 characters so it is always safe to embed in a downstream prompt.
+func extractKeyContent(messages []Message) string {
+	var sb strings.Builder
+	for _, m := range messages {
+		switch m.Role {
+		case RoleUser:
+			sb.WriteString("[User]\n")
+		case RoleAssistant:
+			sb.WriteString("[Assistant]\n")
+		case RoleSystem:
+			sb.WriteString("[System]\n")
+		case RoleTool:
+			// Tool messages may contain multiple blocks; label each.
+		}
+		for _, b := range m.Content {
+			switch b.Type {
+			case "text":
+				if b.Text != "" {
+					sb.WriteString(b.Text)
+					sb.WriteByte('\n')
+				}
+			case "tool_use":
+				sb.WriteString(fmt.Sprintf("[ToolCall: %s]\n", b.Name))
+				if len(b.Input) > 0 {
+					if raw, err := json.Marshal(b.Input); err == nil {
+						sb.Write(raw)
+						sb.WriteByte('\n')
+					}
+				}
+			case "tool_result":
+				sb.WriteString(fmt.Sprintf("[ToolResult: %s]\n", b.ToolUseID))
+				if b.Content != "" {
+					sb.WriteString(b.Content)
+					sb.WriteByte('\n')
+				}
+			}
+		}
+	}
+
+	out := sb.String()
+	const maxChars = 2000
+	if len(out) > maxChars {
+		out = out[:maxChars]
+	}
+	return out
+}
+
+// CompactDAG is the DAG-native compaction strategy.
+//
+// Unlike linear compaction, it never destroys history. Instead it:
+//  1. Reads all ancestors from the current HEAD.
+//  2. Checks NeedsCompaction against that message list.
+//  3. If compaction is needed, extracts key content from the middle messages.
+//  4. Calls summarize to produce a summary string (falls back to key content).
+//  5. Creates a new branch forked from the root node (first ancestor).
+//  6. Adds a single assistant "context summary" node on the new branch.
+//  7. Re-adds the last KeepLastN messages as new nodes on the new branch.
+//  8. Switches the DAG to the new branch (original branch is fully preserved).
+//
+// The dag is mutated in place (branch switch). Returns nil when no compaction
+// was needed.
+func CompactDAG(dag *DAG, cfg CompactionConfig, summarize func(string) (string, error)) error {
+	cfg = defaultCompactionConfig(cfg)
+	if cfg.Mode == CompactionOff {
+		return nil
+	}
+
+	// --- 1. Get current path ---
+	head, err := dag.GetHead()
+	if err != nil {
+		return fmt.Errorf("compactDAG get head: %w", err)
+	}
+	if head == "" {
+		return nil // empty DAG, nothing to compact
+	}
+
+	ancestors, err := dag.GetAncestors(head)
+	if err != nil {
+		return fmt.Errorf("compactDAG get ancestors: %w", err)
+	}
+
+	// Convert nodes → messages for token estimation.
+	messages := nodesToMessages(ancestors)
+
+	// --- 2. Check threshold ---
+	if !NeedsCompaction(messages, cfg) {
+		return nil
+	}
+
+	keepN := cfg.KeepLastN
+	if len(messages) <= keepN+1 {
+		// Not enough messages to meaningfully compact.
+		return nil
+	}
+
+	// --- 3. Extract key content from the middle ---
+	middle := messages[1 : len(messages)-keepN]
+	keyContent := extractKeyContent(middle)
+
+	// --- 4. Summarise ---
+	var summary string
+	if summarize != nil {
+		var serr error
+		summary, serr = summarize(keyContent)
+		if serr != nil {
+			summary = keyContent // fallback
+		}
+	} else {
+		summary = keyContent
+	}
+
+	// --- 5. New branch from root node ---
+	rootNode := ancestors[0]
+	newBranchName := fmt.Sprintf("compact-%s", genID())
+	newBranchID, err := dag.Branch(rootNode.ID, newBranchName)
+	if err != nil {
+		return fmt.Errorf("compactDAG create branch: %w", err)
+	}
+
+	// --- 6. Add summary node ---
+	summaryContent := []ContentBlock{{
+		Type: "text",
+		Text: fmt.Sprintf("[Context Summary]\n\n%s", summary),
+	}}
+	summaryNodeID, err := dag.AddNode(rootNode.ID, RoleAssistant, summaryContent, "", "", estimateTokens([]Message{{Role: RoleAssistant, Content: summaryContent}}))
+	if err != nil {
+		return fmt.Errorf("compactDAG add summary node: %w", err)
+	}
+
+	// --- 7. Re-add last N messages onto the new branch ---
+	tail := messages[len(messages)-keepN:]
+	parentID := summaryNodeID
+	for _, msg := range tail {
+		nodeID, err := dag.AddNode(parentID, msg.Role, msg.Content, "", "", estimateTokens([]Message{msg}))
+		if err != nil {
+			return fmt.Errorf("compactDAG re-add tail node: %w", err)
+		}
+		parentID = nodeID
+	}
+
+	// --- 8. Switch to the new branch (original preserved) ---
+	// newBranchID already set as current by dag.Branch(), but let's be explicit.
+	if err := dag.SwitchBranch(newBranchID); err != nil {
+		return fmt.Errorf("compactDAG switch branch: %w", err)
+	}
+
+	return nil
+}
+
+// nodesToMessages converts a slice of DAG nodes to the Message type used by
+// providers and compaction helpers.
+func nodesToMessages(nodes []Node) []Message {
+	msgs := make([]Message, len(nodes))
+	for i, n := range nodes {
+		msgs[i] = Message{Role: Role(n.Role), Content: n.Content}
+	}
+	return msgs
+}

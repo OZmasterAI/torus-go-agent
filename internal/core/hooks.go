@@ -1,0 +1,82 @@
+package core
+
+import (
+	"context"
+	"sync"
+)
+
+type HookPoint string
+
+const (
+	HookBeforeLLMCall      HookPoint = "before_llm_call"
+	HookAfterLLMCall       HookPoint = "after_llm_call"
+	HookBeforeToolCall     HookPoint = "before_tool_call"
+	HookAfterToolCall      HookPoint = "after_tool_call"
+	HookBeforeContextBuild HookPoint = "before_context_build"
+	HookAfterContextBuild  HookPoint = "after_context_build"
+	HookOnTokenCount       HookPoint = "on_token_count"
+	HookOnError            HookPoint = "on_error"
+	HookOnAgentStart       HookPoint = "on_agent_start"
+	HookOnAgentEnd         HookPoint = "on_agent_end"
+	HookOnTurnStart        HookPoint = "on_turn_start"
+	HookOnTurnEnd          HookPoint = "on_turn_end"
+)
+
+type HookData struct {
+	Point      HookPoint
+	AgentID    string
+	ToolName   string
+	ToolArgs   map[string]any
+	ToolResult *ToolResult
+	Messages   []Message
+	Response   *AssistantMessage
+	TokensIn   int
+	TokensOut  int
+	Block       bool
+	BlockReason string
+	Meta        map[string]any
+}
+
+type HookFn func(ctx context.Context, data *HookData) error
+
+type hookEntry struct {
+	name string
+	fn   HookFn
+}
+
+type HookRegistry struct {
+	mu    sync.RWMutex
+	hooks map[HookPoint][]hookEntry
+}
+
+func NewHookRegistry() *HookRegistry {
+	return &HookRegistry{hooks: make(map[HookPoint][]hookEntry)}
+}
+
+func (r *HookRegistry) Register(point HookPoint, name string, fn HookFn) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.hooks[point] = append(r.hooks[point], hookEntry{name: name, fn: fn})
+}
+
+func (r *HookRegistry) Fire(ctx context.Context, point HookPoint, data *HookData) error {
+	r.mu.RLock()
+	entries := r.hooks[point]
+	r.mu.RUnlock()
+	data.Point = point
+	for _, entry := range entries {
+		if err := entry.fn(ctx, data); err != nil {
+			return err
+		}
+		if data.Block {
+			return nil
+		}
+	}
+	return nil
+}
+
+func (r *HookRegistry) Count(point HookPoint) int {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return len(r.hooks[point])
+}
