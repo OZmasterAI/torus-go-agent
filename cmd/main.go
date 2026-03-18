@@ -162,6 +162,17 @@ func main() {
 		ContextWindow: cfg.Agent.ContextWindow,
 	}, prov, hooks, dag)
 
+	// Set up compaction summarize callback using the session's provider
+	agent.Summarize = func(keyContent string) (string, error) {
+		prompt := "Summarize this conversation concisely, preserving key decisions, tool results, and context needed to continue:\n\n" + keyContent
+		msgs := []core.Message{{Role: core.RoleUser, Content: []core.ContentBlock{{Type: "text", Text: prompt}}}}
+		resp, err := prov.Complete(context.Background(), "You are a conversation summarizer. Be concise.", msgs, nil, 2048)
+		if err != nil {
+			return "", err
+		}
+		return core.ExtractText(resp), nil
+	}
+
 	// Add spawn tool (needs agent reference, so added after agent creation)
 	agent.AddTool(core.Tool{
 		Name:        "spawn",

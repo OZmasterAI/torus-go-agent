@@ -90,24 +90,40 @@ func (a *Agent) Run(ctx context.Context, userMessage string) (string, error) {
 				Messages: messages,
 				Meta:     map[string]any{"mode": string(a.compaction.Mode), "message_count": preCount},
 			})
-			switch a.compaction.Mode {
-			case CompactionSliding:
-				messages = CompactSliding(messages, a.compaction.KeepLastN)
-			case CompactionLLM:
-				compacted, err := CompactLLM(messages, a.compaction.KeepLastN, a.Summarize)
-				if err != nil {
-					log.Printf("[loop] compaction error: %v, using sliding fallback", err)
+
+			// Use DAG-persistent compaction: creates a new branch with summary + last N.
+			// Falls back to in-memory compaction if CompactDAG fails.
+			if err := CompactDAG(a.dag, a.compaction, a.Summarize); err != nil {
+				log.Printf("[loop] DAG compaction failed: %v, falling back to in-memory", err)
+				switch a.compaction.Mode {
+				case CompactionSliding:
 					messages = CompactSliding(messages, a.compaction.KeepLastN)
-				} else {
-					messages = compacted
+				case CompactionLLM:
+					compacted, err := CompactLLM(messages, a.compaction.KeepLastN, a.Summarize)
+					if err != nil {
+						log.Printf("[loop] LLM compaction error: %v, using sliding fallback", err)
+						messages = CompactSliding(messages, a.compaction.KeepLastN)
+					} else {
+						messages = compacted
+					}
 				}
+			} else {
+				// DAG compaction succeeded — reload from the new branch
+				currentHead, _ = a.dag.GetHead()
+				messages, err = a.dag.PromptFrom(currentHead)
+				if err != nil {
+					return "", fmt.Errorf("reload after compaction: %w", err)
+				}
+				messages = sanitizeMessages(messages)
 			}
+
 			a.hooks.Fire(ctx, HookPostCompact, &HookData{
 				AgentID: "main",
 				Meta: map[string]any{
-					"mode":           string(a.compaction.Mode),
+					"mode":            string(a.compaction.Mode),
 					"messages_before": preCount,
 					"messages_after":  len(messages),
+					"persistent":      true,
 				},
 			})
 		}
