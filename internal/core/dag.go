@@ -87,7 +87,14 @@ func NewDAG(dbPath string) (*DAG, error) {
 		db.Exec("INSERT INTO branches (id, name, head_node_id) VALUES (?, ?, ?)", id, "main", "")
 		d.branchID = id
 	} else {
-		db.QueryRow("SELECT id FROM branches LIMIT 1").Scan(&d.branchID)
+		// Pick the most recently created branch by finding the newest head node timestamp.
+		// Branches with empty heads (from /new) get timestamp 0, so they sort last unless they're the only option.
+		db.QueryRow(`
+			SELECT b.id FROM branches b
+			LEFT JOIN nodes n ON n.id = b.head_node_id
+			ORDER BY COALESCE(n.timestamp, 0) DESC
+			LIMIT 1
+		`).Scan(&d.branchID)
 	}
 	return d, nil
 }
