@@ -11,6 +11,7 @@ import (
 	"github.com/joho/godotenv"
 
 	"go_sdk_agent/internal/channels"
+	_ "go_sdk_agent/internal/channels/http"     // register http channel
 	_ "go_sdk_agent/internal/channels/telegram" // register telegram channel
 	_ "go_sdk_agent/internal/channels/tui"      // register tui channel
 	"go_sdk_agent/internal/config"
@@ -197,11 +198,14 @@ func main() {
 		Meta:    map[string]any{"provider": cfg.Agent.Provider, "model": cfg.Agent.Model},
 	})
 
-	// Select channel: --telegram flag or default to TUI
+	// Select channel: --telegram/--http flag or default to TUI
 	channelName := "tui"
 	for _, arg := range os.Args[1:] {
 		if arg == "--telegram" {
 			channelName = "telegram"
+		}
+		if arg == "--http" {
+			channelName = "http"
 		}
 	}
 
