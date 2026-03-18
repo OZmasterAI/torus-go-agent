@@ -101,20 +101,23 @@ func (a *Agent) Run(ctx context.Context, userMessage string) (string, error) {
 		a.hooks.Fire(ctx, HookBeforeContextBuild, ctxData)
 		messages = ctxData.Messages
 
-		// Fire after context build (final prompt assembled)
-		a.hooks.Fire(ctx, HookAfterContextBuild, &HookData{AgentID: "main", Messages: messages})
+		// Fire after context build (final prompt assembled — can transform)
+		afterCtx := &HookData{AgentID: "main", Messages: messages}
+		a.hooks.Fire(ctx, HookAfterContextBuild, afterCtx)
+		messages = afterCtx.Messages
 
 		// Fire token count hook
 		tokenEst := EstimateTokens(messages)
 		a.hooks.Fire(ctx, HookOnTokenCount, &HookData{AgentID: "main", TokensIn: tokenEst, Meta: map[string]any{"estimated": true}})
 
-		// Fire before LLM call
+		// Fire before LLM call (can transform messages or block)
 		llmData := &HookData{AgentID: "main", Messages: messages, Meta: map[string]any{}}
 		a.hooks.Fire(ctx, HookBeforeLLMCall, llmData)
 		if llmData.Block {
 			log.Printf("[loop] LLM call blocked: %s", llmData.BlockReason)
 			break
 		}
+		messages = llmData.Messages
 
 		// Convert tools for provider
 		var toolDefs []Tool
@@ -139,13 +142,17 @@ func (a *Agent) Run(ctx context.Context, userMessage string) (string, error) {
 			return "", fmt.Errorf("llm call: %w", llmErr)
 		}
 
-		// Fire after LLM call
-		a.hooks.Fire(ctx, HookAfterLLMCall, &HookData{
+		// Fire after LLM call (can transform response)
+		afterLLM := &HookData{
 			AgentID:   "main",
 			Response:  resp,
 			TokensIn:  resp.Usage.InputTokens,
 			TokensOut: resp.Usage.OutputTokens,
-		})
+		}
+		a.hooks.Fire(ctx, HookAfterLLMCall, afterLLM)
+		if afterLLM.Response != nil {
+			resp = afterLLM.Response
+		}
 
 		// Add assistant response to DAG
 		_, err = a.dag.AddNode(currentHead, RoleAssistant, resp.Content, resp.Model, a.provider.Name(), resp.Usage.TotalTokens)
@@ -163,7 +170,7 @@ func (a *Agent) Run(ctx context.Context, userMessage string) (string, error) {
 		// Execute tool calls
 		toolCalls := ExtractToolCalls(resp)
 		for _, tc := range toolCalls {
-			// Fire before tool call
+			// Fire before tool call (can transform args, rename tool, or block)
 			toolData := &HookData{
 				AgentID:  "main",
 				ToolName: tc.Name,
@@ -171,6 +178,8 @@ func (a *Agent) Run(ctx context.Context, userMessage string) (string, error) {
 				Meta:     map[string]any{},
 			}
 			a.hooks.Fire(ctx, HookBeforeToolCall, toolData)
+			tc.Name = toolData.ToolName   // read back possibly-modified name
+			tc.Input = toolData.ToolArgs  // read back possibly-modified args
 
 			var result *ToolResult
 			if toolData.Block {
@@ -203,13 +212,17 @@ func (a *Agent) Run(ctx context.Context, userMessage string) (string, error) {
 				}
 			}
 
-			// Fire after tool call
-			a.hooks.Fire(ctx, HookAfterToolCall, &HookData{
+			// Fire after tool call (can transform result)
+			afterTool := &HookData{
 				AgentID:    "main",
 				ToolName:   tc.Name,
 				ToolArgs:   tc.Input,
 				ToolResult: result,
-			})
+			}
+			a.hooks.Fire(ctx, HookAfterToolCall, afterTool)
+			if afterTool.ToolResult != nil {
+				result = afterTool.ToolResult
+			}
 
 			// Add tool result to DAG
 			toolHead, _ := a.dag.GetHead()
