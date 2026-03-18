@@ -37,6 +37,9 @@ const (
 	HookOnBranchSwitch     HookPoint = "on_branch_switch"
 	HookOnAppStart         HookPoint = "on_app_start"
 	HookOnAppShutdown      HookPoint = "on_app_shutdown"
+	HookBeforeSpawn        HookPoint = "before_spawn"
+	HookAfterSpawn         HookPoint = "after_spawn"
+	HookOnSubagentComplete HookPoint = "on_subagent_complete"
 )
 
 type HookData struct {

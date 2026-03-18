@@ -242,8 +242,26 @@ func (m *SubAgentManager) SpawnWithProvider(
 	state := &subAgentState{result: make(chan *SubAgentResult, 1)}
 	m.running.Store(id, state)
 
+	// Fire before_spawn hook on parent's hooks (can block)
+	spawnData := &core.HookData{
+		AgentID: id,
+		Meta:    map[string]any{"agent_type": cfg.AgentType, "task": cfg.Task, "branch": subBranchID},
+	}
+	parentAgent.Hooks().Fire(context.Background(), core.HookBeforeSpawn, spawnData)
+	if spawnData.Block {
+		res := &SubAgentResult{Error: fmt.Errorf("subagents: spawn blocked: %s", spawnData.BlockReason)}
+		m.finalize(id, state, res)
+		return id, nil
+	}
+
 	go func() {
 		start := time.Now()
+
+		// Fire after_spawn once the goroutine starts
+		parentAgent.Hooks().Fire(context.Background(), core.HookAfterSpawn, &core.HookData{
+			AgentID: id,
+			Meta:    map[string]any{"agent_type": cfg.AgentType, "task": cfg.Task, "branch": subBranchID},
+		})
 
 		// Switch the shared DAG to the sub-branch.
 		if err := parentDAG.SwitchBranch(subBranchID); err != nil {
@@ -277,6 +295,19 @@ func (m *SubAgentManager) SpawnWithProvider(
 			Duration:  time.Since(start),
 			ToolCalls: toolCallCount,
 		}
+
+		// Fire on_subagent_complete
+		parentAgent.Hooks().Fire(context.Background(), core.HookOnSubagentComplete, &core.HookData{
+			AgentID: id,
+			Meta: map[string]any{
+				"agent_type": cfg.AgentType,
+				"text":       text,
+				"error":      runErr,
+				"duration":   res.Duration.String(),
+				"tool_calls": toolCallCount,
+			},
+		})
+
 		m.finalize(id, state, res)
 	}()
 
