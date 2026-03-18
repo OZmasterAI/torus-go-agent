@@ -216,7 +216,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.skills != nil {
 				if skillName, ok := m.skills.IsSkillCommand(input); ok {
 					if skill, found := m.skills.Get(skillName); found {
-						input = m.skills.FormatSkillPrompt(skill, input)
+						beforeSkill := &core.HookData{
+							AgentID: "main",
+							Meta:    map[string]any{"skill": skillName, "input": input},
+						}
+						m.agent.Hooks().Fire(context.Background(), core.HookBeforeSkill, beforeSkill)
+						if !beforeSkill.Block {
+							input = m.skills.FormatSkillPrompt(skill, input)
+							m.agent.Hooks().Fire(context.Background(), core.HookAfterSkill, &core.HookData{
+								AgentID: "main",
+								Meta:    map[string]any{"skill": skillName, "input": input},
+							})
+						}
 					}
 				}
 			}

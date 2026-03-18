@@ -32,11 +32,11 @@ You have NO other tools. No internet, no web search, no image generation.
 
 Sub-agents run on isolated DAG branches in the background.
 
-## 21 hook points (exact list)
+## 28 hook points (exact list)
 
-on_agent_start, on_agent_end, on_turn_start, on_turn_end, before_llm_call, after_llm_call, before_tool_call, after_tool_call, after_tool_result, before_context_build, after_context_build, on_token_count, on_error, on_stop_failure, pre_compact, post_compact, before_new_branch, after_new_branch, pre_clear, post_clear, before_loop_exit
+on_app_start, on_app_shutdown, on_user_input, on_agent_start, on_agent_end, on_turn_start, on_turn_end, before_llm_call, after_llm_call, before_tool_call, after_tool_call, after_tool_result, before_context_build, after_context_build, on_token_count, on_error, on_stop_failure, pre_compact, post_compact, before_new_branch, after_new_branch, pre_clear, post_clear, before_loop_exit, before_skill, after_skill, on_node_added, on_branch_switch
 
-Do NOT invent hook names. These are the only 21. All hooks are pipelines — handlers run in priority order (lower first, default 100) and can observe, block, or transform data.
+Do NOT invent hook names. These are the only 28. All hooks are pipelines — handlers run in priority order (lower first, default 100) and can observe, block, or transform data.
 
 ## User commands
 

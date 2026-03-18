@@ -41,6 +41,19 @@ func (a *Agent) SetCompaction(cfg CompactionConfig) { a.compaction = cfg }
 
 // Run processes a user message through the ReAct loop and returns the final text.
 func (a *Agent) Run(ctx context.Context, userMessage string) (string, error) {
+	// on_user_input: can transform or block user input before anything else
+	inputData := &HookData{
+		AgentID: "main",
+		Meta:    map[string]any{"input": userMessage},
+	}
+	a.hooks.Fire(ctx, HookOnUserInput, inputData)
+	if inputData.Block {
+		return inputData.BlockReason, nil
+	}
+	if modified, ok := inputData.Meta["input"].(string); ok {
+		userMessage = modified
+	}
+
 	// Fire agent start
 	a.hooks.Fire(ctx, HookOnAgentStart, &HookData{AgentID: "main"})
 

@@ -1,6 +1,7 @@
 package core
 
 import (
+	"context"
 	"crypto/rand"
 	"database/sql"
 	"encoding/json"
@@ -32,7 +33,11 @@ type BranchInfo struct {
 type DAG struct {
 	db       *sql.DB
 	branchID string
+	hooks    *HookRegistry // optional, set via SetHooks
 }
+
+// SetHooks attaches a hook registry to the DAG for mutation events.
+func (d *DAG) SetHooks(h *HookRegistry) { d.hooks = h }
 
 func genID() string {
 	b := make([]byte, 8)
@@ -114,6 +119,12 @@ func (d *DAG) AddNode(parentID string, role Role, content []ContentBlock, model,
 		return "", fmt.Errorf("insert: %w", err)
 	}
 	d.db.Exec("UPDATE branches SET head_node_id = ? WHERE id = ?", id, d.branchID)
+	if d.hooks != nil {
+		d.hooks.Fire(context.Background(), HookOnNodeAdded, &HookData{
+			AgentID: "main",
+			Meta:    map[string]any{"node_id": id, "parent_id": parentID, "role": string(role), "branch": d.branchID},
+		})
+	}
 	return id, nil
 }
 
@@ -234,7 +245,14 @@ func (d *DAG) SwitchBranch(branchID string) error {
 	if exists == 0 {
 		return fmt.Errorf("branch %s not found", branchID)
 	}
+	oldBranch := d.branchID
 	d.branchID = branchID
+	if d.hooks != nil {
+		d.hooks.Fire(context.Background(), HookOnBranchSwitch, &HookData{
+			AgentID: "main",
+			Meta:    map[string]any{"old_branch": oldBranch, "new_branch": branchID},
+		})
+	}
 	return nil
 }
 

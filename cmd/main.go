@@ -188,6 +188,15 @@ func main() {
 		},
 	})
 
+	// Connect DAG to hooks for mutation events
+	dag.SetHooks(hooks)
+
+	// Fire app start
+	hooks.Fire(context.Background(), core.HookOnAppStart, &core.HookData{
+		AgentID: "main",
+		Meta:    map[string]any{"provider": cfg.Agent.Provider, "model": cfg.Agent.Model},
+	})
+
 	// Select channel: --telegram flag or default to TUI
 	channelName := "tui"
 	for _, arg := range os.Args[1:] {
@@ -203,5 +212,10 @@ func main() {
 	if err := ch.Start(agent, *cfg, skillRegistry); err != nil {
 		log.Fatalf("%s: %v", channelName, err)
 	}
+
+	// Fire app shutdown
+	hooks.Fire(context.Background(), core.HookOnAppShutdown, &core.HookData{
+		AgentID: "main",
+	})
 	_ = subMgr // keep reference alive
 }

@@ -30,6 +30,13 @@ const (
 	HookPreClear           HookPoint = "pre_clear"
 	HookPostClear          HookPoint = "post_clear"
 	HookBeforeLoopExit     HookPoint = "before_loop_exit"
+	HookOnUserInput        HookPoint = "on_user_input"
+	HookBeforeSkill        HookPoint = "before_skill"
+	HookAfterSkill         HookPoint = "after_skill"
+	HookOnNodeAdded        HookPoint = "on_node_added"
+	HookOnBranchSwitch     HookPoint = "on_branch_switch"
+	HookOnAppStart         HookPoint = "on_app_start"
+	HookOnAppShutdown      HookPoint = "on_app_shutdown"
 )
 
 type HookData struct {
