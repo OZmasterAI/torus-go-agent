@@ -111,7 +111,7 @@ func main() {
 	dagSchemaBase := "[SYSTEM: DAG schema] tables: nodes(id, parent_id, role, content, model, provider, timestamp, token_count), branches(id, name, head_node_id, forked_from). DB path: " + filepath.Join(dataDir, "conversations.db")
 	hooks.Register(core.HookBeforeContextBuild, "dag-context", func(ctx context.Context, d *core.HookData) error {
 		brID, brName, headNode, msgCount := dag.CurrentBranchInfo()
-		contextLine := fmt.Sprintf("[SYSTEM: DAG context] active_branch: %s, name: %s, head: %s, messages: %d", brID, brName, headNode, msgCount)
+		contextLine := fmt.Sprintf("[SYSTEM: DAG context] active_branch: %s, name: %s, head: %s, messages: %d, context_window: %d, compaction_threshold: 80%%", brID, brName, headNode, msgCount, cfg.Agent.ContextWindow)
 		schema := core.Message{
 			Role:    core.RoleUser,
 			Content: []core.ContentBlock{{Type: "text", Text: dagSchemaBase + "\n" + contextLine}},
@@ -162,11 +162,23 @@ func main() {
 		ContextWindow: cfg.Agent.ContextWindow,
 	}, prov, hooks, dag)
 
-	// Set up compaction summarize callback using the session's provider
+	// Set up compaction summarize callback — use compactionModel if set, otherwise session's model
+	compactProv := prov
+	if cfg.Agent.CompactionModel != "" {
+		switch cfg.Agent.Provider {
+		case "anthropic":
+			compactProv = providers.NewAnthropicProvider(key, cfg.Agent.CompactionModel)
+		case "nvidia":
+			compactProv = providers.NewNvidiaProvider(key, cfg.Agent.CompactionModel)
+		default:
+			compactProv = providers.NewOpenRouterProvider(key, cfg.Agent.CompactionModel)
+		}
+		log.Printf("[main] compaction model: %s", cfg.Agent.CompactionModel)
+	}
 	agent.Summarize = func(keyContent string) (string, error) {
 		prompt := "Summarize this conversation concisely, preserving key decisions, tool results, and context needed to continue:\n\n" + keyContent
 		msgs := []core.Message{{Role: core.RoleUser, Content: []core.ContentBlock{{Type: "text", Text: prompt}}}}
-		resp, err := prov.Complete(context.Background(), "You are a conversation summarizer. Be concise.", msgs, nil, 2048)
+		resp, err := compactProv.Complete(context.Background(), "You are a conversation summarizer. Be concise.", msgs, nil, 2048)
 		if err != nil {
 			return "", err
 		}
