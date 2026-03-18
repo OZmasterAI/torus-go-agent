@@ -1,5 +1,4 @@
-// Package ui provides user-interface channels for the agent (Telegram, TUI, etc.).
-package ui
+package telegram
 
 import (
 	"context"
@@ -10,13 +9,28 @@ import (
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 
+	"go_sdk_agent/internal/channels"
 	"go_sdk_agent/internal/config"
 	"go_sdk_agent/internal/core"
+	"go_sdk_agent/internal/features"
 )
 
+func init() { channels.Register(&telegramChannel{}) }
+
+type telegramChannel struct{}
+
+func (t *telegramChannel) Name() string { return "telegram" }
+
+func (t *telegramChannel) Start(agent *core.Agent, cfg config.Config, _ *features.SkillRegistry) error {
+	if cfg.Telegram.BotToken == "" {
+		return fmt.Errorf("no Telegram bot token — set TELEGRAM_BOT_TOKEN or telegram.botToken in config.json")
+	}
+	return startTelegram(agent, cfg.Telegram)
+}
+
 const (
-	chunkSize       = 4000
-	placeholderText = "..."
+	tgChunkSize       = 4000
+	tgPlaceholderText = "..."
 )
 
 // pendingMsg holds a queued user message waiting for the active run to finish.
@@ -32,10 +46,10 @@ type chatState struct {
 	queue   []pendingMsg
 }
 
-// StartTelegram creates a Telegram bot, begins long-polling, and dispatches
+// startTelegram creates a Telegram bot, begins long-polling, and dispatches
 // incoming messages to agent.Run. It blocks until polling stops or a fatal
 // error occurs.
-func StartTelegram(agent *core.Agent, cfg config.TelegramConfig) error {
+func startTelegram(agent *core.Agent, cfg config.TelegramConfig) error {
 	if len(cfg.AllowedUsers) == 0 {
 		log.Printf("[telegram] WARNING: allowedUsers is empty — all requests will be denied")
 	}
@@ -142,7 +156,7 @@ func handleMessage(
 // the final response (chunking if necessary).
 func runOne(bot *tgbotapi.BotAPI, agent *core.Agent, chatID int64, sessionKey string, text string) {
 	// Send placeholder
-	placeholderMsg := tgbotapi.NewMessage(chatID, placeholderText)
+	placeholderMsg := tgbotapi.NewMessage(chatID, tgPlaceholderText)
 	sent, err := bot.Send(placeholderMsg)
 	if err != nil {
 		log.Printf("[telegram] send placeholder (chat %d): %v", chatID, err)
@@ -168,7 +182,7 @@ func runOne(bot *tgbotapi.BotAPI, agent *core.Agent, chatID int64, sessionKey st
 	}
 
 	// If response fits in one chunk, edit the placeholder
-	if len(response) <= chunkSize {
+	if len(response) <= tgChunkSize {
 		if err := editOrSend(bot, chatID, sent.MessageID, response); err != nil {
 			log.Printf("[telegram] editOrSend (chat %d): %v", chatID, err)
 		}
@@ -185,10 +199,10 @@ func runOne(bot *tgbotapi.BotAPI, agent *core.Agent, chatID int64, sessionKey st
 	}
 }
 
-// sendChunked splits text at chunkSize boundaries (on whitespace when possible)
+// sendChunked splits text at tgChunkSize boundaries (on whitespace when possible)
 // and sends each chunk as a separate message.
 func sendChunked(bot *tgbotapi.BotAPI, chatID int64, text string) error {
-	chunks := splitChunks(text, chunkSize)
+	chunks := splitChunks(text, tgChunkSize)
 	for _, chunk := range chunks {
 		msg := tgbotapi.NewMessage(chatID, chunk)
 		if _, err := bot.Send(msg); err != nil {

@@ -10,6 +10,9 @@ import (
 
 	"github.com/joho/godotenv"
 
+	"go_sdk_agent/internal/channels"
+	_ "go_sdk_agent/internal/channels/telegram" // register telegram channel
+	_ "go_sdk_agent/internal/channels/tui"      // register tui channel
 	"go_sdk_agent/internal/config"
 	"go_sdk_agent/internal/core"
 	"go_sdk_agent/internal/features"
@@ -185,27 +188,20 @@ func main() {
 		},
 	})
 
-	// Launch Telegram or TUI based on flag
-	isTelegram := false
+	// Select channel: --telegram flag or default to TUI
+	channelName := "tui"
 	for _, arg := range os.Args[1:] {
 		if arg == "--telegram" {
-			isTelegram = true
+			channelName = "telegram"
 		}
 	}
 
-	if isTelegram {
-		if cfg.Telegram.BotToken == "" {
-			fmt.Fprintln(os.Stderr, "No Telegram bot token. Set TELEGRAM_BOT_TOKEN or telegram.botToken in config.json.")
-			os.Exit(1)
-		}
-		log.Printf("[main] Starting Telegram bot...")
-		if err := ui.StartTelegram(agent, cfg.Telegram); err != nil {
-			log.Fatalf("telegram: %v", err)
-		}
-	} else {
-		if err := ui.StartTUI(agent, cfg.Agent.Model, skillRegistry); err != nil {
-			log.Fatalf("tui: %v", err)
-		}
+	ch, err := channels.Get(channelName)
+	if err != nil {
+		log.Fatalf("channel: %v", err)
+	}
+	if err := ch.Start(agent, *cfg, skillRegistry); err != nil {
+		log.Fatalf("%s: %v", channelName, err)
 	}
 	_ = subMgr // keep reference alive
 }
