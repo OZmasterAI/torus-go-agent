@@ -104,6 +104,8 @@ func (c *Config) APIKey() string {
 	switch strings.ToLower(c.Agent.Provider) {
 	case "anthropic":
 		return os.Getenv("ANTHROPIC_API_KEY")
+	case "nvidia":
+		return os.Getenv("NVIDIA_API_KEY")
 	default:
 		return os.Getenv("OPENROUTER_API_KEY")
 	}

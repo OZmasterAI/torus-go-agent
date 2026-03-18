@@ -1,4 +1,7 @@
 go_sdk_agent
+torus
 data/
 .env
 *.db
+crash.log
+.claude-state.json

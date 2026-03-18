@@ -1,8 +1,8 @@
 {
   "telegram": { "botToken": "ENV", "allowedUsers": [] },
   "agent": {
-    "provider": "openrouter",
-    "model": "nvidia/nemotron-3-super-120b-a12b:free",
+    "provider": "nvidia",
+    "model": "z-ai/glm4.7",
     "maxTokens": 16384
   },
   "data": { "dir": "../data" }

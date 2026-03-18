@@ -47,6 +47,11 @@ type agentErrorMsg struct {
 	err error
 }
 
+// streamDeltaMsg carries a single text delta from the streaming LLM response.
+type streamDeltaMsg struct {
+	delta string
+}
+
 // tickMsg drives the elapsed-time display while the agent is processing.
 type tickMsg time.Time
 
@@ -77,6 +82,8 @@ type Model struct {
 	// Status
 	statusLine string
 	processing   bool
+	streaming    bool       // true while streaming deltas are arriving
+	deltaCh      chan string // channel for stream deltas; nil when idle
 	spinnerFrame int
 	startTime  time.Time
 
@@ -153,11 +160,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, tea.Quit
 			}
 			if input == "/new" {
-				// Start fresh branch
-				head, _ := m.agent.DAG().GetHead()
-				if head != "" {
-					m.agent.DAG().Branch(head, fmt.Sprintf("session-%d", time.Now().Unix()))
-				}
+				// Start fresh branch with empty head — no history carried over
+				m.agent.DAG().NewBranch(fmt.Sprintf("session-%d", time.Now().Unix()))
 				m.messages = m.messages[:0]
 				m.messages = append(m.messages, displayMsg{role: "assistant", text: "New conversation started (previous preserved on old branch)."})
 				m.totalTokensIn = 0
@@ -189,13 +193,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					}
 				}
 			}
-			// Append user message to display, clear input, start agent.
+			// Append user message to display, clear input, start agent with streaming.
 			m.messages = append(m.messages, displayMsg{role: "user", text: input})
+			m.messages = append(m.messages, displayMsg{role: "assistant", text: ""}) // streaming placeholder
 			m.input = ""
 			m.processing = true
+			m.streaming = true
 			m.startTime = time.Now()
 			m.statusLine = m.buildStatus(0, 0, 0, 0)
-			return m, tea.Batch(runAgent(m.agent, input), tick())
+
+			deltaCh := make(chan string, 64)
+			m.deltaCh = deltaCh
+			return m, tea.Batch(runAgentStream(m.agent, input, deltaCh), waitForDelta(deltaCh), tick())
 
 		case tea.KeyBackspace, tea.KeyDelete:
 			if len(m.input) > 0 {
@@ -216,6 +225,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 
+	// ── Stream delta ─────────────────────────────────────────────────────
+	case streamDeltaMsg:
+		if m.streaming && len(m.messages) > 0 {
+			last := &m.messages[len(m.messages)-1]
+			if last.role == "assistant" {
+				last.text += msg.delta
+			}
+		}
+		return m, waitForDelta(m.deltaCh)
+
 	// ── Tick (elapsed timer while processing) ────────────────────────────
 	case tickMsg:
 		if m.processing {
@@ -229,17 +248,35 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// ── Agent response ───────────────────────────────────────────────────
 	case agentResponseMsg:
 		m.processing = false
+		m.streaming = false
+		m.deltaCh = nil
 		m.totalTokensIn += msg.tokensIn
 		m.totalTokensOut += msg.tokensOut
 		m.totalCost += msg.cost
 		m.statusLine = m.buildStatus(m.totalTokensIn, m.totalTokensOut, m.totalCost, msg.elapsed)
-		m.messages = append(m.messages, displayMsg{role: "assistant", text: msg.text})
+		// The streamed text is already in the last message; no need to add another.
+		// But if the final text is empty (error path) or non-streaming, update it.
+		if len(m.messages) > 0 {
+			last := &m.messages[len(m.messages)-1]
+			if last.role == "assistant" && last.text == "" && msg.text != "" {
+				last.text = msg.text
+			}
+		}
 		return m, nil
 
 	// ── Agent error ──────────────────────────────────────────────────────
 	case agentErrorMsg:
 		m.processing = false
+		m.streaming = false
+		m.deltaCh = nil
 		m.err = msg.err
+		// Remove the empty streaming placeholder if it exists
+		if len(m.messages) > 0 {
+			last := m.messages[len(m.messages)-1]
+			if last.role == "assistant" && last.text == "" {
+				m.messages = m.messages[:len(m.messages)-1]
+			}
+		}
 		m.messages = append(m.messages, displayMsg{
 			role:    "error",
 			text:    fmt.Sprintf("Error: %v", msg.err),
@@ -347,7 +384,11 @@ func (m Model) View() string {
 	if m.processing {
 		spinner := styleSpinner.Render(torusFrames[m.spinnerFrame])
 		elapsed := time.Since(m.startTime)
-		inputLine = styleDim.Render(fmt.Sprintf("%s thinking... %.1fs", spinner, elapsed.Seconds()))
+		if m.streaming && len(m.messages) > 0 && m.messages[len(m.messages)-1].text != "" {
+			inputLine = styleDim.Render(fmt.Sprintf("%s streaming... %.1fs", spinner, elapsed.Seconds()))
+		} else {
+			inputLine = styleDim.Render(fmt.Sprintf("%s thinking... %.1fs", spinner, elapsed.Seconds()))
+		}
 	}
 	sb.WriteString(inputLine)
 
@@ -467,17 +508,22 @@ func wrapText(text string, maxWidth int) string {
 
 // ── Commands ──────────────────────────────────────────────────────────────────
 
-// runAgent returns a tea.Cmd that executes agent.Run in a goroutine.
-func runAgent(agent *core.Agent, input string) tea.Cmd {
+// runAgentStream returns a tea.Cmd that executes agent.Run in a goroutine with
+// streaming enabled. Text deltas are sent on deltaCh; the channel is closed
+// when the agent finishes.
+func runAgentStream(agent *core.Agent, input string, deltaCh chan<- string) tea.Cmd {
 	return func() tea.Msg {
 		start := time.Now()
+		agent.OnStreamDelta = func(delta string) {
+			deltaCh <- delta
+		}
 		text, err := agent.Run(context.Background(), input)
+		agent.OnStreamDelta = nil
+		close(deltaCh)
 		elapsed := time.Since(start)
 		if err != nil {
 			return agentErrorMsg{err: err}
 		}
-		// Token/cost data not yet plumbed through agent.Run return value;
-		// leave as zero — status bar will show elapsed time.
 		return agentResponseMsg{
 			text:    text,
 			elapsed: elapsed,
@@ -485,7 +531,22 @@ func runAgent(agent *core.Agent, input string) tea.Cmd {
 	}
 }
 
-// tick returns a command that fires a tickMsg after one second.
+// waitForDelta returns a tea.Cmd that blocks until a delta arrives on the
+// channel, then delivers it as a streamDeltaMsg. Returns nil when closed.
+func waitForDelta(ch <-chan string) tea.Cmd {
+	if ch == nil {
+		return nil
+	}
+	return func() tea.Msg {
+		delta, ok := <-ch
+		if !ok {
+			return nil // channel closed — agent done
+		}
+		return streamDeltaMsg{delta: delta}
+	}
+}
+
+// tick returns a command that fires a tickMsg after 250ms.
 func tick() tea.Cmd {
 	return tea.Tick(250*time.Millisecond, func(t time.Time) tea.Msg {
 		return tickMsg(t)

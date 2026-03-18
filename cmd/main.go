@@ -69,9 +69,12 @@ func main() {
 
 	// Create provider
 	var prov providers.Provider
-	if cfg.Agent.Provider == "anthropic" {
+	switch cfg.Agent.Provider {
+	case "anthropic":
 		prov = providers.NewAnthropicProvider(key, cfg.Agent.Model)
-	} else {
+	case "nvidia":
+		prov = providers.NewNvidiaProvider(key, cfg.Agent.Model)
+	default:
 		prov = providers.NewOpenRouterProvider(key, cfg.Agent.Model)
 	}
 
@@ -97,6 +100,19 @@ func main() {
 				d.BlockReason = "Secret detected: " + desc
 			}
 		}
+		return nil
+	})
+
+	// Inject DAG schema + live branch state so the LLM knows the active branch.
+	dagSchemaBase := "[SYSTEM: DAG schema] tables: nodes(id, parent_id, role, content, model, provider, timestamp, token_count), branches(id, name, head_node_id, forked_from). DB path: " + filepath.Join(dataDir, "conversations.db")
+	hooks.Register(core.HookBeforeContextBuild, "dag-context", func(ctx context.Context, d *core.HookData) error {
+		brID, brName, headNode, msgCount := dag.CurrentBranchInfo()
+		contextLine := fmt.Sprintf("[SYSTEM: DAG context] active_branch: %s, name: %s, head: %s, messages: %d", brID, brName, headNode, msgCount)
+		schema := core.Message{
+			Role:    core.RoleUser,
+			Content: []core.ContentBlock{{Type: "text", Text: dagSchemaBase + "\n" + contextLine}},
+		}
+		d.Messages = append([]core.Message{schema}, d.Messages...)
 		return nil
 	})
 

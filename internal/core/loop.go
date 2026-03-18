@@ -4,17 +4,17 @@ import (
 	"context"
 	"fmt"
 	"log"
-
 )
 
 // Agent is the DAG-based ReAct agent loop.
 type Agent struct {
-	config     AgentConfig
-	provider   Provider
-	hooks      *HookRegistry
-	dag        *DAG
-	compaction CompactionConfig
-	Summarize  func(string) (string, error) // LLM summarize callback for compaction
+	config        AgentConfig
+	provider      Provider
+	hooks         *HookRegistry
+	dag           *DAG
+	compaction    CompactionConfig
+	Summarize     func(string) (string, error) // LLM summarize callback for compaction
+	OnStreamDelta func(delta string)           // called for each text delta during streaming; nil = use Complete
 }
 
 // NewAgent creates a new agent.
@@ -87,6 +87,9 @@ func (a *Agent) Run(ctx context.Context, userMessage string) (string, error) {
 		a.hooks.Fire(ctx, HookBeforeContextBuild, ctxData)
 		messages = ctxData.Messages
 
+		// Fire after context build (final prompt assembled)
+		a.hooks.Fire(ctx, HookAfterContextBuild, &HookData{AgentID: "main", Messages: messages})
+
 		// Fire token count hook
 		tokenEst := EstimateTokens(messages)
 		a.hooks.Fire(ctx, HookOnTokenCount, &HookData{AgentID: "main", TokensIn: tokenEst, Meta: map[string]any{"estimated": true}})
@@ -105,11 +108,21 @@ func (a *Agent) Run(ctx context.Context, userMessage string) (string, error) {
 			toolDefs = append(toolDefs, t)
 		}
 
-		// Call LLM
-		resp, err := a.provider.Complete(ctx, a.config.SystemPrompt, messages, toolDefs, a.config.Provider.MaxTokens)
-		if err != nil {
-			a.hooks.Fire(ctx, HookOnError, &HookData{AgentID: "main", Meta: map[string]any{"error": err.Error()}})
-			return "", fmt.Errorf("llm call: %w", err)
+		// Call LLM — use streaming if callback is set, otherwise non-streaming
+		var resp *AssistantMessage
+		var llmErr error
+		if a.OnStreamDelta != nil {
+			var ch <-chan StreamEvent
+			ch, llmErr = a.provider.StreamComplete(ctx, a.config.SystemPrompt, messages, toolDefs, a.config.Provider.MaxTokens)
+			if llmErr == nil {
+				resp, llmErr = consumeStream(ch, a.OnStreamDelta)
+			}
+		} else {
+			resp, llmErr = a.provider.Complete(ctx, a.config.SystemPrompt, messages, toolDefs, a.config.Provider.MaxTokens)
+		}
+		if llmErr != nil {
+			a.hooks.Fire(ctx, HookOnError, &HookData{AgentID: "main", Meta: map[string]any{"error": llmErr.Error()}})
+			return "", fmt.Errorf("llm call: %w", llmErr)
 		}
 
 		// Fire after LLM call
@@ -203,6 +216,28 @@ func (a *Agent) Run(ctx context.Context, userMessage string) (string, error) {
 	a.hooks.Fire(ctx, HookOnAgentEnd, &HookData{AgentID: "main", Meta: map[string]any{"text": finalText}})
 
 	return finalText, nil
+}
+
+// consumeStream reads all events from a StreamComplete channel, calls onDelta
+// for text deltas, and returns the assembled AssistantMessage from message_stop.
+func consumeStream(ch <-chan StreamEvent, onDelta func(string)) (*AssistantMessage, error) {
+	var resp *AssistantMessage
+	for ev := range ch {
+		switch ev.Type {
+		case EventTextDelta:
+			if onDelta != nil {
+				onDelta(ev.Text)
+			}
+		case EventError:
+			return nil, ev.Error
+		case EventMessageStop:
+			resp = ev.Response
+		}
+	}
+	if resp == nil {
+		return nil, fmt.Errorf("stream ended without response")
+	}
+	return resp, nil
 }
 
 func (a *Agent) findTool(name string) *Tool {

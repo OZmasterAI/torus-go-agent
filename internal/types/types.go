@@ -48,6 +48,33 @@ type AssistantMessage struct {
 	Usage      Usage  `json:"usage"`
 }
 
+// StreamEventType identifies the kind of streaming event.
+type StreamEventType string
+
+const (
+	EventTextDelta        StreamEventType = "text_delta"
+	EventToolUseStart     StreamEventType = "tool_use_start"
+	EventInputDelta       StreamEventType = "input_delta"
+	EventContentBlockStop StreamEventType = "content_block_stop"
+	EventMessageStop      StreamEventType = "message_stop"
+	EventError            StreamEventType = "error"
+	EventUsage            StreamEventType = "usage"
+)
+
+// StreamEvent is a single event from a streaming LLM response.
+type StreamEvent struct {
+	Type         StreamEventType
+	Text         string            // text_delta: the text fragment
+	ContentIndex int               // block index within the message
+	ID           string            // tool_use_start: tool use ID
+	Name         string            // tool_use_start: tool name
+	InputDelta   string            // input_delta: partial JSON fragment
+	StopReason   string            // message_stop: why the message ended
+	Usage        *Usage            // usage event
+	Response     *AssistantMessage // message_stop: accumulated full response
+	Error        error             // error event
+}
+
 // ToolResult is the output from executing a tool.
 type ToolResult struct {
 	ToolUseID string `json:"tool_use_id"`
@@ -86,6 +113,7 @@ type AgentConfig struct {
 // Provider is the interface all LLM providers implement.
 type Provider interface {
 	Complete(ctx context.Context, systemPrompt string, messages []Message, tools []Tool, maxTokens int) (*AssistantMessage, error)
+	StreamComplete(ctx context.Context, systemPrompt string, messages []Message, tools []Tool, maxTokens int) (<-chan StreamEvent, error)
 	Name() string
 	ModelID() string
 }

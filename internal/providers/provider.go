@@ -8,6 +8,7 @@ import (
 // Provider is the interface all LLM providers implement.
 type Provider interface {
 	Complete(ctx context.Context, systemPrompt string, messages []t.Message, tools []t.Tool, maxTokens int) (*t.AssistantMessage, error)
+	StreamComplete(ctx context.Context, systemPrompt string, messages []t.Message, tools []t.Tool, maxTokens int) (<-chan t.StreamEvent, error)
 	Name() string
 	ModelID() string
 }
@@ -49,4 +50,9 @@ func (r *Router) Active() Provider { return r.active }
 // Complete delegates to the active provider.
 func (r *Router) Complete(ctx context.Context, systemPrompt string, messages []t.Message, tools []t.Tool, maxTokens int) (*t.AssistantMessage, error) {
 	return r.active.Complete(ctx, systemPrompt, messages, tools, maxTokens)
+}
+
+// StreamComplete delegates streaming to the active provider.
+func (r *Router) StreamComplete(ctx context.Context, systemPrompt string, messages []t.Message, tools []t.Tool, maxTokens int) (<-chan t.StreamEvent, error) {
+	return r.active.StreamComplete(ctx, systemPrompt, messages, tools, maxTokens)
 }

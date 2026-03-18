@@ -21,3 +21,15 @@ const (
 	RoleTool      = t.RoleTool
 )
 type Provider = t.Provider
+type StreamEventType = t.StreamEventType
+type StreamEvent = t.StreamEvent
+
+const (
+	EventTextDelta        = t.EventTextDelta
+	EventToolUseStart     = t.EventToolUseStart
+	EventInputDelta       = t.EventInputDelta
+	EventContentBlockStop = t.EventContentBlockStop
+	EventMessageStop      = t.EventMessageStop
+	EventError            = t.EventError
+	EventUsage            = t.EventUsage
+)

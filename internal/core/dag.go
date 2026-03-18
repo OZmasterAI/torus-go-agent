@@ -26,6 +26,7 @@ type BranchInfo struct {
 	ID         string `json:"id"`
 	Name       string `json:"name"`
 	HeadNodeID string `json:"head_node_id"`
+	ForkedFrom string `json:"forked_from,omitempty"` // node ID this branch was forked from
 }
 
 type DAG struct {
@@ -54,7 +55,8 @@ CREATE INDEX IF NOT EXISTS idx_nodes_parent ON nodes(parent_id);
 CREATE TABLE IF NOT EXISTS branches (
 	id TEXT PRIMARY KEY,
 	name TEXT NOT NULL,
-	head_node_id TEXT NOT NULL
+	head_node_id TEXT NOT NULL,
+	forked_from TEXT DEFAULT ''
 );
 `
 
@@ -73,6 +75,9 @@ func NewDAG(dbPath string) (*DAG, error) {
 		db.Close()
 		return nil, fmt.Errorf("schema: %w", err)
 	}
+	// Migration: add forked_from column if missing (existing databases).
+	db.Exec("ALTER TABLE branches ADD COLUMN forked_from TEXT DEFAULT ''")
+
 
 	d := &DAG{db: db}
 	var count int
@@ -162,9 +167,46 @@ func (d *DAG) GetHead() (string, error) {
 	return h, err
 }
 
+// CurrentBranchInfo returns the active branch ID, name, head node, and ancestor count.
+func (d *DAG) CurrentBranchInfo() (branchID, branchName, headNode string, msgCount int) {
+	branchID = d.branchID
+	d.db.QueryRow("SELECT name, head_node_id FROM branches WHERE id = ?", d.branchID).Scan(&branchName, &headNode)
+	if headNode != "" {
+		cur := headNode
+		for cur != "" {
+			var pid sql.NullString
+			if d.db.QueryRow("SELECT parent_id FROM nodes WHERE id = ?", cur).Scan(&pid) != nil {
+				break
+			}
+			msgCount++
+			if pid.Valid {
+				cur = pid.String
+			} else {
+				cur = ""
+			}
+		}
+	}
+	return
+}
+
+// Branch creates a new branch continuing from fromNodeID (prompt includes ancestor history).
 func (d *DAG) Branch(fromNodeID, name string) (string, error) {
 	id := "br_" + genID()
-	_, err := d.db.Exec("INSERT INTO branches (id, name, head_node_id) VALUES (?,?,?)", id, name, fromNodeID)
+	_, err := d.db.Exec("INSERT INTO branches (id, name, head_node_id, forked_from) VALUES (?,?,?,?)", id, name, fromNodeID, fromNodeID)
+	if err != nil {
+		return "", err
+	}
+	d.branchID = id
+	return id, nil
+}
+
+// NewBranch creates a fresh branch with an empty head (prompt starts clean)
+// but records forkedFrom so the lineage is preserved.
+func (d *DAG) NewBranch(name string) (string, error) {
+	// Capture the current head as the fork point before resetting.
+	head, _ := d.GetHead()
+	id := "br_" + genID()
+	_, err := d.db.Exec("INSERT INTO branches (id, name, head_node_id, forked_from) VALUES (?,?,?,?)", id, name, "", head)
 	if err != nil {
 		return "", err
 	}
@@ -183,7 +225,7 @@ func (d *DAG) SwitchBranch(branchID string) error {
 }
 
 func (d *DAG) ListBranches() ([]BranchInfo, error) {
-	rows, err := d.db.Query("SELECT id, name, head_node_id FROM branches")
+	rows, err := d.db.Query("SELECT id, name, head_node_id, forked_from FROM branches")
 	if err != nil {
 		return nil, err
 	}
@@ -191,7 +233,7 @@ func (d *DAG) ListBranches() ([]BranchInfo, error) {
 	var bs []BranchInfo
 	for rows.Next() {
 		var b BranchInfo
-		rows.Scan(&b.ID, &b.Name, &b.HeadNodeID)
+		rows.Scan(&b.ID, &b.Name, &b.HeadNodeID, &b.ForkedFrom)
 		bs = append(bs, b)
 	}
 	return bs, nil

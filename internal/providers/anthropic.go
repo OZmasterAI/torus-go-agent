@@ -1,6 +1,7 @@
 package providers
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -275,6 +276,340 @@ func (p *AnthropicProvider) Name() string { return "anthropic" }
 
 // ModelID returns the current model.
 func (p *AnthropicProvider) ModelID() string { return p.Model }
+
+// setHeaders configures auth and version headers on an Anthropic API request.
+func (p *AnthropicProvider) setHeaders(req *http.Request) {
+	req.Header.Set("Content-Type", "application/json")
+	if IsOAuthToken(p.APIKey) {
+		req.Header.Set("Authorization", "Bearer "+p.APIKey)
+		req.Header.Set("anthropic-beta", "claude-code-20250219,oauth-2025-04-20")
+		req.Header.Set("user-agent", "claude-cli/1.0.0")
+		req.Header.Set("x-app", "cli")
+	} else {
+		req.Header.Set("x-api-key", p.APIKey)
+	}
+	req.Header.Set("anthropic-version", anthropicVersion)
+}
+
+// SSE event structs for Anthropic streaming.
+type sseMessageStart struct {
+	Message struct {
+		ID    string         `json:"id"`
+		Model string         `json:"model"`
+		Usage anthropicUsage `json:"usage"`
+	} `json:"message"`
+}
+
+type sseContentBlockStart struct {
+	Index        int `json:"index"`
+	ContentBlock struct {
+		Type string `json:"type"`
+		ID   string `json:"id,omitempty"`
+		Name string `json:"name,omitempty"`
+	} `json:"content_block"`
+}
+
+type sseContentBlockDelta struct {
+	Index int `json:"index"`
+	Delta struct {
+		Type        string `json:"type"`
+		Text        string `json:"text,omitempty"`
+		PartialJSON string `json:"partial_json,omitempty"`
+	} `json:"delta"`
+}
+
+type sseContentBlockStop struct {
+	Index int `json:"index"`
+}
+
+type sseMessageDelta struct {
+	Delta struct {
+		StopReason string `json:"stop_reason"`
+	} `json:"delta"`
+	Usage anthropicUsage `json:"usage"`
+}
+
+// StreamComplete sends a streaming request to the Anthropic Messages API.
+// It returns a channel of StreamEvents. The final EventMessageStop carries the
+// accumulated AssistantMessage. The channel is closed when the stream ends.
+func (p *AnthropicProvider) StreamComplete(ctx context.Context, systemPrompt string, messages []t.Message, tools []t.Tool, maxTokens int) (<-chan t.StreamEvent, error) {
+	if maxTokens > 64000 {
+		maxTokens = 64000
+	}
+	if maxTokens <= 0 {
+		maxTokens = 8192
+	}
+
+	// Convert messages (same logic as Complete)
+	var apiMsgs []anthropicMsg
+	for _, m := range messages {
+		if m.Role == t.RoleSystem {
+			continue
+		}
+		if m.Role == t.RoleTool {
+			var results []map[string]any
+			for _, b := range m.Content {
+				if b.Type == "tool_result" {
+					tr := map[string]any{
+						"type":        "tool_result",
+						"tool_use_id": b.ToolUseID,
+						"content":     b.Content,
+					}
+					if b.IsError {
+						tr["is_error"] = true
+					}
+					results = append(results, tr)
+				}
+			}
+			if len(results) > 0 {
+				apiMsgs = append(apiMsgs, anthropicMsg{Role: "user", Content: results})
+			}
+			continue
+		}
+		var content any
+		if len(m.Content) == 1 && m.Content[0].Type == "text" {
+			content = m.Content[0].Text
+		} else {
+			content = m.Content
+		}
+		apiMsgs = append(apiMsgs, anthropicMsg{Role: string(m.Role), Content: content})
+	}
+
+	var apiTools []anthropicTool
+	for _, tl := range tools {
+		apiTools = append(apiTools, anthropicTool{
+			Name:        tl.Name,
+			Description: tl.Description,
+			InputSchema: tl.InputSchema,
+		})
+	}
+
+	var systemBlocks []systemBlock
+	if IsOAuthToken(p.APIKey) {
+		systemBlocks = append(systemBlocks, systemBlock{
+			Type: "text", Text: "You are Claude Code, Anthropic's official CLI for Claude.",
+			CacheControl: &cacheControl{Type: "ephemeral"},
+		})
+	}
+	if systemPrompt != "" {
+		systemBlocks = append(systemBlocks, systemBlock{
+			Type: "text", Text: systemPrompt,
+			CacheControl: &cacheControl{Type: "ephemeral"},
+		})
+	}
+	var system any
+	if len(systemBlocks) > 0 {
+		system = systemBlocks
+	}
+
+	cacheStart := len(apiMsgs) - 2
+	if cacheStart < 0 {
+		cacheStart = 0
+	}
+	for i := cacheStart; i < len(apiMsgs); i++ {
+		if textStr, ok := apiMsgs[i].Content.(string); ok {
+			apiMsgs[i].Content = []contentBlockWithCache{{
+				Type: "text", Text: textStr,
+				CacheControl: &cacheControl{Type: "ephemeral"},
+			}}
+		}
+	}
+
+	req := anthropicRequest{
+		Model:     p.Model,
+		MaxTokens: maxTokens,
+		System:    system,
+		Messages:  apiMsgs,
+		Tools:     apiTools,
+		Stream:    true,
+	}
+
+	body, err := json.Marshal(req)
+	if err != nil {
+		return nil, fmt.Errorf("marshal request: %w", err)
+	}
+
+	httpReq, err := http.NewRequestWithContext(ctx, "POST", p.BaseURL+"/messages", bytes.NewReader(body))
+	if err != nil {
+		return nil, fmt.Errorf("create request: %w", err)
+	}
+	p.setHeaders(httpReq)
+
+	resp, err := p.client.Do(httpReq)
+	if err != nil {
+		return nil, fmt.Errorf("http request: %w", err)
+	}
+
+	if resp.StatusCode != 200 {
+		defer resp.Body.Close()
+		respBody, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("anthropic API error %d: %s", resp.StatusCode, string(respBody))
+	}
+
+	ch := make(chan t.StreamEvent, 32)
+	go p.parseAnthropicSSE(ctx, resp, ch)
+	return ch, nil
+}
+
+// parseAnthropicSSE reads SSE events from the response body and sends StreamEvents on ch.
+func (p *AnthropicProvider) parseAnthropicSSE(ctx context.Context, resp *http.Response, ch chan<- t.StreamEvent) {
+	defer close(ch)
+	defer resp.Body.Close()
+	defer func() {
+		if r := recover(); r != nil {
+			ch <- t.StreamEvent{Type: t.EventError, Error: fmt.Errorf("anthropic stream panic: %v", r)}
+		}
+	}()
+
+	var (
+		model      string
+		stopReason string
+		usage      t.Usage
+		blocks     []t.ContentBlock
+		inputJSONs []strings.Builder // accumulated tool input per block index
+	)
+
+	send := func(ev t.StreamEvent) bool {
+		select {
+		case ch <- ev:
+			return true
+		case <-ctx.Done():
+			return false
+		}
+	}
+
+	scanner := bufio.NewScanner(resp.Body)
+	scanner.Buffer(make([]byte, 0, 256*1024), 256*1024)
+	var eventType string
+
+	for scanner.Scan() {
+		line := scanner.Text()
+
+		if strings.HasPrefix(line, "event: ") {
+			eventType = strings.TrimPrefix(line, "event: ")
+			continue
+		}
+		if !strings.HasPrefix(line, "data: ") {
+			continue
+		}
+		data := strings.TrimPrefix(line, "data: ")
+
+		switch eventType {
+		case "message_start":
+			var ev sseMessageStart
+			if json.Unmarshal([]byte(data), &ev) == nil {
+				model = ev.Message.Model
+				usage.InputTokens = ev.Message.Usage.InputTokens
+				usage.CacheReadTokens = ev.Message.Usage.CacheReadInputTokens
+				usage.CacheWriteTokens = ev.Message.Usage.CacheCreationInputTokens
+			}
+
+		case "content_block_start":
+			var ev sseContentBlockStart
+			if json.Unmarshal([]byte(data), &ev) == nil {
+				// Grow blocks slice to fit
+				for len(blocks) <= ev.Index {
+					blocks = append(blocks, t.ContentBlock{})
+				}
+				for len(inputJSONs) <= ev.Index {
+					inputJSONs = append(inputJSONs, strings.Builder{})
+				}
+				blocks[ev.Index] = t.ContentBlock{
+					Type: ev.ContentBlock.Type,
+					ID:   ev.ContentBlock.ID,
+					Name: ev.ContentBlock.Name,
+				}
+				if ev.ContentBlock.Type == "tool_use" {
+					if !send(t.StreamEvent{
+						Type:         t.EventToolUseStart,
+						ContentIndex: ev.Index,
+						ID:           ev.ContentBlock.ID,
+						Name:         ev.ContentBlock.Name,
+					}) {
+						return
+					}
+				}
+			}
+
+		case "content_block_delta":
+			var ev sseContentBlockDelta
+			if json.Unmarshal([]byte(data), &ev) == nil {
+				switch ev.Delta.Type {
+				case "text_delta":
+					if ev.Index < len(blocks) {
+						blocks[ev.Index].Text += ev.Delta.Text
+					}
+					if !send(t.StreamEvent{
+						Type:         t.EventTextDelta,
+						ContentIndex: ev.Index,
+						Text:         ev.Delta.Text,
+					}) {
+						return
+					}
+				case "input_json_delta":
+					if ev.Index < len(inputJSONs) {
+						inputJSONs[ev.Index].WriteString(ev.Delta.PartialJSON)
+					}
+					if !send(t.StreamEvent{
+						Type:         t.EventInputDelta,
+						ContentIndex: ev.Index,
+						InputDelta:   ev.Delta.PartialJSON,
+					}) {
+						return
+					}
+				}
+			}
+
+		case "content_block_stop":
+			var ev sseContentBlockStop
+			if json.Unmarshal([]byte(data), &ev) == nil {
+				// Finalize tool input JSON
+				if ev.Index < len(blocks) && blocks[ev.Index].Type == "tool_use" && ev.Index < len(inputJSONs) {
+					var args map[string]any
+					_ = json.Unmarshal([]byte(inputJSONs[ev.Index].String()), &args)
+					blocks[ev.Index].Input = args
+				}
+				if !send(t.StreamEvent{Type: t.EventContentBlockStop, ContentIndex: ev.Index}) {
+					return
+				}
+			}
+
+		case "message_delta":
+			var ev sseMessageDelta
+			if json.Unmarshal([]byte(data), &ev) == nil {
+				stopReason = ev.Delta.StopReason
+				usage.OutputTokens = ev.Usage.OutputTokens
+				usage.TotalTokens = usage.InputTokens + usage.OutputTokens
+				send(t.StreamEvent{Type: t.EventUsage, Usage: &usage})
+			}
+
+		case "message_stop":
+			assembled := &t.AssistantMessage{
+				Message:    t.Message{Role: t.RoleAssistant, Content: blocks},
+				Model:      model,
+				StopReason: stopReason,
+				Usage:      usage,
+			}
+			send(t.StreamEvent{
+				Type:       t.EventMessageStop,
+				StopReason: stopReason,
+				Response:   assembled,
+			})
+			return
+
+		case "error":
+			send(t.StreamEvent{
+				Type:  t.EventError,
+				Error: fmt.Errorf("anthropic stream error: %s", data),
+			})
+			return
+		}
+	}
+
+	if err := scanner.Err(); err != nil {
+		send(t.StreamEvent{Type: t.EventError, Error: fmt.Errorf("sse read: %w", err)})
+	}
+}
 
 // HasToolUse checks if the response wants to use tools.
 func HasToolUse(msg *t.AssistantMessage) bool {
