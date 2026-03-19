@@ -29,6 +29,13 @@ type CompactionConfig struct {
 	// Default: 80
 	Threshold int
 
+	// MaxMessages triggers compaction when message count exceeds this value.
+	// 0 = disabled (token-based only). Use with Trigger = "messages" or "both".
+	MaxMessages int
+
+	// Trigger controls what triggers compaction: "tokens" (default), "messages", or "both".
+	Trigger string
+
 	// KeepLastN is the number of recent messages to preserve verbatim after compaction.
 	// Default: 10
 	KeepLastN int
@@ -73,16 +80,38 @@ func estimateTokens(messages []Message) int {
 	return int(float64(len(b)) / 3.5)
 }
 
-// NeedsCompaction returns true when the estimated token count of messages
-// exceeds cfg.Threshold percent of cfg.ContextWindow.
+// NeedsCompaction returns true when compaction should trigger based on the
+// configured trigger mode: "tokens" (default), "messages", or "both".
 func NeedsCompaction(messages []Message, cfg CompactionConfig) bool {
 	cfg = defaultCompactionConfig(cfg)
 	if cfg.Mode == CompactionOff {
 		return false
 	}
+
+	trigger := cfg.Trigger
+	if trigger == "" {
+		trigger = "tokens"
+	}
+
+	tokenHit := false
+	msgHit := false
+
 	tokens := estimateTokens(messages)
 	limit := cfg.ContextWindow * cfg.Threshold / 100
-	return tokens >= limit
+	tokenHit = tokens >= limit
+
+	if cfg.MaxMessages > 0 {
+		msgHit = len(messages) >= cfg.MaxMessages
+	}
+
+	switch trigger {
+	case "messages":
+		return msgHit
+	case "both":
+		return tokenHit || msgHit
+	default: // "tokens"
+		return tokenHit
+	}
 }
 
 // CompactSliding keeps the first message (system / initial user turn) and the

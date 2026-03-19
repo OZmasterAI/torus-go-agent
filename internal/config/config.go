@@ -34,10 +34,14 @@ type AgentConfig struct {
 	Provider          string `json:"provider"`
 	Model             string `json:"model"`
 	MaxTokens         int    `json:"maxTokens"`     // max output tokens per response
-	ContextWindow     int    `json:"contextWindow"` // model's full context window size
-	Compaction        string `json:"compaction"`
-	CompactionModel   string `json:"compactionModel"`
-	SmartRouting      bool   `json:"smartRouting"`
+	ContextWindow         int    `json:"contextWindow"`         // model's full context window size
+	Compaction            string `json:"compaction"`
+	CompactionModel       string `json:"compactionModel"`
+	CompactionTrigger     string `json:"compactionTrigger"`     // "tokens", "messages", or "both"
+	CompactionMaxMessages int    `json:"compactionMaxMessages"` // max messages before compaction (0 = disabled)
+	ContinuousCompression bool   `json:"continuousCompression"` // enable per-turn gradual message compression
+	ZoneBudgeting         bool   `json:"zoneBudgeting"`         // enable zone-based token budget allocation (requires continuousCompression)
+	SmartRouting          bool   `json:"smartRouting"`
 	SmartRoutingModel string `json:"smartRoutingModel"`
 }
 

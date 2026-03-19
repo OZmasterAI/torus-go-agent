@@ -39,6 +39,9 @@ func NewAgent(config AgentConfig, provider Provider, hooks *HookRegistry, dag *D
 // SetCompaction configures the compaction settings.
 func (a *Agent) SetCompaction(cfg CompactionConfig) { a.compaction = cfg }
 
+// GetCompaction returns the current compaction settings.
+func (a *Agent) GetCompaction() CompactionConfig { return a.compaction }
+
 // Run processes a user message through the ReAct loop and returns the final text.
 func (a *Agent) Run(ctx context.Context, userMessage string) (string, error) {
 	// on_user_input: can transform or block user input before anything else

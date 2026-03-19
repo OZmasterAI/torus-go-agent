@@ -120,6 +120,36 @@ func main() {
 		return nil
 	})
 
+	// Register continuous compression hook (optional, config-driven)
+	if cfg.Agent.ContinuousCompression {
+		hooks.RegisterPriority(core.HookBeforeContextBuild, "continuous-compression", func(ctx context.Context, d *core.HookData) error {
+			d.Messages = core.ContinuousCompress(d.Messages, 10)
+			return nil
+		}, 50) // priority 50 = runs before DAG context injection (priority 100)
+		log.Printf("[main] continuous compression enabled")
+	}
+
+	// Register zone budgeting hook (optional, requires continuousCompression)
+	if cfg.Agent.ZoneBudgeting {
+		if !cfg.Agent.ContinuousCompression {
+			log.Printf("[main] WARNING: zoneBudgeting requires continuousCompression — enabling it")
+			hooks.RegisterPriority(core.HookBeforeContextBuild, "continuous-compression", func(ctx context.Context, d *core.HookData) error {
+				d.Messages = core.ContinuousCompress(d.Messages, 10)
+				return nil
+			}, 50)
+		}
+		zoneBudget := core.ZoneBudget{
+			ContextWindow:  cfg.Agent.ContextWindow,
+			ArchivePercent: 30,
+			OutputReserve:  cfg.Agent.MaxTokens,
+		}
+		hooks.RegisterPriority(core.HookBeforeContextBuild, "zone-budgeting", func(ctx context.Context, d *core.HookData) error {
+			d.Messages = core.ApplyZoneBudget(d.Messages, zoneBudget)
+			return nil
+		}, 60)
+		log.Printf("[main] zone budgeting enabled (archive: 30%%, history: remaining, output reserve: %d)", cfg.Agent.MaxTokens)
+	}
+
 	// Build tools: default 6 + MCP tools
 	tools := core.BuildDefaultTools()
 
@@ -161,6 +191,44 @@ func main() {
 		MaxTurns:      30,
 		ContextWindow: cfg.Agent.ContextWindow,
 	}, prov, hooks, dag)
+
+	// Override compaction settings from config
+	if cfg.Agent.CompactionTrigger != "" || cfg.Agent.CompactionMaxMessages > 0 {
+		compCfg := agent.GetCompaction()
+		if cfg.Agent.CompactionTrigger != "" {
+			compCfg.Trigger = cfg.Agent.CompactionTrigger
+		}
+		if cfg.Agent.CompactionMaxMessages > 0 {
+			compCfg.MaxMessages = cfg.Agent.CompactionMaxMessages
+		}
+		agent.SetCompaction(compCfg)
+	}
+
+	// Add recall_branch tool — search across all DAG branches
+	agent.AddTool(core.Tool{
+		Name:        "recall_branch",
+		Description: "Search all conversation branches for messages matching a query. Returns relevant excerpts from any branch.",
+		InputSchema: map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"query": map[string]any{"type": "string", "description": "Text to search for across all branches"},
+				"limit": map[string]any{"type": "number", "description": "Max results (default 5)"},
+			},
+			"required": []string{"query"},
+		},
+		Execute: func(args map[string]any) (*core.ToolResult, error) {
+			query, _ := args["query"].(string)
+			limit := int(core.GF(args, "limit", 5))
+			rows, err := dag.SearchAll(query, limit)
+			if err != nil {
+				return &core.ToolResult{Content: "Error: " + err.Error(), IsError: true}, nil
+			}
+			if rows == "" {
+				return &core.ToolResult{Content: "(no matches across any branch)"}, nil
+			}
+			return &core.ToolResult{Content: rows}, nil
+		},
+	})
 
 	// Set up compaction summarize callback — use compactionModel if set, otherwise session's model
 	compactProv := prov

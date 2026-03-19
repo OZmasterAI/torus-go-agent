@@ -123,8 +123,8 @@ func readTool() Tool {
 				return &ToolResult{Content: "Error: " + err.Error(), IsError: true}, nil
 			}
 			lines := strings.Split(string(data), "\n")
-			off := int(gf(args, "offset", 0))
-			lim := int(gf(args, "limit", float64(len(lines))))
+			off := int(GF(args, "offset", 0))
+			lim := int(GF(args, "limit", float64(len(lines))))
 			end := off + lim
 			if end > len(lines) {
 				end = len(lines)
@@ -262,7 +262,7 @@ func grepTool() Tool {
 	}
 }
 
-func gf(m map[string]any, key string, def float64) float64 {
+func GF(m map[string]any, key string, def float64) float64 {
 	v, ok := m[key].(float64)
 	if !ok {
 		return def

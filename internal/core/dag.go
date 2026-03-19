@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"slices"
+	"strings"
 	"time"
 
 	_ "modernc.org/sqlite"
@@ -289,3 +290,58 @@ func (d *DAG) ListBranches() ([]BranchInfo, error) {
 
 func (d *DAG) CurrentBranchID() string { return d.branchID }
 func (d *DAG) Close() error            { return d.db.Close() }
+
+// SearchAll searches all nodes across all branches for content matching the query.
+// Returns formatted results with branch name and role, limited to maxResults.
+func (d *DAG) SearchAll(query string, maxResults int) (string, error) {
+	if maxResults <= 0 {
+		maxResults = 5
+	}
+	rows, err := d.db.Query(`
+		SELECT n.role, n.content, b.name
+		FROM nodes n
+		LEFT JOIN branches b ON b.head_node_id IN (
+			WITH RECURSIVE ancestors(id) AS (
+				SELECT b2.head_node_id FROM branches b2 WHERE b2.id = b.id
+				UNION ALL
+				SELECT n2.parent_id FROM nodes n2 JOIN ancestors a ON a.id = n2.id WHERE n2.parent_id != ''
+			)
+			SELECT id FROM ancestors
+		)
+		WHERE n.content LIKE '%' || ? || '%'
+		ORDER BY n.timestamp DESC
+		LIMIT ?
+	`, query, maxResults)
+	if err != nil {
+		// Fallback to simpler query if recursive CTE fails
+		rows, err = d.db.Query(
+			"SELECT role, content, '' FROM nodes WHERE content LIKE '%' || ? || '%' ORDER BY timestamp DESC LIMIT ?",
+			query, maxResults,
+		)
+		if err != nil {
+			return "", err
+		}
+	}
+	defer rows.Close()
+
+	var results []string
+	for rows.Next() {
+		var role, content, branch string
+		rows.Scan(&role, &content, &branch)
+		// Truncate long content
+		if len(content) > 300 {
+			content = content[:300] + "..."
+		}
+		label := fmt.Sprintf("[%s", role)
+		if branch != "" {
+			label += " @ " + branch
+		}
+		label += "] "
+		results = append(results, label+content)
+	}
+	if len(results) == 0 {
+		return "", nil
+	}
+	return fmt.Sprintf("Found %d matches:\n\n%s", len(results), strings.Join(results, "\n\n")), nil
+}
+
