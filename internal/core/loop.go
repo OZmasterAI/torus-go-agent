@@ -15,7 +15,8 @@ type Agent struct {
 	dag           *DAG
 	compaction    CompactionConfig
 	Summarize     func(string) (string, error) // LLM summarize callback for compaction
-	OnStreamDelta func(delta string)           // called for each text delta during streaming; nil = use Complete
+	OnStreamDelta func(delta string)                                    // called for each text delta during streaming; nil = use Complete
+	OnToolUse     func(name string, args map[string]any, result *ToolResult) // called after each tool execution; nil = silent
 }
 
 // SetSmartProvider sets the provider used for simple messages when smart routing is enabled.
@@ -296,6 +297,11 @@ func (a *Agent) Run(ctx context.Context, userMessage string) (string, error) {
 			a.hooks.Fire(ctx, HookAfterToolCall, afterTool)
 			if afterTool.ToolResult != nil {
 				result = afterTool.ToolResult
+			}
+
+			// Notify TUI/channel about tool use
+			if a.OnToolUse != nil {
+				a.OnToolUse(tc.Name, tc.Input, result)
 			}
 
 			// Add tool result to DAG

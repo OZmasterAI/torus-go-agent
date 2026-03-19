@@ -4,6 +4,8 @@ package ui
 import (
 	"context"
 	"fmt"
+	"io/fs"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -18,18 +20,17 @@ import (
 
 // ── Styles ────────────────────────────────────────────────────────────────────
 
-// Torus spinner frames
 var torusFrames = []string{"◐", "◓", "◑", "◒"}
 
 var (
-	styleUser    = lipgloss.NewStyle().Foreground(lipgloss.Color("10")).Bold(true) // bright green
-	styleError   = lipgloss.NewStyle().Foreground(lipgloss.Color("9")).Bold(true)  // bright red
-	styleCursor  = lipgloss.NewStyle().Reverse(true)                              // block cursor
-	stylePrompt  = lipgloss.NewStyle().Foreground(lipgloss.Color("10")).Bold(true) // green prompt
-	styleDim     = lipgloss.NewStyle().Foreground(lipgloss.Color("242"))           // dim text
-	styleSpinner = lipgloss.NewStyle().Foreground(lipgloss.Color("39"))            // cyan spinner
+	styleUser    = lipgloss.NewStyle().Foreground(lipgloss.Color("10")).Bold(true)
+	styleError   = lipgloss.NewStyle().Foreground(lipgloss.Color("9")).Bold(true)
+	styleCursor  = lipgloss.NewStyle().Reverse(true)
+	stylePrompt  = lipgloss.NewStyle().Foreground(lipgloss.Color("10")).Bold(true)
+	styleDim     = lipgloss.NewStyle().Foreground(lipgloss.Color("242"))
+	styleSpinner = lipgloss.NewStyle().Foreground(lipgloss.Color("39"))
 
-	// Header bar
+	// Header
 	styleHeaderBar = lipgloss.NewStyle().
 			Background(lipgloss.Color("17")).
 			Foreground(lipgloss.Color("39")).
@@ -44,18 +45,58 @@ var (
 	styleStatus = lipgloss.NewStyle().
 			Background(lipgloss.Color("236")).
 			Foreground(lipgloss.Color("252"))
-
-	// Scroll indicator
 	styleScrollHint = lipgloss.NewStyle().
 				Foreground(lipgloss.Color("243")).
 				Italic(true)
+
+	// Tool cards
+	styleToolHeader = lipgloss.NewStyle().
+				Foreground(lipgloss.Color("214")).
+				Bold(true)
+	styleToolDim = lipgloss.NewStyle().Foreground(lipgloss.Color("245"))
+	styleToolSep = lipgloss.NewStyle().Foreground(lipgloss.Color("238"))
+	styleDiffAdd = lipgloss.NewStyle().Foreground(lipgloss.Color("10"))
+	styleDiffDel = lipgloss.NewStyle().Foreground(lipgloss.Color("9"))
+
+	// Sidebar
+	styleSidebarBorder = lipgloss.NewStyle().
+				Border(lipgloss.RoundedBorder()).
+				BorderForeground(lipgloss.Color("238"))
+	styleSidebarTitle = lipgloss.NewStyle().
+				Foreground(lipgloss.Color("39")).
+				Bold(true)
+	styleSidebarFile = lipgloss.NewStyle().Foreground(lipgloss.Color("252"))
+	styleSidebarCount = lipgloss.NewStyle().Foreground(lipgloss.Color("245"))
+
+	// Autocomplete / Palette / Dialog
+	styleACNormal   = lipgloss.NewStyle().Foreground(lipgloss.Color("252"))
+	styleACSelected = lipgloss.NewStyle().
+				Foreground(lipgloss.Color("0")).
+				Background(lipgloss.Color("39"))
+
+	// Overlay dialog (command palette + session switcher)
+	styleOverlayBorder = lipgloss.NewStyle().
+				Border(lipgloss.RoundedBorder()).
+				BorderForeground(lipgloss.Color("39")).
+				Padding(0, 1)
+	styleOverlayTitle = lipgloss.NewStyle().
+				Foreground(lipgloss.Color("39")).
+				Bold(true)
+	styleOverlayHint = lipgloss.NewStyle().
+				Foreground(lipgloss.Color("243")).
+				Italic(true)
+	styleKeybind = lipgloss.NewStyle().
+				Foreground(lipgloss.Color("214"))
 )
 
-// Layout constants — lines reserved for non-chat UI
+// Layout constants
 const (
-	headerLines = 2 // header bar + separator
-	statusLines = 1 // status bar
-	inputLines  = 2 // blank + input line
+	headerLines  = 2
+	statusLines  = 1
+	inputLines   = 2
+	sidebarMinW  = 120 // show sidebar when terminal wider than this
+	sidebarWidth = 26
+	acMaxResults = 8
 )
 
 // ── Custom messages ───────────────────────────────────────────────────────────
@@ -68,23 +109,68 @@ type agentResponseMsg struct {
 	elapsed   time.Duration
 }
 
-type agentErrorMsg struct {
-	err error
+type agentErrorMsg struct{ err error }
+
+type streamDeltaMsg struct{ delta string }
+
+type toolEvent struct {
+	name     string
+	args     map[string]any
+	result   string
+	isError  bool
+	filePath string
 }
 
-type streamDeltaMsg struct {
-	delta string
-}
+type toolEventMsg struct{ event toolEvent }
 
 type tickMsg time.Time
+
+// ── Overlay mode ──────────────────────────────────────────────────────────────
+
+type overlayMode int
+
+const (
+	overlayNone    overlayMode = iota
+	overlayPalette             // command palette (Ctrl+K or /)
+	overlaySessions            // session/branch switcher (Ctrl+B)
+	overlayHelp                // keybindings help (?)
+)
+
+// paletteCommand is an entry in the command palette.
+type paletteCommand struct {
+	name    string // display name
+	key     string // keybind hint (e.g. "Ctrl+B")
+	command string // slash command to execute (e.g. "/new")
+}
+
+func defaultPaletteCommands(skills *features.SkillRegistry) []paletteCommand {
+	cmds := []paletteCommand{
+		{name: "New conversation", key: "", command: "/new"},
+		{name: "Clear context", key: "", command: "/clear"},
+		{name: "Switch session", key: "Ctrl+B", command: "::sessions"},
+		{name: "Show keybindings", key: "?", command: "::help"},
+		{name: "List skills", key: "", command: "/skills"},
+		{name: "Exit", key: "Ctrl+D", command: "/exit"},
+	}
+	if skills != nil {
+		for _, s := range skills.List() {
+			cmds = append(cmds, paletteCommand{
+				name:    s.Name + " — " + s.Description,
+				command: "/" + s.Name,
+			})
+		}
+	}
+	return cmds
+}
 
 // ── displayMsg ────────────────────────────────────────────────────────────────
 
 type displayMsg struct {
-	role     string // "user", "assistant", "error"
+	role     string // "user", "assistant", "error", "tool"
 	text     string
 	isError  bool
-	rendered string // cached glamour output (assistant only)
+	rendered string   // cached glamour output
+	tool     *toolEvent // set when role == "tool"
 }
 
 // ── Model ─────────────────────────────────────────────────────────────────────
@@ -94,87 +180,108 @@ type Model struct {
 	modelName string
 	skills    *features.SkillRegistry
 
-	// Input state
+	// Input
 	input  string
 	cursor bool
 
-	// Chat history
+	// Chat
 	messages []displayMsg
-
-	// Viewport (scrollable chat area)
 	viewport viewport.Model
-	ready    bool // true after first WindowSizeMsg
+	ready    bool
 
-	// Glamour renderer (recreated on resize)
+	// Glamour
 	glamRenderer *glamour.TermRenderer
+
+	// Streaming channels
+	deltaCh chan string
+	toolCh  chan toolEvent
 
 	// Status
 	statusLine   string
 	processing   bool
 	streaming    bool
-	deltaCh      chan string
 	spinnerFrame int
 	startTime    time.Time
 
-	// Accumulated usage
+	// Usage
 	totalTokensIn  int
 	totalTokensOut int
 	totalCost      float64
 	preEstimate    int
 
-	// Terminal dimensions
+	// Tool tracking
+	toolEvents    []toolEvent
+	modifiedFiles map[string]int // file path → edit count
+
+	// Sidebar
+	showSidebar bool
+
+	// Autocomplete
+	acMode    bool
+	acQuery   string
+	acList    []string
+	acIdx     int
+	acFiles   []string // cached file list
+	acLoaded  bool
+
+	// Overlay (command palette / session switcher / help)
+	overlay      overlayMode
+	overlayQuery string
+	overlayIdx   int
+	overlayItems []paletteCommand  // filtered palette commands
+	branches     []core.BranchInfo // cached for session switcher
+
+	// Terminal
 	width  int
 	height int
-
-	err error
+	err    error
 }
 
 func newModel(agent *core.Agent, modelName string, skills *features.SkillRegistry) Model {
 	return Model{
-		agent:      agent,
-		modelName:  modelName,
-		skills:     skills,
-		startTime:  time.Now(),
-		statusLine: "starting...",
+		agent:         agent,
+		modelName:     modelName,
+		skills:        skills,
+		startTime:     time.Now(),
+		statusLine:    "starting...",
+		modifiedFiles: make(map[string]int),
 		messages: []displayMsg{
-			{role: "assistant", text: fmt.Sprintf("Type a message. Ctrl+D or /exit to quit. /skills to list skills.")},
+			{role: "assistant", text: "Type a message. Ctrl+D or /exit to quit. /skills to list skills."},
 		},
 	}
 }
 
 // ── tea.Model interface ───────────────────────────────────────────────────────
 
-func (m Model) Init() tea.Cmd {
-	return nil
-}
+func (m Model) Init() tea.Cmd { return nil }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	var cmds []tea.Cmd
-
 	switch msg := msg.(type) {
 
 	// ── Window resize ────────────────────────────────────────────────────
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
+		m.showSidebar = m.width >= sidebarMinW
 
+		vpWidth := m.chatWidth()
 		vpHeight := m.height - headerLines - statusLines - inputLines
+		if m.acMode {
+			vpHeight -= min(len(m.acList), acMaxResults) + 1
+		}
 		if vpHeight < 1 {
 			vpHeight = 1
 		}
 
 		if !m.ready {
-			m.viewport = viewport.New(m.width, vpHeight)
+			m.viewport = viewport.New(vpWidth, vpHeight)
 			m.ready = true
 		} else {
-			m.viewport.Width = m.width
+			m.viewport.Width = vpWidth
 			m.viewport.Height = vpHeight
 		}
 
-		// Recreate glamour renderer for new width
-		m.glamRenderer = newGlamourRenderer(m.width - 4)
-
-		// Re-render all cached messages for new width
+		m.glamRenderer = newGlamourRenderer(vpWidth - 4)
 		for i := range m.messages {
 			m.messages[i].rendered = ""
 		}
@@ -183,14 +290,68 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	// ── Keyboard input ───────────────────────────────────────────────────
 	case tea.KeyMsg:
-		switch msg.Type {
 
+		// Overlay key handling (command palette / session switcher / help)
+		if m.overlay != overlayNone {
+			return m.handleOverlayKey(msg)
+		}
+
+		// Autocomplete key handling
+		if m.acMode {
+			switch msg.Type {
+			case tea.KeyTab:
+				if len(m.acList) > 0 {
+					m.acIdx = (m.acIdx + 1) % len(m.acList)
+				}
+				return m, nil
+			case tea.KeyShiftTab:
+				if len(m.acList) > 0 {
+					m.acIdx = (m.acIdx - 1 + len(m.acList)) % len(m.acList)
+				}
+				return m, nil
+			case tea.KeyEnter:
+				if len(m.acList) > 0 {
+					// Replace @query with selected file
+					atPos := strings.LastIndex(m.input, "@")
+					if atPos >= 0 {
+						m.input = m.input[:atPos] + m.acList[m.acIdx] + " "
+					}
+				}
+				m.acMode = false
+				return m, nil
+			case tea.KeyEscape:
+				m.acMode = false
+				return m, nil
+			case tea.KeyBackspace:
+				if len(m.input) > 0 {
+					runes := []rune(m.input)
+					runes = runes[:len(runes)-1]
+					m.input = string(runes)
+					m.updateAutocomplete()
+				}
+				return m, nil
+			default:
+				if msg.Type == tea.KeyRunes {
+					char := string(msg.Runes)
+					m.input += char
+					if char == " " || char == "\t" {
+						m.acMode = false
+					} else {
+						m.updateAutocomplete()
+					}
+				} else if msg.Type == tea.KeySpace {
+					m.input += " "
+					m.acMode = false
+				}
+				return m, nil
+			}
+		}
+
+		switch msg.Type {
 		case tea.KeyCtrlC:
 			if m.processing {
 				m.messages = append(m.messages, displayMsg{
-					role:    "error",
-					text:    "Agent is running — use Ctrl+D to force quit.",
-					isError: true,
+					role: "error", text: "Agent is running — use Ctrl+D to force quit.", isError: true,
 				})
 				m.rebuildContent()
 				return m, nil
@@ -199,6 +360,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case tea.KeyCtrlD:
 			return m, tea.Quit
+
+		case tea.KeyCtrlK:
+			m.openPalette()
+			return m, nil
+
+		case tea.KeyCtrlB:
+			m.openSessions()
+			return m, nil
 
 		case tea.KeyPgUp, tea.KeyPgDown:
 			var cmd tea.Cmd
@@ -214,60 +383,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, tea.Quit
 			}
 			if input == "/new" {
-				oldBranch := m.agent.DAG().CurrentBranchID()
-				m.agent.Hooks().Fire(context.Background(), core.HookBeforeNewBranch, &core.HookData{
-					AgentID: "main",
-					Meta:    map[string]any{"old_branch": oldBranch},
-				})
-				newBranch, _ := m.agent.DAG().NewBranch(fmt.Sprintf("session-%d", time.Now().Unix()))
-				m.agent.Hooks().Fire(context.Background(), core.HookAfterNewBranch, &core.HookData{
-					AgentID: "main",
-					Meta:    map[string]any{"old_branch": oldBranch, "new_branch": newBranch},
-				})
-				m.messages = m.messages[:0]
-				m.messages = append(m.messages, displayMsg{role: "assistant", text: "New conversation started (previous preserved on old branch)."})
-				m.totalTokensIn = 0
-				m.totalTokensOut = 0
-				m.totalCost = 0
-				m.input = ""
-				m.rebuildContent()
-				return m, nil
+				return m.handleNewBranch()
 			}
 			if input == "/clear" {
-				branchID := m.agent.DAG().CurrentBranchID()
-				m.agent.Hooks().Fire(context.Background(), core.HookPreClear, &core.HookData{
-					AgentID: "main",
-					Meta:    map[string]any{"branch": branchID},
-				})
-				m.agent.DAG().ResetHead()
-				m.agent.Hooks().Fire(context.Background(), core.HookPostClear, &core.HookData{
-					AgentID: "main",
-					Meta:    map[string]any{"branch": branchID},
-				})
-				m.messages = m.messages[:0]
-				m.messages = append(m.messages, displayMsg{role: "assistant", text: "Context cleared on current branch."})
-				m.totalTokensIn = 0
-				m.totalTokensOut = 0
-				m.totalCost = 0
-				m.input = ""
-				m.rebuildContent()
-				return m, nil
+				return m.handleClear()
 			}
 			if input == "/skills" && m.skills != nil {
-				list := m.skills.List()
-				if len(list) == 0 {
-					m.messages = append(m.messages, displayMsg{role: "assistant", text: "No skills found in skills directory."})
-				} else {
-					var sb strings.Builder
-					sb.WriteString("**Available skills:**\n\n")
-					for _, s := range list {
-						sb.WriteString(fmt.Sprintf("- `/%s` — %s\n", s.Name, s.Description))
-					}
-					m.messages = append(m.messages, displayMsg{role: "assistant", text: sb.String()})
-				}
-				m.input = ""
-				m.rebuildContent()
-				return m, nil
+				return m.handleSkills()
 			}
 			// Check skills
 			if m.skills != nil {
@@ -288,9 +410,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					}
 				}
 			}
-			// Append user message, add streaming placeholder, start agent.
+			// Send message
 			m.messages = append(m.messages, displayMsg{role: "user", text: input})
-			m.messages = append(m.messages, displayMsg{role: "assistant", text: ""}) // streaming placeholder
+			m.messages = append(m.messages, displayMsg{role: "assistant", text: ""})
 			m.input = ""
 			m.processing = true
 			m.streaming = true
@@ -298,21 +420,49 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.statusLine = m.buildStatus(0, 0, 0, 0)
 
 			deltaCh := make(chan string, 64)
+			toolCh := make(chan toolEvent, 32)
 			m.deltaCh = deltaCh
+			m.toolCh = toolCh
 			m.rebuildContent()
-			return m, tea.Batch(runAgentStream(m.agent, input, deltaCh), waitForDelta(deltaCh), tick())
+			return m, tea.Batch(
+				runAgentStream(m.agent, input, deltaCh, toolCh),
+				waitForDelta(deltaCh),
+				waitForToolEvent(toolCh),
+				tick(),
+			)
 
 		case tea.KeyBackspace, tea.KeyDelete:
 			if len(m.input) > 0 {
 				runes := []rune(m.input)
+				deleted := runes[len(runes)-1]
 				runes = runes[:len(runes)-1]
 				m.input = string(runes)
+				// If we deleted the @, exit autocomplete
+				if deleted == '@' {
+					m.acMode = false
+				}
 			}
 			return m, nil
 
 		default:
 			if msg.Type == tea.KeyRunes {
-				m.input += string(msg.Runes)
+				char := string(msg.Runes)
+				if char == "/" && m.input == "" && !m.processing {
+					m.openPalette()
+					return m, nil
+				}
+				if char == "?" && m.input == "" && !m.processing {
+					m.openHelp()
+					return m, nil
+				}
+				m.input += char
+				if char == "@" && !m.processing {
+					m.acMode = true
+					m.acQuery = ""
+					m.acIdx = 0
+					m.ensureFileList()
+					m.acList = m.acFiles
+				}
 			} else if msg.Type == tea.KeySpace {
 				m.input += " "
 			}
@@ -325,11 +475,37 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			last := &m.messages[len(m.messages)-1]
 			if last.role == "assistant" {
 				last.text += msg.delta
-				last.rendered = "" // invalidate cache during streaming
+				last.rendered = ""
 			}
 		}
 		m.rebuildContent()
 		return m, waitForDelta(m.deltaCh)
+
+	// ── Tool event ───────────────────────────────────────────────────────
+	case toolEventMsg:
+		ev := msg.event
+		m.toolEvents = append(m.toolEvents, ev)
+
+		// Track modified files
+		if ev.filePath != "" && (ev.name == "write" || ev.name == "edit") {
+			m.modifiedFiles[ev.filePath]++
+		}
+
+		// Remove empty trailing placeholder
+		if len(m.messages) > 0 {
+			last := m.messages[len(m.messages)-1]
+			if last.role == "assistant" && last.text == "" {
+				m.messages = m.messages[:len(m.messages)-1]
+			}
+		}
+
+		// Add tool card
+		m.messages = append(m.messages, displayMsg{role: "tool", tool: &ev})
+		// Add new streaming placeholder for next turn
+		m.messages = append(m.messages, displayMsg{role: "assistant", text: ""})
+
+		m.rebuildContent()
+		return m, waitForToolEvent(m.toolCh)
 
 	// ── Tick ─────────────────────────────────────────────────────────────
 	case tickMsg:
@@ -346,18 +522,25 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.processing = false
 		m.streaming = false
 		m.deltaCh = nil
+		m.toolCh = nil
 		m.totalTokensIn += msg.tokensIn
 		m.totalTokensOut += msg.tokensOut
 		m.totalCost += msg.cost
 		m.statusLine = m.buildStatus(m.totalTokensIn, m.totalTokensOut, m.totalCost, msg.elapsed)
-		// Finalize the last message — clear rendered cache so glamour kicks in.
+
+		// Clean up empty trailing placeholder
 		if len(m.messages) > 0 {
 			last := &m.messages[len(m.messages)-1]
-			if last.role == "assistant" {
-				last.rendered = "" // force re-render with glamour
-				if last.text == "" && msg.text != "" {
+			if last.role == "assistant" && last.text == "" {
+				if msg.text != "" {
 					last.text = msg.text
+				} else {
+					m.messages = m.messages[:len(m.messages)-1]
 				}
+			}
+			// Force glamour re-render for final message
+			if len(m.messages) > 0 {
+				m.messages[len(m.messages)-1].rendered = ""
 			}
 		}
 		m.rebuildContent()
@@ -368,6 +551,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.processing = false
 		m.streaming = false
 		m.deltaCh = nil
+		m.toolCh = nil
 		m.err = msg.err
 		if len(m.messages) > 0 {
 			last := m.messages[len(m.messages)-1]
@@ -376,21 +560,227 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 		m.messages = append(m.messages, displayMsg{
-			role:    "error",
-			text:    fmt.Sprintf("Error: %v", msg.err),
-			isError: true,
+			role: "error", text: fmt.Sprintf("Error: %v", msg.err), isError: true,
 		})
 		m.rebuildContent()
 		return m, nil
 	}
 
-	// Forward any other messages to viewport (mouse wheel, etc.)
+	// Forward other messages to viewport
 	var cmd tea.Cmd
 	m.viewport, cmd = m.viewport.Update(msg)
-	if cmd != nil {
-		cmds = append(cmds, cmd)
+	return m, cmd
+}
+
+// ── Slash command handlers ────────────────────────────────────────────────────
+
+func (m *Model) handleNewBranch() (tea.Model, tea.Cmd) {
+	oldBranch := m.agent.DAG().CurrentBranchID()
+	m.agent.Hooks().Fire(context.Background(), core.HookBeforeNewBranch, &core.HookData{
+		AgentID: "main", Meta: map[string]any{"old_branch": oldBranch},
+	})
+	newBranch, _ := m.agent.DAG().NewBranch(fmt.Sprintf("session-%d", time.Now().Unix()))
+	m.agent.Hooks().Fire(context.Background(), core.HookAfterNewBranch, &core.HookData{
+		AgentID: "main", Meta: map[string]any{"old_branch": oldBranch, "new_branch": newBranch},
+	})
+	m.messages = m.messages[:0]
+	m.messages = append(m.messages, displayMsg{role: "assistant", text: "New conversation started (previous preserved on old branch)."})
+	m.totalTokensIn, m.totalTokensOut, m.totalCost = 0, 0, 0
+	m.toolEvents = nil
+	m.modifiedFiles = make(map[string]int)
+	m.input = ""
+	m.rebuildContent()
+	return m, nil
+}
+
+func (m *Model) handleClear() (tea.Model, tea.Cmd) {
+	branchID := m.agent.DAG().CurrentBranchID()
+	m.agent.Hooks().Fire(context.Background(), core.HookPreClear, &core.HookData{
+		AgentID: "main", Meta: map[string]any{"branch": branchID},
+	})
+	m.agent.DAG().ResetHead()
+	m.agent.Hooks().Fire(context.Background(), core.HookPostClear, &core.HookData{
+		AgentID: "main", Meta: map[string]any{"branch": branchID},
+	})
+	m.messages = m.messages[:0]
+	m.messages = append(m.messages, displayMsg{role: "assistant", text: "Context cleared on current branch."})
+	m.totalTokensIn, m.totalTokensOut, m.totalCost = 0, 0, 0
+	m.input = ""
+	m.rebuildContent()
+	return m, nil
+}
+
+func (m *Model) handleSkills() (tea.Model, tea.Cmd) {
+	list := m.skills.List()
+	if len(list) == 0 {
+		m.messages = append(m.messages, displayMsg{role: "assistant", text: "No skills found in skills directory."})
+	} else {
+		var sb strings.Builder
+		sb.WriteString("**Available skills:**\n\n")
+		for _, s := range list {
+			sb.WriteString(fmt.Sprintf("- `/%s` — %s\n", s.Name, s.Description))
+		}
+		m.messages = append(m.messages, displayMsg{role: "assistant", text: sb.String()})
 	}
-	return m, tea.Batch(cmds...)
+	m.input = ""
+	m.rebuildContent()
+	return m, nil
+}
+
+// ── Overlay methods ───────────────────────────────────────────────────────────
+
+func (m *Model) openPalette() {
+	m.overlay = overlayPalette
+	m.overlayQuery = ""
+	m.overlayIdx = 0
+	m.overlayItems = defaultPaletteCommands(m.skills)
+}
+
+func (m *Model) openSessions() {
+	m.overlay = overlaySessions
+	m.overlayIdx = 0
+	m.branches, _ = m.agent.DAG().ListBranches()
+}
+
+func (m *Model) openHelp() {
+	m.overlay = overlayHelp
+}
+
+func (m *Model) handleOverlayKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch m.overlay {
+	case overlayHelp:
+		// Any key closes help
+		m.overlay = overlayNone
+		return m, nil
+
+	case overlayPalette:
+		switch msg.Type {
+		case tea.KeyEscape:
+			m.overlay = overlayNone
+			return m, nil
+		case tea.KeyUp:
+			if m.overlayIdx > 0 {
+				m.overlayIdx--
+			}
+			return m, nil
+		case tea.KeyDown:
+			if m.overlayIdx < len(m.overlayItems)-1 {
+				m.overlayIdx++
+			}
+			return m, nil
+		case tea.KeyTab:
+			if len(m.overlayItems) > 0 {
+				m.overlayIdx = (m.overlayIdx + 1) % len(m.overlayItems)
+			}
+			return m, nil
+		case tea.KeyEnter:
+			if len(m.overlayItems) > 0 {
+				cmd := m.overlayItems[m.overlayIdx].command
+				m.overlay = overlayNone
+				return m.executePaletteCommand(cmd)
+			}
+			return m, nil
+		case tea.KeyBackspace:
+			if len(m.overlayQuery) > 0 {
+				runes := []rune(m.overlayQuery)
+				m.overlayQuery = string(runes[:len(runes)-1])
+				m.filterPalette()
+			}
+			return m, nil
+		default:
+			if msg.Type == tea.KeyRunes {
+				m.overlayQuery += string(msg.Runes)
+				m.filterPalette()
+			} else if msg.Type == tea.KeySpace {
+				m.overlayQuery += " "
+				m.filterPalette()
+			}
+			return m, nil
+		}
+
+	case overlaySessions:
+		switch msg.Type {
+		case tea.KeyEscape:
+			m.overlay = overlayNone
+			return m, nil
+		case tea.KeyUp:
+			if m.overlayIdx > 0 {
+				m.overlayIdx--
+			}
+			return m, nil
+		case tea.KeyDown:
+			if m.overlayIdx < len(m.branches)-1 {
+				m.overlayIdx++
+			}
+			return m, nil
+		case tea.KeyTab:
+			if len(m.branches) > 0 {
+				m.overlayIdx = (m.overlayIdx + 1) % len(m.branches)
+			}
+			return m, nil
+		case tea.KeyEnter:
+			if len(m.branches) > 0 {
+				branch := m.branches[m.overlayIdx]
+				m.agent.DAG().SwitchBranch(branch.ID)
+				m.overlay = overlayNone
+				m.messages = m.messages[:0]
+				m.messages = append(m.messages, displayMsg{
+					role: "assistant",
+					text: fmt.Sprintf("Switched to branch: **%s** (`%s`)", branch.Name, branch.ID),
+				})
+				m.rebuildContent()
+			}
+			return m, nil
+		}
+	}
+
+	return m, nil
+}
+
+func (m *Model) filterPalette() {
+	all := defaultPaletteCommands(m.skills)
+	if m.overlayQuery == "" {
+		m.overlayItems = all
+		m.overlayIdx = 0
+		return
+	}
+	q := strings.ToLower(m.overlayQuery)
+	var filtered []paletteCommand
+	for _, cmd := range all {
+		if strings.Contains(strings.ToLower(cmd.name), q) || strings.Contains(cmd.command, q) {
+			filtered = append(filtered, cmd)
+		}
+	}
+	m.overlayItems = filtered
+	if m.overlayIdx >= len(filtered) {
+		m.overlayIdx = 0
+	}
+}
+
+func (m *Model) executePaletteCommand(cmd string) (tea.Model, tea.Cmd) {
+	switch cmd {
+	case "/new":
+		return m.handleNewBranch()
+	case "/clear":
+		return m.handleClear()
+	case "/skills":
+		return m.handleSkills()
+	case "/exit":
+		return m, tea.Quit
+	case "::sessions":
+		m.openSessions()
+		return m, nil
+	case "::help":
+		m.openHelp()
+		return m, nil
+	default:
+		// Skill commands — inject as input
+		if strings.HasPrefix(cmd, "/") {
+			m.input = cmd
+			// Simulate Enter press by setting input and letting the user confirm
+		}
+		return m, nil
+	}
 }
 
 // ── View ──────────────────────────────────────────────────────────────────────
@@ -402,20 +792,23 @@ func (m Model) View() string {
 
 	var sb strings.Builder
 
-	// ── Header ───────────────────────────────────────────────────────────
+	// Header
 	sb.WriteString(m.renderHeader())
 	sb.WriteByte('\n')
-
-	// Separator
 	sep := styleSeparator.Render(strings.Repeat("─", m.width))
 	sb.WriteString(sep)
 	sb.WriteByte('\n')
 
-	// ── Chat viewport ────────────────────────────────────────────────────
-	sb.WriteString(m.viewport.View())
+	// Chat + optional sidebar
+	chatView := m.viewport.View()
+	if m.showSidebar {
+		sidebar := m.renderSidebar()
+		chatView = lipgloss.JoinHorizontal(lipgloss.Top, chatView, " ", sidebar)
+	}
+	sb.WriteString(chatView)
 	sb.WriteByte('\n')
 
-	// ── Status bar ───────────────────────────────────────────────────────
+	// Status bar
 	statusLine := m.statusLine
 	if !m.processing {
 		preEst := 0
@@ -432,7 +825,6 @@ func (m Model) View() string {
 			statusLine += fmt.Sprintf(" | next: ~%s tok", fmtTok(preEst))
 		}
 	}
-	// Scroll indicator
 	if !m.viewport.AtBottom() {
 		statusLine += " | " + styleScrollHint.Render("PgDn ↓")
 	}
@@ -443,53 +835,69 @@ func (m Model) View() string {
 	sb.WriteString(styleStatus.Render(padded))
 	sb.WriteByte('\n')
 
-	// ── Input line ───────────────────────────────────────────────────────
-	inputLine := stylePrompt.Render("❯ ") + m.input + styleCursor.Render(" ")
-	if m.processing {
-		spinner := styleSpinner.Render(torusFrames[m.spinnerFrame])
-		elapsed := time.Since(m.startTime)
-		if m.streaming && len(m.messages) > 0 && m.messages[len(m.messages)-1].text != "" {
-			inputLine = styleDim.Render(fmt.Sprintf("%s streaming... %.1fs", spinner, elapsed.Seconds()))
-		} else {
-			inputLine = styleDim.Render(fmt.Sprintf("%s thinking... %.1fs", spinner, elapsed.Seconds()))
+	// Overlay or normal input area
+	if m.overlay != overlayNone {
+		sb.WriteString(m.renderOverlay())
+	} else {
+		// Autocomplete dropdown (if active)
+		if m.acMode && len(m.acList) > 0 {
+			sb.WriteString(m.renderAutocomplete())
+			sb.WriteByte('\n')
 		}
+
+		// Input line
+		inputLine := stylePrompt.Render("❯ ") + m.input + styleCursor.Render(" ")
+		if m.processing {
+			spinner := styleSpinner.Render(torusFrames[m.spinnerFrame])
+			elapsed := time.Since(m.startTime)
+			if m.streaming && len(m.messages) > 0 && m.messages[len(m.messages)-1].text != "" {
+				inputLine = styleDim.Render(fmt.Sprintf("%s streaming... %.1fs", spinner, elapsed.Seconds()))
+			} else {
+				inputLine = styleDim.Render(fmt.Sprintf("%s thinking... %.1fs", spinner, elapsed.Seconds()))
+			}
+		}
+		sb.WriteString(inputLine)
 	}
-	sb.WriteString(inputLine)
 
 	return sb.String()
 }
 
 // ── Content rendering ─────────────────────────────────────────────────────────
 
-// rebuildContent renders all messages and sets the viewport content.
 func (m *Model) rebuildContent() {
 	if !m.ready {
 		return
 	}
 
+	chatW := m.chatWidth()
 	var sb strings.Builder
+
 	for i := range m.messages {
 		dm := &m.messages[i]
 		switch dm.role {
 		case "user":
 			sb.WriteString(styleUser.Render("you ❯ "))
-			sb.WriteString(wrapText(dm.text, m.width-6))
+			sb.WriteString(wrapText(dm.text, chatW-6))
 			sb.WriteString("\n\n")
 
 		case "assistant":
 			isStreaming := m.streaming && i == len(m.messages)-1
 			if isStreaming || dm.text == "" {
-				// During streaming: plain text (fast)
-				sb.WriteString(wrapText(dm.text, m.width-2))
+				sb.WriteString(wrapText(dm.text, chatW-2))
 				if dm.text != "" {
 					sb.WriteByte('\n')
 				}
 			} else {
-				// Completed: glamour-rendered markdown
 				if dm.rendered == "" {
 					dm.rendered = m.glamourRender(dm.text)
 				}
 				sb.WriteString(dm.rendered)
+				sb.WriteByte('\n')
+			}
+
+		case "tool":
+			if dm.tool != nil {
+				sb.WriteString(m.renderToolCard(dm.tool, chatW))
 				sb.WriteByte('\n')
 			}
 
@@ -506,7 +914,396 @@ func (m *Model) rebuildContent() {
 	}
 }
 
-// renderHeader builds the header bar.
+// ── Tool card rendering ───────────────────────────────────────────────────────
+
+func (m Model) renderToolCard(ev *toolEvent, maxWidth int) string {
+	var sb strings.Builder
+	cardW := maxWidth - 4
+	if cardW < 20 {
+		cardW = 20
+	}
+
+	// Header line
+	header := styleToolHeader.Render(fmt.Sprintf("─── %s ", ev.name))
+	headerPad := ""
+	hLen := lipgloss.Width(header)
+	if cardW > hLen {
+		headerPad = styleToolSep.Render(strings.Repeat("─", cardW-hLen))
+	}
+	sb.WriteString("  " + header + headerPad + "\n")
+
+	// Body based on tool type
+	switch ev.name {
+	case "edit":
+		if ev.filePath != "" {
+			sb.WriteString("  " + styleToolDim.Render(truncPath(ev.filePath, cardW-2)) + "\n")
+		}
+		oldStr, _ := ev.args["old_str"].(string)
+		newStr, _ := ev.args["new_str"].(string)
+		if oldStr != "" || newStr != "" {
+			sb.WriteString(renderDiff(oldStr, newStr, cardW-4))
+		}
+
+	case "write":
+		if ev.filePath != "" {
+			sb.WriteString("  " + styleToolDim.Render(truncPath(ev.filePath, cardW-2)) + "\n")
+		}
+		content, _ := ev.args["content"].(string)
+		lines := strings.Count(content, "\n") + 1
+		sb.WriteString("  " + styleDim.Render(fmt.Sprintf("%d lines written", lines)) + "\n")
+
+	case "bash":
+		cmd, _ := ev.args["command"].(string)
+		if cmd != "" {
+			sb.WriteString("  " + styleDim.Render("$ "+truncStr(cmd, cardW-4)) + "\n")
+		}
+		// Show truncated output
+		if ev.result != "" && !ev.isError {
+			outLines := strings.Split(ev.result, "\n")
+			show := outLines
+			if len(show) > 5 {
+				show = show[:5]
+			}
+			for _, line := range show {
+				sb.WriteString("  " + styleToolDim.Render(truncStr(line, cardW-2)) + "\n")
+			}
+			if len(outLines) > 5 {
+				sb.WriteString("  " + styleDim.Render(fmt.Sprintf("... +%d lines", len(outLines)-5)) + "\n")
+			}
+		}
+
+	case "read":
+		if ev.filePath != "" {
+			sb.WriteString("  " + styleToolDim.Render(truncPath(ev.filePath, cardW-2)) + "\n")
+		}
+
+	case "glob":
+		pat, _ := ev.args["pattern"].(string)
+		matches := strings.Count(ev.result, "\n")
+		if ev.result != "" && !strings.Contains(ev.result, "no matches") {
+			matches++
+		}
+		sb.WriteString("  " + styleToolDim.Render(fmt.Sprintf("%s → %d matches", pat, matches)) + "\n")
+
+	case "grep":
+		pat, _ := ev.args["pattern"].(string)
+		matches := strings.Count(ev.result, "\n")
+		sb.WriteString("  " + styleToolDim.Render(fmt.Sprintf("/%s/ → %d matches", pat, matches)) + "\n")
+
+	default:
+		// MCP or custom tools
+		sb.WriteString("  " + styleToolDim.Render(truncStr(ev.result, cardW-2)) + "\n")
+	}
+
+	if ev.isError {
+		sb.WriteString("  " + styleError.Render("error") + "\n")
+	}
+
+	// Footer separator
+	sb.WriteString("  " + styleToolSep.Render(strings.Repeat("─", cardW)) + "\n")
+
+	return sb.String()
+}
+
+func renderDiff(oldStr, newStr string, maxWidth int) string {
+	var sb strings.Builder
+	oldLines := strings.Split(oldStr, "\n")
+	newLines := strings.Split(newStr, "\n")
+
+	// Cap lines shown
+	maxLines := 10
+	showOld := oldLines
+	if len(showOld) > maxLines {
+		showOld = showOld[:maxLines]
+	}
+	showNew := newLines
+	if len(showNew) > maxLines {
+		showNew = showNew[:maxLines]
+	}
+
+	for _, line := range showOld {
+		sb.WriteString("  " + styleDiffDel.Render("- "+truncStr(line, maxWidth-4)) + "\n")
+	}
+	if len(oldLines) > maxLines {
+		sb.WriteString("  " + styleDim.Render(fmt.Sprintf("  ... +%d lines", len(oldLines)-maxLines)) + "\n")
+	}
+	for _, line := range showNew {
+		sb.WriteString("  " + styleDiffAdd.Render("+ "+truncStr(line, maxWidth-4)) + "\n")
+	}
+	if len(newLines) > maxLines {
+		sb.WriteString("  " + styleDim.Render(fmt.Sprintf("  ... +%d lines", len(newLines)-maxLines)) + "\n")
+	}
+
+	return sb.String()
+}
+
+// ── Sidebar ───────────────────────────────────────────────────────────────────
+
+func (m Model) renderSidebar() string {
+	w := sidebarWidth - 4 // inner width (border + padding)
+	var sb strings.Builder
+
+	// Files section
+	sb.WriteString(styleSidebarTitle.Render("Files Modified"))
+	sb.WriteByte('\n')
+	if len(m.modifiedFiles) == 0 {
+		sb.WriteString(styleDim.Render(" (none)"))
+		sb.WriteByte('\n')
+	} else {
+		for path, count := range m.modifiedFiles {
+			name := filepath.Base(path)
+			if len(name) > w-6 {
+				name = name[:w-6] + "…"
+			}
+			sb.WriteString(styleSidebarFile.Render(" "+name) + " " + styleSidebarCount.Render(fmt.Sprintf("(%d)", count)))
+			sb.WriteByte('\n')
+		}
+	}
+	sb.WriteByte('\n')
+
+	// Stats section
+	sb.WriteString(styleSidebarTitle.Render("Session"))
+	sb.WriteByte('\n')
+	sb.WriteString(fmt.Sprintf(" Tools: %d\n", len(m.toolEvents)))
+	sb.WriteString(fmt.Sprintf(" Turns: %d\n", m.turnCount()))
+
+	// Context %
+	ctxPct := 0.0
+	head, _ := m.agent.DAG().GetHead()
+	if head != "" {
+		msgs, _ := m.agent.DAG().PromptFrom(head)
+		est := core.EstimateTokens(msgs)
+		ctxPct = float64(est) / 200000.0 * 100
+	}
+	sb.WriteString(fmt.Sprintf(" CTX: %.0f%%\n", ctxPct))
+
+	totalTok := m.totalTokensIn + m.totalTokensOut
+	if totalTok > 0 {
+		sb.WriteString(fmt.Sprintf(" Tokens: %s\n", fmtTok(totalTok)))
+	}
+	if m.totalCost > 0 {
+		sb.WriteString(fmt.Sprintf(" Cost: $%.2f\n", m.totalCost))
+	}
+
+	// Calculate available height for sidebar
+	vpHeight := m.height - headerLines - statusLines - inputLines
+	if vpHeight < 1 {
+		vpHeight = 1
+	}
+
+	content := sb.String()
+
+	return styleSidebarBorder.
+		Width(sidebarWidth - 2).
+		Height(vpHeight - 2).
+		Render(content)
+}
+
+// ── Autocomplete ──────────────────────────────────────────────────────────────
+
+func (m *Model) ensureFileList() {
+	if m.acLoaded {
+		return
+	}
+	m.acFiles = loadFiles(".", 3)
+	m.acLoaded = true
+}
+
+func (m *Model) updateAutocomplete() {
+	atPos := strings.LastIndex(m.input, "@")
+	if atPos < 0 {
+		m.acMode = false
+		return
+	}
+	m.acQuery = m.input[atPos+1:]
+	m.ensureFileList()
+	m.acList = filterFiles(m.acFiles, m.acQuery)
+	if m.acIdx >= len(m.acList) {
+		m.acIdx = 0
+	}
+	if len(m.acList) == 0 {
+		m.acMode = false
+	}
+}
+
+func (m Model) renderAutocomplete() string {
+	var sb strings.Builder
+	show := m.acList
+	if len(show) > acMaxResults {
+		show = show[:acMaxResults]
+	}
+	for i, path := range show {
+		style := styleACNormal
+		if i == m.acIdx {
+			style = styleACSelected
+		}
+		entry := " " + truncStr(path, m.chatWidth()-4) + " "
+		sb.WriteString("  " + style.Render(entry))
+		if i < len(show)-1 {
+			sb.WriteByte('\n')
+		}
+	}
+	if len(m.acList) > acMaxResults {
+		sb.WriteByte('\n')
+		sb.WriteString("  " + styleDim.Render(fmt.Sprintf("  +%d more", len(m.acList)-acMaxResults)))
+	}
+	return sb.String()
+}
+
+// ── Overlay rendering ─────────────────────────────────────────────────────────
+
+func (m Model) renderOverlay() string {
+	switch m.overlay {
+	case overlayPalette:
+		return m.renderPalette()
+	case overlaySessions:
+		return m.renderSessionSwitcher()
+	case overlayHelp:
+		return m.renderHelp()
+	}
+	return ""
+}
+
+func (m Model) renderPalette() string {
+	var sb strings.Builder
+	sb.WriteString(styleOverlayTitle.Render("Command Palette"))
+	sb.WriteString("  " + styleOverlayHint.Render("↑↓ navigate · Enter select · Esc close"))
+	sb.WriteByte('\n')
+
+	// Search input
+	sb.WriteString(stylePrompt.Render("/ ") + m.overlayQuery + styleCursor.Render(" "))
+	sb.WriteByte('\n')
+
+	// Filtered commands
+	for i, cmd := range m.overlayItems {
+		style := styleACNormal
+		if i == m.overlayIdx {
+			style = styleACSelected
+		}
+		entry := " " + cmd.name + " "
+		if cmd.key != "" {
+			entry += styleKeybind.Render("["+cmd.key+"]") + " "
+		}
+		sb.WriteString("  " + style.Render(entry))
+		sb.WriteByte('\n')
+	}
+	if len(m.overlayItems) == 0 {
+		sb.WriteString("  " + styleDim.Render("No matching commands"))
+		sb.WriteByte('\n')
+	}
+	return sb.String()
+}
+
+func (m Model) renderSessionSwitcher() string {
+	var sb strings.Builder
+	sb.WriteString(styleOverlayTitle.Render("Switch Session"))
+	sb.WriteString("  " + styleOverlayHint.Render("↑↓ navigate · Enter switch · Esc close"))
+	sb.WriteByte('\n')
+
+	currentID := m.agent.DAG().CurrentBranchID()
+
+	for i, b := range m.branches {
+		style := styleACNormal
+		if i == m.overlayIdx {
+			style = styleACSelected
+		}
+		marker := "  "
+		if b.ID == currentID {
+			marker = "● "
+		}
+		name := b.Name
+		if len(name) > 30 {
+			name = name[:27] + "…"
+		}
+		entry := marker + name
+		sb.WriteString("  " + style.Render(entry))
+		sb.WriteByte('\n')
+	}
+	if len(m.branches) == 0 {
+		sb.WriteString("  " + styleDim.Render("No sessions found"))
+		sb.WriteByte('\n')
+	}
+	return sb.String()
+}
+
+func (m Model) renderHelp() string {
+	var sb strings.Builder
+	sb.WriteString(styleOverlayTitle.Render("Keybindings"))
+	sb.WriteString("  " + styleOverlayHint.Render("Press any key to close"))
+	sb.WriteByte('\n')
+	sb.WriteByte('\n')
+
+	bindings := []struct{ key, desc string }{
+		{"Ctrl+K", "Command palette"},
+		{"Ctrl+B", "Switch session/branch"},
+		{"/", "Command palette (empty input)"},
+		{"?", "Show this help (empty input)"},
+		{"@", "File autocomplete"},
+		{"PgUp/PgDn", "Scroll chat history"},
+		{"Ctrl+C", "Cancel (or quit if idle)"},
+		{"Ctrl+D", "Force quit"},
+	}
+
+	commands := []struct{ cmd, desc string }{
+		{"/new", "Start new conversation branch"},
+		{"/clear", "Clear context on current branch"},
+		{"/skills", "List available skills"},
+		{"/exit", "Exit the TUI"},
+	}
+
+	sb.WriteString("  " + styleKeybind.Render("Keys") + "\n")
+	for _, b := range bindings {
+		sb.WriteString(fmt.Sprintf("  %-14s %s\n", styleKeybind.Render(b.key), b.desc))
+	}
+	sb.WriteByte('\n')
+	sb.WriteString("  " + styleKeybind.Render("Commands") + "\n")
+	for _, c := range commands {
+		sb.WriteString(fmt.Sprintf("  %-14s %s\n", styleKeybind.Render(c.cmd), c.desc))
+	}
+	return sb.String()
+}
+
+func loadFiles(dir string, maxDepth int) []string {
+	var files []string
+	baseDepth := strings.Count(filepath.Clean(dir), string(filepath.Separator))
+	filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return filepath.SkipDir
+		}
+		if d.IsDir() {
+			name := d.Name()
+			if strings.HasPrefix(name, ".") || name == "node_modules" || name == "vendor" || name == "__pycache__" {
+				return filepath.SkipDir
+			}
+			depth := strings.Count(filepath.Clean(path), string(filepath.Separator)) - baseDepth
+			if depth >= maxDepth {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		rel, _ := filepath.Rel(dir, path)
+		files = append(files, rel)
+		return nil
+	})
+	return files
+}
+
+func filterFiles(files []string, query string) []string {
+	if query == "" {
+		return files
+	}
+	q := strings.ToLower(query)
+	var matches []string
+	for _, f := range files {
+		if strings.Contains(strings.ToLower(f), q) {
+			matches = append(matches, f)
+		}
+	}
+	return matches
+}
+
+// ── Header ────────────────────────────────────────────────────────────────────
+
 func (m Model) renderHeader() string {
 	title := styleHeaderBar.Render("◉ Torus Agent")
 
@@ -517,7 +1314,6 @@ func (m Model) renderHeader() string {
 
 	info := styleHeaderDim.Render(fmt.Sprintf(" │ %s │ branch: %s ", m.modelName, branch))
 
-	// Pad to full width
 	titleLen := lipgloss.Width(title) + lipgloss.Width(info)
 	pad := ""
 	if m.width > titleLen {
@@ -526,7 +1322,33 @@ func (m Model) renderHeader() string {
 	return title + info + pad
 }
 
-// glamourRender renders markdown text with glamour, falling back to plain text.
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+func (m Model) chatWidth() int {
+	w := m.width
+	if m.showSidebar {
+		w -= sidebarWidth + 1
+	}
+	if w < 40 {
+		w = 40
+	}
+	return w
+}
+
+func newGlamourRenderer(width int) *glamour.TermRenderer {
+	if width < 20 {
+		width = 20
+	}
+	r, err := glamour.NewTermRenderer(
+		glamour.WithStylePath("dark"),
+		glamour.WithWordWrap(width),
+	)
+	if err != nil {
+		return nil
+	}
+	return r
+}
+
 func (m Model) glamourRender(text string) string {
 	if m.glamRenderer == nil {
 		return text
@@ -538,24 +1360,6 @@ func (m Model) glamourRender(text string) string {
 	return strings.TrimRight(rendered, "\n")
 }
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
-// newGlamourRenderer creates a glamour renderer for the given width.
-func newGlamourRenderer(width int) *glamour.TermRenderer {
-	if width < 20 {
-		width = 20
-	}
-	r, err := glamour.NewTermRenderer(
-		glamour.WithAutoStyle(),
-		glamour.WithWordWrap(width),
-	)
-	if err != nil {
-		return nil
-	}
-	return r
-}
-
-// ctxBar renders a progress bar for context usage.
 func ctxBar(pct float64, barLen int) string {
 	if pct < 0 {
 		pct = 0
@@ -572,14 +1376,10 @@ func ctxBar(pct float64, barLen int) string {
 	return fmt.Sprintf("%s %.0f%%", bar, pct)
 }
 
-// buildStatus formats the status bar line.
 func (m Model) buildStatus(tokIn, tokOut int, cost float64, elapsed time.Duration) string {
 	var parts []string
-
-	// Model
 	parts = append(parts, fmt.Sprintf("[%s]", m.modelName))
 
-	// CTX bar
 	ctxPct := 0.0
 	head, _ := m.agent.DAG().GetHead()
 	if head != "" {
@@ -589,13 +1389,11 @@ func (m Model) buildStatus(tokIn, tokOut int, cost float64, elapsed time.Duratio
 	}
 	parts = append(parts, "CTX:"+ctxBar(ctxPct, 8))
 
-	// Tokens
 	totalTok := tokIn + tokOut
 	if totalTok > 0 {
 		parts = append(parts, fmt.Sprintf("%s tok (%d turns)", fmtTok(totalTok), m.turnCount()))
 	}
 
-	// Timer
 	sessionElapsed := time.Since(m.startTime)
 	if !m.startTime.IsZero() && sessionElapsed > time.Second {
 		mins := int(sessionElapsed.Minutes())
@@ -606,7 +1404,6 @@ func (m Model) buildStatus(tokIn, tokOut int, cost float64, elapsed time.Duratio
 		}
 	}
 
-	// Cost
 	if cost > 0 {
 		parts = append(parts, fmt.Sprintf("$%.2f", cost))
 	}
@@ -632,6 +1429,32 @@ func fmtTok(n int) string {
 		return fmt.Sprintf("%.1fk", float64(n)/1000)
 	}
 	return fmt.Sprintf("%d", n)
+}
+
+func truncStr(s string, maxLen int) string {
+	if maxLen <= 0 || len(s) <= maxLen {
+		return s
+	}
+	if maxLen < 4 {
+		return s[:maxLen]
+	}
+	return s[:maxLen-1] + "…"
+}
+
+func truncPath(path string, maxLen int) string {
+	if len(path) <= maxLen {
+		return path
+	}
+	base := filepath.Base(path)
+	dir := filepath.Dir(path)
+	if len(base) >= maxLen-4 {
+		return truncStr(base, maxLen)
+	}
+	remain := maxLen - len(base) - 4
+	if remain < 1 {
+		return truncStr(base, maxLen)
+	}
+	return "…/" + dir[len(dir)-remain:] + "/" + base
 }
 
 func wrapText(text string, maxWidth int) string {
@@ -669,15 +1492,27 @@ func wrapText(text string, maxWidth int) string {
 
 // ── Commands ──────────────────────────────────────────────────────────────────
 
-func runAgentStream(agent *core.Agent, input string, deltaCh chan<- string) tea.Cmd {
+func runAgentStream(agent *core.Agent, input string, deltaCh chan<- string, toolCh chan<- toolEvent) tea.Cmd {
 	return func() tea.Msg {
 		start := time.Now()
 		agent.OnStreamDelta = func(delta string) {
 			deltaCh <- delta
 		}
+		agent.OnToolUse = func(name string, args map[string]any, result *core.ToolResult) {
+			fp, _ := args["file_path"].(string)
+			toolCh <- toolEvent{
+				name:     name,
+				args:     args,
+				result:   result.Content,
+				isError:  result.IsError,
+				filePath: fp,
+			}
+		}
 		text, err := agent.Run(context.Background(), input)
 		agent.OnStreamDelta = nil
+		agent.OnToolUse = nil
 		close(deltaCh)
+		close(toolCh)
 		elapsed := time.Since(start)
 		if err != nil {
 			return agentErrorMsg{err: err}
@@ -699,6 +1534,19 @@ func waitForDelta(ch <-chan string) tea.Cmd {
 			return nil
 		}
 		return streamDeltaMsg{delta: delta}
+	}
+}
+
+func waitForToolEvent(ch <-chan toolEvent) tea.Cmd {
+	if ch == nil {
+		return nil
+	}
+	return func() tea.Msg {
+		ev, ok := <-ch
+		if !ok {
+			return nil
+		}
+		return toolEventMsg{event: ev}
 	}
 }
 
