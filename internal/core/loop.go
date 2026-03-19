@@ -10,12 +10,16 @@ import (
 type Agent struct {
 	config        AgentConfig
 	provider      Provider
+	smartProvider Provider          // optional cheaper model for simple messages
 	hooks         *HookRegistry
 	dag           *DAG
 	compaction    CompactionConfig
 	Summarize     func(string) (string, error) // LLM summarize callback for compaction
 	OnStreamDelta func(delta string)           // called for each text delta during streaming; nil = use Complete
 }
+
+// SetSmartProvider sets the provider used for simple messages when smart routing is enabled.
+func (a *Agent) SetSmartProvider(p Provider) { a.smartProvider = p }
 
 // NewAgent creates a new agent.
 func NewAgent(config AgentConfig, provider Provider, hooks *HookRegistry, dag *DAG) *Agent {
@@ -160,17 +164,27 @@ func (a *Agent) Run(ctx context.Context, userMessage string) (string, error) {
 			toolDefs = append(toolDefs, t)
 		}
 
+		// Smart routing: pick provider based on message complexity
+		activeProvider := a.provider
+		if a.smartProvider != nil && a.config.SmartRouting {
+			routed := RouteMessage(userMessage, a.config)
+			if routed != a.config.Provider.Model {
+				activeProvider = a.smartProvider
+				log.Printf("[loop] smart routing: using %s for simple message", routed)
+			}
+		}
+
 		// Call LLM — use streaming if callback is set, otherwise non-streaming
 		var resp *AssistantMessage
 		var llmErr error
 		if a.OnStreamDelta != nil {
 			var ch <-chan StreamEvent
-			ch, llmErr = a.provider.StreamComplete(ctx, a.config.SystemPrompt, messages, toolDefs, a.config.Provider.MaxTokens)
+			ch, llmErr = activeProvider.StreamComplete(ctx, a.config.SystemPrompt, messages, toolDefs, a.config.Provider.MaxTokens)
 			if llmErr == nil {
 				resp, llmErr = consumeStream(ch, a.OnStreamDelta)
 			}
 		} else {
-			resp, llmErr = a.provider.Complete(ctx, a.config.SystemPrompt, messages, toolDefs, a.config.Provider.MaxTokens)
+			resp, llmErr = activeProvider.Complete(ctx, a.config.SystemPrompt, messages, toolDefs, a.config.Provider.MaxTokens)
 		}
 		if llmErr != nil {
 			a.hooks.Fire(ctx, HookOnError, &HookData{AgentID: "main", Meta: map[string]any{"error": llmErr.Error()}})

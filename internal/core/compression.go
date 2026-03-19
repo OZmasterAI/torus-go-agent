@@ -130,12 +130,16 @@ func CompressMessage(m Message, maxChars int) Message {
 // get progressively shorter. Returns a new slice — does not modify the originals.
 //
 // The keepLast parameter controls how many recent messages are always kept verbatim.
-func ContinuousCompress(messages []Message, keepLast int) []Message {
+// The minMessages parameter sets the minimum message count before compression activates (0 = use keepLast).
+func ContinuousCompress(messages []Message, keepLast, minMessages int) []Message {
 	if keepLast <= 0 {
 		keepLast = 10
 	}
 	n := len(messages)
 	if n <= keepLast {
+		return messages
+	}
+	if minMessages > 0 && n < minMessages {
 		return messages
 	}
 

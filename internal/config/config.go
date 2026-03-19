@@ -40,8 +40,13 @@ type AgentConfig struct {
 	CompactionModel       string `json:"compactionModel"`
 	CompactionTrigger     string `json:"compactionTrigger"`     // "tokens", "messages", or "both"
 	CompactionMaxMessages int    `json:"compactionMaxMessages"` // max messages before compaction (0 = disabled)
-	ContinuousCompression bool   `json:"continuousCompression"` // enable per-turn gradual message compression
-	ZoneBudgeting         bool   `json:"zoneBudgeting"`         // enable zone-based token budget allocation (requires continuousCompression)
+	CompactionThreshold   int    `json:"compactionThreshold"`   // % of contextWindow that triggers compaction (default 80)
+	CompactionKeepLastN   int    `json:"compactionKeepLastN"`   // messages kept verbatim after compaction (default 10)
+	ContinuousCompression  bool   `json:"continuousCompression"`  // enable per-turn gradual message compression
+	CompressionKeepLast    int    `json:"compressionKeepLast"`    // messages always kept verbatim by continuous compression (default 10)
+	CompressionMinMessages int    `json:"compressionMinMessages"` // don't compress until this many messages (0 = compress from keepLast+1)
+	ZoneBudgeting         bool   `json:"zoneBudgeting"`         // enable zone-based token budget allocation
+	ZoneArchivePercent    int    `json:"zoneArchivePercent"`    // % of usable budget for archive zone (default 30)
 	SmartRouting          bool   `json:"smartRouting"`
 	SmartRoutingModel string `json:"smartRoutingModel"`
 }

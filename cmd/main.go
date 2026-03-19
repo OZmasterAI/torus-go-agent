@@ -121,7 +121,11 @@ func main() {
 	dagSchemaBase := "[SYSTEM: DAG schema] tables: nodes(id, parent_id, role, content, model, provider, timestamp, token_count), branches(id, name, head_node_id, forked_from). DB path: " + filepath.Join(dataDir, "conversations.db")
 	hooks.Register(core.HookBeforeContextBuild, "dag-context", func(ctx context.Context, d *core.HookData) error {
 		brID, brName, headNode, msgCount := dag.CurrentBranchInfo()
-		contextLine := fmt.Sprintf("[SYSTEM: DAG context] active_branch: %s, name: %s, head: %s, messages: %d, context_window: %d, compaction_threshold: 80%%", brID, brName, headNode, msgCount, cfg.Agent.ContextWindow)
+		threshold := cfg.Agent.CompactionThreshold
+		if threshold <= 0 {
+			threshold = 80
+		}
+		contextLine := fmt.Sprintf("[SYSTEM: DAG context] active_branch: %s, name: %s, head: %s, messages: %d, context_window: %d, compaction_threshold: %d%%", brID, brName, headNode, msgCount, cfg.Agent.ContextWindow, threshold)
 		schema := core.Message{
 			Role:    core.RoleUser,
 			Content: []core.ContentBlock{{Type: "text", Text: dagSchemaBase + "\n" + contextLine}},
@@ -131,12 +135,17 @@ func main() {
 	})
 
 	// Register continuous compression hook (optional, config-driven)
+	compressionKeepLast := cfg.Agent.CompressionKeepLast
+	if compressionKeepLast <= 0 {
+		compressionKeepLast = 10
+	}
+	compressionMinMessages := cfg.Agent.CompressionMinMessages
 	if cfg.Agent.ContinuousCompression {
 		hooks.RegisterPriority(core.HookBeforeContextBuild, "continuous-compression", func(ctx context.Context, d *core.HookData) error {
-			d.Messages = core.ContinuousCompress(d.Messages, 10)
+			d.Messages = core.ContinuousCompress(d.Messages, compressionKeepLast, compressionMinMessages)
 			return nil
-		}, 50) // priority 50 = runs before DAG context injection (priority 100)
-		log.Printf("[main] continuous compression enabled")
+		}, 50)
+		log.Printf("[main] continuous compression enabled (keepLast: %d)", compressionKeepLast)
 	}
 
 	// Register zone budgeting hook (optional, requires continuousCompression)
@@ -144,20 +153,24 @@ func main() {
 		if !cfg.Agent.ContinuousCompression {
 			log.Printf("[main] WARNING: zoneBudgeting requires continuousCompression — enabling it")
 			hooks.RegisterPriority(core.HookBeforeContextBuild, "continuous-compression", func(ctx context.Context, d *core.HookData) error {
-				d.Messages = core.ContinuousCompress(d.Messages, 10)
+				d.Messages = core.ContinuousCompress(d.Messages, compressionKeepLast, compressionMinMessages)
 				return nil
 			}, 50)
 		}
+		archivePercent := cfg.Agent.ZoneArchivePercent
+		if archivePercent <= 0 {
+			archivePercent = 30
+		}
 		zoneBudget := core.ZoneBudget{
 			ContextWindow:  cfg.Agent.ContextWindow,
-			ArchivePercent: 30,
+			ArchivePercent: archivePercent,
 			OutputReserve:  cfg.Agent.MaxTokens,
 		}
 		hooks.RegisterPriority(core.HookBeforeContextBuild, "zone-budgeting", func(ctx context.Context, d *core.HookData) error {
 			d.Messages = core.ApplyZoneBudget(d.Messages, zoneBudget)
 			return nil
 		}, 60)
-		log.Printf("[main] zone budgeting enabled (archive: 30%%, history: remaining, output reserve: %d)", cfg.Agent.MaxTokens)
+		log.Printf("[main] zone budgeting enabled (archive: %d%%, output reserve: %d)", archivePercent, cfg.Agent.MaxTokens)
 	}
 
 	// Build tools: default 6 + MCP tools
@@ -196,20 +209,49 @@ func main() {
 			APIKey:    key,
 			MaxTokens: cfg.Agent.MaxTokens,
 		},
-		SystemPrompt:  soul,
-		Tools:         tools,
-		MaxTurns:      30,
-		ContextWindow: cfg.Agent.ContextWindow,
+		SystemPrompt:      soul,
+		Tools:             tools,
+		MaxTurns:          30,
+		ContextWindow:     cfg.Agent.ContextWindow,
+		SmartRouting:      cfg.Agent.SmartRouting,
+		SmartRoutingModel: cfg.Agent.SmartRoutingModel,
 	}, prov, hooks, dag)
 
+	// Wire smart routing provider if configured
+	if cfg.Agent.SmartRouting && cfg.Agent.SmartRoutingModel != "" {
+		var smartProv providers.Provider
+		switch cfg.Agent.Provider {
+		case "anthropic":
+			smartProv = providers.NewAnthropicProvider(key, cfg.Agent.SmartRoutingModel)
+		case "nvidia":
+			smartProv = providers.NewNvidiaProvider(key, cfg.Agent.SmartRoutingModel)
+		default:
+			smartProv = providers.NewOpenRouterProvider(key, cfg.Agent.SmartRoutingModel)
+		}
+		agent.SetSmartProvider(smartProv)
+		log.Printf("[main] smart routing enabled: simple → %s", cfg.Agent.SmartRoutingModel)
+	}
+
 	// Override compaction settings from config
-	if cfg.Agent.CompactionTrigger != "" || cfg.Agent.CompactionMaxMessages > 0 {
+	{
 		compCfg := agent.GetCompaction()
+		switch cfg.Agent.Compaction {
+		case "sliding":
+			compCfg.Mode = core.CompactionSliding
+		case "off":
+			compCfg.Mode = core.CompactionOff
+		}
 		if cfg.Agent.CompactionTrigger != "" {
 			compCfg.Trigger = cfg.Agent.CompactionTrigger
 		}
 		if cfg.Agent.CompactionMaxMessages > 0 {
 			compCfg.MaxMessages = cfg.Agent.CompactionMaxMessages
+		}
+		if cfg.Agent.CompactionThreshold > 0 {
+			compCfg.Threshold = cfg.Agent.CompactionThreshold
+		}
+		if cfg.Agent.CompactionKeepLastN > 0 {
+			compCfg.KeepLastN = cfg.Agent.CompactionKeepLastN
 		}
 		agent.SetCompaction(compCfg)
 	}
