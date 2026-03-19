@@ -18,6 +18,7 @@ import (
 	"go_sdk_agent/internal/core"
 	"go_sdk_agent/internal/features"
 	"go_sdk_agent/internal/providers"
+	"go_sdk_agent/internal/safety"
 	"go_sdk_agent/internal/ui"
 )
 
@@ -109,9 +110,19 @@ func main() {
 			if content == "" {
 				content, _ = d.ToolArgs["new_str"].(string)
 			}
-			if desc, found := core.ScanSecrets(content); found {
+			if desc, found := safety.ScanSecrets(content); found {
 				d.Block = true
 				d.BlockReason = "Secret detected: " + desc
+			}
+		}
+		return nil
+	})
+	hooks.Register(core.HookBeforeToolCall, "danger-scan", func(ctx context.Context, d *core.HookData) error {
+		if d.ToolName == "bash" {
+			command, _ := d.ToolArgs["command"].(string)
+			if label, bad := safety.CheckSafety(command); bad {
+				d.Block = true
+				d.BlockReason = "Dangerous command: " + label
 			}
 		}
 		return nil
