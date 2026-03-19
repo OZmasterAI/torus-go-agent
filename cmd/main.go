@@ -14,6 +14,7 @@ import (
 	_ "go_sdk_agent/internal/channels/http"     // register http channel
 	_ "go_sdk_agent/internal/channels/telegram" // register telegram channel
 	_ "go_sdk_agent/internal/channels/tui"      // register tui channel
+	_ "go_sdk_agent/internal/channels/tui2"     // register tui2 channel (raw terminal)
 	"go_sdk_agent/internal/config"
 	"go_sdk_agent/internal/core"
 	"go_sdk_agent/internal/features"
@@ -401,6 +402,9 @@ func main() {
 		}
 		if arg == "--http" {
 			channelName = "http"
+		}
+		if arg == "--tui2" {
+			channelName = "tui2"
 		}
 	}
 
