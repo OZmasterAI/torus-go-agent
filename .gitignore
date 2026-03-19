@@ -1,7 +1,10 @@
 go_sdk_agent
 torus
+torus-agent
+torus_test
 data/
 .env
 *.db
 crash.log
 .claude-state.json
+tui/node_modules/

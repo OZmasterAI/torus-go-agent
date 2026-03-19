@@ -2,7 +2,7 @@
   "telegram": { "botToken": "ENV", "allowedUsers": [] },
   "agent": {
     "provider": "nvidia",
-    "model": "z-ai/glm4.7",
+    "model": "qwen/qwen3.5-122b-a10b",
     "maxTokens": 16384,
     "contextWindow": 262144,
     "compaction": "llm",

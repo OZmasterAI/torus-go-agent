@@ -8,8 +8,10 @@ package http
 
 import (
 	"context"
+	"embed"
 	"encoding/json"
 	"fmt"
+	"io/fs"
 	"log"
 	"net/http"
 	"os"
@@ -21,6 +23,9 @@ import (
 	"go_sdk_agent/internal/core"
 	"go_sdk_agent/internal/features"
 )
+
+//go:embed web/*
+var webFS embed.FS
 
 func init() { channels.Register(&httpChannel{}) }
 
@@ -43,13 +48,18 @@ func (h *httpChannel) Start(agent *core.Agent, cfg config.Config, _ *features.Sk
 	mux.HandleFunc("/api/new", srv.auth(srv.handleNew))
 	mux.HandleFunc("/api/clear", srv.auth(srv.handleClear))
 
+	// Serve embedded web UI at root
+	webRoot, _ := fs.Sub(webFS, "web")
+	mux.Handle("/", http.FileServer(http.FS(webRoot)))
+
 	addr := ":" + port
 	if apiKey != "" {
 		log.Printf("[http] listening on %s (auth enabled)", addr)
 	} else {
 		log.Printf("[http] listening on %s (no auth — set TORUSGO_API_KEY to secure)", addr)
 	}
-	return http.ListenAndServe(addr, mux)
+	log.Printf("[http] web UI → http://localhost%s", addr)
+	return http.ListenAndServe(addr, corsHandler(mux))
 }
 
 type server struct {
@@ -57,6 +67,20 @@ type server struct {
 	cfg    config.Config
 	apiKey string     // optional — if set, requires Authorization: Bearer <key>
 	mu     sync.Mutex // serialize agent.Run calls
+}
+
+// corsHandler adds CORS headers and handles OPTIONS preflight.
+func corsHandler(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+		if r.Method == http.MethodOptions {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 // auth wraps a handler with bearer token validation (skipped if TORUSGO_API_KEY is unset).
@@ -108,7 +132,6 @@ func (s *server) handleChat(w http.ResponseWriter, r *http.Request) {
 		response, err := s.agent.Run(r.Context(), req.Message)
 		s.mu.Unlock()
 		w.Header().Set("Content-Type", "application/json")
-		w.Header().Set("Access-Control-Allow-Origin", "*")
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
@@ -127,7 +150,6 @@ func (s *server) handleChat(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
-	w.Header().Set("Access-Control-Allow-Origin", "*")
 
 	// Serialize access to agent (single-threaded agent loop)
 	s.mu.Lock()
@@ -180,7 +202,6 @@ func (s *server) handleStatus(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	w.Header().Set("Access-Control-Allow-Origin", "*")
 	json.NewEncoder(w).Encode(resp)
 }
 
@@ -208,7 +229,6 @@ func (s *server) handleNew(w http.ResponseWriter, r *http.Request) {
 	})
 
 	w.Header().Set("Content-Type", "application/json")
-	w.Header().Set("Access-Control-Allow-Origin", "*")
 	json.NewEncoder(w).Encode(map[string]string{"branch": newBranch})
 }
 
@@ -236,6 +256,5 @@ func (s *server) handleClear(w http.ResponseWriter, r *http.Request) {
 	})
 
 	w.Header().Set("Content-Type", "application/json")
-	w.Header().Set("Access-Control-Allow-Origin", "*")
 	json.NewEncoder(w).Encode(map[string]string{"status": "cleared"})
 }
