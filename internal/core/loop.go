@@ -13,16 +13,15 @@ type Agent struct {
 	hooks         *HookRegistry
 	dag           *DAG
 	compaction    CompactionConfig
-	Summarize     func(string) (string, error) // LLM summarize callback for compaction
-	OnStreamDelta func(delta string)                                    // called for each text delta during streaming; nil = use Complete
-	OnToolUse     func(name string, args map[string]any, result *ToolResult) // called after each tool execution; nil = silent
-	Steering      chan Message // async steering: any goroutine can push messages, polled between tool rounds and at exit
-	RouteProvider func(userMessage string) Provider // optional: pick provider per turn; nil = always use main provider
+	Summarize     func(string) (string, error)
+	OnStreamDelta func(delta string)
+	OnToolUse     func(name string, args map[string]any, result *ToolResult)
+	Steering      chan Message
+	RouteProvider func(userMessage string) Provider
 }
 
 // NewAgent creates a new agent.
 func NewAgent(config AgentConfig, provider Provider, hooks *HookRegistry, dag *DAG) *Agent {
-	// MaxTurns: 0 = unlimited, >0 = cap. Default 30 set by caller (cmd/main.go).
 	return &Agent{
 		config:   config,
 		provider: provider,
@@ -37,66 +36,92 @@ func NewAgent(config AgentConfig, provider Provider, hooks *HookRegistry, dag *D
 	}
 }
 
-// SetCompaction configures the compaction settings.
 func (a *Agent) SetCompaction(cfg CompactionConfig) { a.compaction = cfg }
+func (a *Agent) GetCompaction() CompactionConfig     { return a.compaction }
 
-// GetCompaction returns the current compaction settings.
-func (a *Agent) GetCompaction() CompactionConfig { return a.compaction }
-
-// Run processes a user message through the ReAct loop and returns the final text.
+// Run processes a user message and returns the final text.
+// It wraps RunStream, draining events and calling OnStreamDelta/OnToolUse callbacks.
 func (a *Agent) Run(ctx context.Context, userMessage string) (string, error) {
-	// on_user_input: can transform or block user input before anything else
-	inputData := &HookData{
-		AgentID: "main",
-		Meta:    map[string]any{"input": userMessage},
+	var finalText string
+	var finalErr error
+	for ev := range a.RunStream(ctx, userMessage) {
+		switch ev.Type {
+		case EventAgentTextDelta:
+			if a.OnStreamDelta != nil {
+				a.OnStreamDelta(ev.Text)
+			}
+		case EventAgentToolEnd:
+			if a.OnToolUse != nil {
+				a.OnToolUse(ev.ToolName, ev.ToolArgs, ev.ToolResult)
+			}
+		case EventAgentDone:
+			finalText = ev.Text
+		case EventAgentError:
+			finalErr = ev.Error
+		}
 	}
+	return finalText, finalErr
+}
+
+// RunStream processes a user message, emitting events on the returned channel.
+// The channel is closed when the loop finishes.
+func (a *Agent) RunStream(ctx context.Context, userMessage string) <-chan AgentEvent {
+	ch := make(chan AgentEvent, 32)
+	go a.runLoop(ctx, userMessage, ch)
+	return ch
+}
+
+func (a *Agent) runLoop(ctx context.Context, userMessage string, ch chan<- AgentEvent) {
+	defer close(ch)
+
+	emit := func(ev AgentEvent) {
+		select {
+		case ch <- ev:
+		case <-ctx.Done():
+		}
+	}
+
+	inputData := &HookData{AgentID: "main", Meta: map[string]any{"input": userMessage}}
 	a.hooks.Fire(ctx, HookOnUserInput, inputData)
 	if inputData.Block {
-		return inputData.BlockReason, nil
+		emit(AgentEvent{Type: EventAgentDone, Text: inputData.BlockReason})
+		return
 	}
 	if modified, ok := inputData.Meta["input"].(string); ok {
 		userMessage = modified
 	}
 
-	// Fire agent start
 	a.hooks.Fire(ctx, HookOnAgentStart, &HookData{AgentID: "main"})
 
-	// Add user message to DAG
 	head, _ := a.dag.GetHead()
 	userContent := []ContentBlock{{Type: "text", Text: userMessage}}
 	userNodeID, err := a.dag.AddNode(head, RoleUser, userContent, "", "", 0)
 	if err != nil {
-		return "", fmt.Errorf("add user node: %w", err)
+		emit(AgentEvent{Type: EventAgentError, Error: fmt.Errorf("add user node: %w", err)})
+		return
 	}
 
 	var finalText string
 
 	for turn := 0; a.config.MaxTurns == 0 || turn < a.config.MaxTurns; turn++ {
-		// Fire turn start
+		emit(AgentEvent{Type: EventAgentTurnStart, Turn: turn})
 		a.hooks.Fire(ctx, HookOnTurnStart, &HookData{AgentID: "main", Meta: map[string]any{"turn": turn}})
 
-		// Build context from DAG
 		currentHead, _ := a.dag.GetHead()
 		messages, err := a.dag.PromptFrom(currentHead)
 		if err != nil {
-			return "", fmt.Errorf("build context: %w", err)
+			emit(AgentEvent{Type: EventAgentError, Error: fmt.Errorf("build context: %w", err)})
+			return
 		}
-
-		// Sanitize messages: remove empty blocks, dedup identical blocks, merge consecutive same-role
 		messages = sanitizeMessages(messages)
 
-		// Compaction: check if context exceeds threshold
 		if a.compaction.Mode != CompactionOff && NeedsCompaction(messages, a.compaction) {
 			preCount := len(messages)
 			log.Printf("[loop] compaction triggered (%d messages)", preCount)
 			a.hooks.Fire(ctx, HookPreCompact, &HookData{
-				AgentID:  "main",
-				Messages: messages,
-				Meta:     map[string]any{"mode": string(a.compaction.Mode), "message_count": preCount},
+				AgentID: "main", Messages: messages,
+				Meta: map[string]any{"mode": string(a.compaction.Mode), "message_count": preCount},
 			})
-
-			// Use DAG-persistent compaction: creates a new branch with summary + last N.
-			// Falls back to in-memory compaction if CompactDAG fails.
 			if err := CompactDAG(a.dag, a.compaction, a.Summarize); err != nil {
 				log.Printf("[loop] DAG compaction failed: %v, falling back to in-memory", err)
 				switch a.compaction.Mode {
@@ -112,41 +137,30 @@ func (a *Agent) Run(ctx context.Context, userMessage string) (string, error) {
 					}
 				}
 			} else {
-				// DAG compaction succeeded — reload from the new branch
 				currentHead, _ = a.dag.GetHead()
 				messages, err = a.dag.PromptFrom(currentHead)
 				if err != nil {
-					return "", fmt.Errorf("reload after compaction: %w", err)
+					emit(AgentEvent{Type: EventAgentError, Error: fmt.Errorf("reload after compaction: %w", err)})
+					return
 				}
 				messages = sanitizeMessages(messages)
 			}
-
 			a.hooks.Fire(ctx, HookPostCompact, &HookData{
 				AgentID: "main",
-				Meta: map[string]any{
-					"mode":            string(a.compaction.Mode),
-					"messages_before": preCount,
-					"messages_after":  len(messages),
-					"persistent":      true,
-				},
+				Meta: map[string]any{"mode": string(a.compaction.Mode), "messages_before": preCount, "messages_after": len(messages), "persistent": true},
 			})
 		}
 
-		// Fire before context build
 		ctxData := &HookData{AgentID: "main", Messages: messages}
 		a.hooks.Fire(ctx, HookBeforeContextBuild, ctxData)
 		messages = ctxData.Messages
-
-		// Fire after context build (final prompt assembled — can transform)
 		afterCtx := &HookData{AgentID: "main", Messages: messages}
 		a.hooks.Fire(ctx, HookAfterContextBuild, afterCtx)
 		messages = afterCtx.Messages
 
-		// Fire token count hook
 		tokenEst := EstimateTokens(messages)
 		a.hooks.Fire(ctx, HookOnTokenCount, &HookData{AgentID: "main", TokensIn: tokenEst, Meta: map[string]any{"estimated": true}})
 
-		// Fire before LLM call (can transform messages or block)
 		llmData := &HookData{AgentID: "main", Messages: messages, Meta: map[string]any{}}
 		a.hooks.Fire(ctx, HookBeforeLLMCall, llmData)
 		if llmData.Block {
@@ -155,130 +169,89 @@ func (a *Agent) Run(ctx context.Context, userMessage string) (string, error) {
 		}
 		messages = llmData.Messages
 
-		// Convert tools for provider
 		var toolDefs []Tool
 		for _, t := range a.config.Tools {
 			toolDefs = append(toolDefs, t)
 		}
 
-		// Pick provider — use RouteProvider callback if set, otherwise main provider
 		activeProvider := a.provider
 		if a.RouteProvider != nil {
 			activeProvider = a.RouteProvider(userMessage)
 		}
 
-		// Call LLM — use streaming if callback is set, otherwise non-streaming
 		var resp *AssistantMessage
 		var llmErr error
-		if a.OnStreamDelta != nil {
-			var ch <-chan StreamEvent
-			ch, llmErr = activeProvider.StreamComplete(ctx, a.config.SystemPrompt, messages, toolDefs, a.config.Provider.MaxTokens)
-			if llmErr == nil {
-				resp, llmErr = consumeStream(ch, a.OnStreamDelta)
-			}
+		streamCh, streamErr := activeProvider.StreamComplete(ctx, a.config.SystemPrompt, messages, toolDefs, a.config.Provider.MaxTokens)
+		if streamErr != nil {
+			llmErr = streamErr
 		} else {
-			resp, llmErr = activeProvider.Complete(ctx, a.config.SystemPrompt, messages, toolDefs, a.config.Provider.MaxTokens)
+			resp, llmErr = consumeStreamEmit(streamCh, emit)
 		}
 		if llmErr != nil {
 			a.hooks.Fire(ctx, HookOnError, &HookData{AgentID: "main", Meta: map[string]any{"error": llmErr.Error()}})
-			// Roll back the user node to prevent dangling orphans in the DAG
 			if turn == 0 {
 				a.dag.RemoveNode(userNodeID)
 			}
-			return "", fmt.Errorf("llm call: %w", llmErr)
+			emit(AgentEvent{Type: EventAgentError, Error: fmt.Errorf("llm call: %w", llmErr)})
+			return
 		}
 
-		// Fire after LLM call (can transform response)
-		afterLLM := &HookData{
-			AgentID:   "main",
-			Response:  resp,
-			TokensIn:  resp.Usage.InputTokens,
-			TokensOut: resp.Usage.OutputTokens,
-		}
+		afterLLM := &HookData{AgentID: "main", Response: resp, TokensIn: resp.Usage.InputTokens, TokensOut: resp.Usage.OutputTokens}
 		a.hooks.Fire(ctx, HookAfterLLMCall, afterLLM)
 		if afterLLM.Response != nil {
 			resp = afterLLM.Response
 		}
 
-		// Add assistant response to DAG
 		_, err = a.dag.AddNode(currentHead, RoleAssistant, resp.Content, resp.Model, a.provider.Name(), resp.Usage.TotalTokens)
 		if err != nil {
-			return "", fmt.Errorf("add assistant node: %w", err)
+			emit(AgentEvent{Type: EventAgentError, Error: fmt.Errorf("add assistant node: %w", err)})
+			return
 		}
 
-		// Check for tool use
 		if !HasToolUse(resp) {
 			finalText = ExtractText(resp)
-
-			// before_loop_exit: hooks can inject follow-up messages + set Block to force another turn
-			exitData := &HookData{
-				AgentID:  "main",
-				Response: resp,
-				Messages: nil, // hooks populate this with follow-up messages
-				Meta:     map[string]any{"final_text": finalText},
-			}
+			exitData := &HookData{AgentID: "main", Response: resp, Messages: nil, Meta: map[string]any{"final_text": finalText}}
 			a.hooks.Fire(ctx, HookBeforeLoopExit, exitData)
-
 			if exitData.Block && len(exitData.Messages) > 0 {
-				// Hook wants another turn — add follow-up messages to DAG
 				for _, msg := range exitData.Messages {
 					fHead, _ := a.dag.GetHead()
 					a.dag.AddNode(fHead, msg.Role, msg.Content, "", "", 0)
 				}
-				finalText = "" // reset — we're continuing
-				a.hooks.Fire(ctx, HookOnTurnEnd, &HookData{AgentID: "main", Response: resp})
-				continue // back to top of loop
-			}
-
-			// Drain async steering channel — if messages arrived, force another turn
-			if a.drainSteering() > 0 {
 				finalText = ""
+				emit(AgentEvent{Type: EventAgentTurnEnd, Turn: turn})
 				a.hooks.Fire(ctx, HookOnTurnEnd, &HookData{AgentID: "main", Response: resp})
 				continue
 			}
-
+			if a.drainSteering() > 0 {
+				finalText = ""
+				emit(AgentEvent{Type: EventAgentTurnEnd, Turn: turn})
+				a.hooks.Fire(ctx, HookOnTurnEnd, &HookData{AgentID: "main", Response: resp})
+				continue
+			}
+			emit(AgentEvent{Type: EventAgentTurnEnd, Turn: turn})
 			a.hooks.Fire(ctx, HookOnTurnEnd, &HookData{AgentID: "main", Response: resp})
 			break
 		}
 
-		// Execute tool calls
 		toolCalls := ExtractToolCalls(resp)
 		for _, tc := range toolCalls {
-			// Fire before tool call (can transform args, rename tool, or block)
-			toolData := &HookData{
-				AgentID:  "main",
-				ToolName: tc.Name,
-				ToolArgs: tc.Input,
-				Meta:     map[string]any{},
-			}
+			toolData := &HookData{AgentID: "main", ToolName: tc.Name, ToolArgs: tc.Input, Meta: map[string]any{}}
 			a.hooks.Fire(ctx, HookBeforeToolCall, toolData)
-			tc.Name = toolData.ToolName   // read back possibly-modified name
-			tc.Input = toolData.ToolArgs  // read back possibly-modified args
+			tc.Name = toolData.ToolName
+			tc.Input = toolData.ToolArgs
+			emit(AgentEvent{Type: EventAgentToolStart, ToolName: tc.Name, ToolArgs: tc.Input})
 
 			var result *ToolResult
 			if toolData.Block {
-				result = &ToolResult{
-					ToolUseID: tc.ID,
-					Content:   fmt.Sprintf("[BLOCKED] %s", toolData.BlockReason),
-					IsError:   true,
-				}
+				result = &ToolResult{ToolUseID: tc.ID, Content: fmt.Sprintf("[BLOCKED] %s", toolData.BlockReason), IsError: true}
 			} else {
-				// Find and execute tool
 				tool := a.findTool(tc.Name)
 				if tool == nil {
-					result = &ToolResult{
-						ToolUseID: tc.ID,
-						Content:   fmt.Sprintf("Tool '%s' not found", tc.Name),
-						IsError:   true,
-					}
+					result = &ToolResult{ToolUseID: tc.ID, Content: fmt.Sprintf("Tool '%s' not found", tc.Name), IsError: true}
 				} else {
-					r, err := tool.Execute(tc.Input)
-					if err != nil {
-						result = &ToolResult{
-							ToolUseID: tc.ID,
-							Content:   fmt.Sprintf("Tool error: %s", err.Error()),
-							IsError:   true,
-						}
+					r, execErr := tool.Execute(tc.Input)
+					if execErr != nil {
+						result = &ToolResult{ToolUseID: tc.ID, Content: fmt.Sprintf("Tool error: %s", execErr.Error()), IsError: true}
 					} else {
 						result = r
 						result.ToolUseID = tc.ID
@@ -286,41 +259,19 @@ func (a *Agent) Run(ctx context.Context, userMessage string) (string, error) {
 				}
 			}
 
-			// Fire after tool call (can transform result)
-			afterTool := &HookData{
-				AgentID:    "main",
-				ToolName:   tc.Name,
-				ToolArgs:   tc.Input,
-				ToolResult: result,
-			}
+			afterTool := &HookData{AgentID: "main", ToolName: tc.Name, ToolArgs: tc.Input, ToolResult: result}
 			a.hooks.Fire(ctx, HookAfterToolCall, afterTool)
 			if afterTool.ToolResult != nil {
 				result = afterTool.ToolResult
 			}
+			emit(AgentEvent{Type: EventAgentToolEnd, ToolName: tc.Name, ToolArgs: tc.Input, ToolResult: result})
 
-			// Notify TUI/channel about tool use
-			if a.OnToolUse != nil {
-				a.OnToolUse(tc.Name, tc.Input, result)
-			}
-
-			// Add tool result to DAG
 			toolHead, _ := a.dag.GetHead()
-			toolContent := []ContentBlock{{
-				Type:      "tool_result",
-				ToolUseID: result.ToolUseID,
-				Content:   result.Content,
-				IsError:   result.IsError,
-			}}
+			toolContent := []ContentBlock{{Type: "tool_result", ToolUseID: result.ToolUseID, Content: result.Content, IsError: result.IsError}}
 			a.dag.AddNode(toolHead, RoleTool, toolContent, "", "", 0)
 		}
 
-		// after_tool_result: fires after ALL tool results are in DAG, before next LLM turn.
-		// Hooks can inject steering messages to guide the LLM's next reasoning step.
-		steerData := &HookData{
-			AgentID:  "main",
-			Response: resp,
-			Messages: nil, // hooks populate this with steering messages
-		}
+		steerData := &HookData{AgentID: "main", Response: resp, Messages: nil}
 		a.hooks.Fire(ctx, HookAfterToolResult, steerData)
 		if len(steerData.Messages) > 0 {
 			for _, msg := range steerData.Messages {
@@ -328,38 +279,26 @@ func (a *Agent) Run(ctx context.Context, userMessage string) (string, error) {
 				a.dag.AddNode(sHead, msg.Role, msg.Content, "", "", 0)
 			}
 		}
-
-		// Drain async steering channel (non-blocking)
 		a.drainSteering()
 
+		emit(AgentEvent{Type: EventAgentTurnEnd, Turn: turn})
 		a.hooks.Fire(ctx, HookOnTurnEnd, &HookData{AgentID: "main", Response: resp})
-		_ = userNodeID // used above
+		_ = userNodeID
 	}
 
-	// Fire stop failure if loop exhausted without a final response
 	if finalText == "" {
-		a.hooks.Fire(ctx, HookOnStopFailure, &HookData{
-			AgentID: "main",
-			Meta:    map[string]any{"reason": "max_turns_exhausted", "max_turns": a.config.MaxTurns},
-		})
+		a.hooks.Fire(ctx, HookOnStopFailure, &HookData{AgentID: "main", Meta: map[string]any{"reason": "max_turns_exhausted", "max_turns": a.config.MaxTurns}})
 	}
-
-	// Fire agent end
 	a.hooks.Fire(ctx, HookOnAgentEnd, &HookData{AgentID: "main", Meta: map[string]any{"text": finalText}})
-
-	return finalText, nil
+	emit(AgentEvent{Type: EventAgentDone, Text: finalText})
 }
 
-// consumeStream reads all events from a StreamComplete channel, calls onDelta
-// for text deltas, and returns the assembled AssistantMessage from message_stop.
-func consumeStream(ch <-chan StreamEvent, onDelta func(string)) (*AssistantMessage, error) {
+func consumeStreamEmit(streamCh <-chan StreamEvent, emit func(AgentEvent)) (*AssistantMessage, error) {
 	var resp *AssistantMessage
-	for ev := range ch {
+	for ev := range streamCh {
 		switch ev.Type {
 		case EventTextDelta:
-			if onDelta != nil {
-				onDelta(ev.Text)
-			}
+			emit(AgentEvent{Type: EventAgentTextDelta, Text: ev.Text})
 		case EventError:
 			return nil, ev.Error
 		case EventMessageStop:
@@ -381,17 +320,10 @@ func (a *Agent) findTool(name string) *Tool {
 	return nil
 }
 
-// DAG returns the conversation DAG.
-func (a *Agent) DAG() *DAG { return a.dag }
+func (a *Agent) DAG() *DAG                { return a.dag }
+func (a *Agent) Hooks() *HookRegistry     { return a.hooks }
+func (a *Agent) AddTool(t Tool)            { a.config.Tools = append(a.config.Tools, t) }
 
-// Hooks returns the hook registry.
-func (a *Agent) Hooks() *HookRegistry { return a.hooks }
-
-// AddTool appends a tool to the agent's config after creation.
-func (a *Agent) AddTool(t Tool) { a.config.Tools = append(a.config.Tools, t) }
-
-// drainSteering non-blocking reads all messages from the Steering channel
-// and adds them to the DAG. Returns the number of messages drained.
 func (a *Agent) drainSteering() int {
 	if a.Steering == nil {
 		return 0
