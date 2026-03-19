@@ -2,6 +2,7 @@ package config
 
 import (
 	"encoding/json"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -84,6 +85,81 @@ func LoadConfig(path string) (*Config, error) {
 		cfg.Telegram.BotToken = os.Getenv("TELEGRAM_BOT_TOKEN")
 	}
 	return &cfg, nil
+}
+
+// ModelInfo holds context window and max tokens for a model.
+type ModelInfo struct {
+	ContextWindow int `json:"contextWindow"`
+	MaxTokens     int `json:"maxTokens"`
+}
+
+// LoadModels reads models.json from configDir and returns a map of model ID to ModelInfo.
+func LoadModels(configDir string) map[string]ModelInfo {
+	data, err := os.ReadFile(filepath.Join(configDir, "models.json"))
+	if err != nil {
+		return nil
+	}
+	var models map[string]ModelInfo
+	json.Unmarshal(data, &models)
+	return models
+}
+
+// ResolveModelInfo looks up model specs in this order:
+// 1. models.json lookup table
+// 2. OpenRouter API (if provider is "openrouter")
+// 3. Returns zeros if not found (caller uses config.json defaults)
+func ResolveModelInfo(modelID, provider string, models map[string]ModelInfo) ModelInfo {
+	// 1. Local lookup
+	if models != nil {
+		if info, ok := models[modelID]; ok {
+			return info
+		}
+	}
+
+	// 2. OpenRouter API auto-detect
+	if provider == "openrouter" {
+		if info, ok := fetchOpenRouterModelInfo(modelID); ok {
+			return info
+		}
+	}
+
+	return ModelInfo{}
+}
+
+// fetchOpenRouterModelInfo queries OpenRouter's /api/v1/models for a specific model.
+func fetchOpenRouterModelInfo(modelID string) (ModelInfo, bool) {
+	resp, err := http.Get("https://openrouter.ai/api/v1/models")
+	if err != nil {
+		return ModelInfo{}, false
+	}
+	defer resp.Body.Close()
+
+	var result struct {
+		Data []struct {
+			ID            string `json:"id"`
+			ContextLength int    `json:"context_length"`
+			TopProvider   struct {
+				MaxCompletionTokens *int `json:"max_completion_tokens"`
+			} `json:"top_provider"`
+		} `json:"data"`
+	}
+	if json.NewDecoder(resp.Body).Decode(&result) != nil {
+		return ModelInfo{}, false
+	}
+
+	for _, m := range result.Data {
+		if m.ID == modelID {
+			info := ModelInfo{ContextWindow: m.ContextLength}
+			if m.TopProvider.MaxCompletionTokens != nil {
+				info.MaxTokens = *m.TopProvider.MaxCompletionTokens
+			}
+			if info.MaxTokens == 0 {
+				info.MaxTokens = 8192
+			}
+			return info, true
+		}
+	}
+	return ModelInfo{}, false
 }
 
 // LoadTorus reads the TORUS.md persona file from configDir.

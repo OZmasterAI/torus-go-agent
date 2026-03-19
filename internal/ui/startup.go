@@ -10,24 +10,26 @@ import (
 
 // ProviderChoice holds a provider option for the startup menu.
 type ProviderChoice struct {
-	Name     string
-	Provider string // "openrouter" or "anthropic"
-	Model    string
-	NeedsKey string // env var name
+	Name          string
+	Provider      string // "openrouter", "nvidia", or "anthropic"
+	Model         string
+	NeedsKey      string // env var name
+	ContextWindow int    // model's context window size
+	MaxTokens     int    // max output tokens
 }
 
 // DefaultProviderChoices returns the standard options.
 func DefaultProviderChoices() []ProviderChoice {
 	return []ProviderChoice{
-		{Name: "OpenRouter (hunter-alpha)", Provider: "openrouter", Model: "openrouter/hunter-alpha", NeedsKey: "OPENROUTER_API_KEY"},
-		{Name: "OpenRouter (nemotron-3-super)", Provider: "openrouter", Model: "nvidia/nemotron-3-super-120b-a12b:free", NeedsKey: "OPENROUTER_API_KEY"},
-		{Name: "OpenRouter (step-3.5-flash)", Provider: "openrouter", Model: "stepfun/step-3.5-flash:free", NeedsKey: "OPENROUTER_API_KEY"},
-		{Name: "NVIDIA NIM (GLM-4.7)", Provider: "nvidia", Model: "z-ai/glm4.7", NeedsKey: "NVIDIA_API_KEY"},
-		{Name: "NVIDIA NIM (Qwen3.5-122B)", Provider: "nvidia", Model: "qwen/qwen3.5-122b-a10b", NeedsKey: "NVIDIA_API_KEY"},
-		{Name: "NVIDIA NIM (llama-3.3-70b)", Provider: "nvidia", Model: "meta/llama-3.3-70b-instruct", NeedsKey: "NVIDIA_API_KEY"},
-		{Name: "Anthropic Claude (OAuth)", Provider: "anthropic", Model: "claude-sonnet-4-5-20250929", NeedsKey: ""},
-		{Name: "Anthropic Claude (API key)", Provider: "anthropic", Model: "claude-sonnet-4-5-20250929", NeedsKey: "ANTHROPIC_API_KEY"},
-		{Name: "Custom model", Provider: "", Model: "", NeedsKey: ""},
+		{Name: "OpenRouter (hunter-alpha)", Provider: "openrouter", Model: "openrouter/hunter-alpha", NeedsKey: "OPENROUTER_API_KEY", ContextWindow: 128000, MaxTokens: 8192},
+		{Name: "OpenRouter (nemotron-3-super)", Provider: "openrouter", Model: "nvidia/nemotron-3-super-120b-a12b:free", NeedsKey: "OPENROUTER_API_KEY", ContextWindow: 131072, MaxTokens: 8192},
+		{Name: "OpenRouter (step-3.5-flash)", Provider: "openrouter", Model: "stepfun/step-3.5-flash:free", NeedsKey: "OPENROUTER_API_KEY", ContextWindow: 128000, MaxTokens: 8192},
+		{Name: "NVIDIA NIM (GLM-4.7)", Provider: "nvidia", Model: "z-ai/glm4.7", NeedsKey: "NVIDIA_API_KEY", ContextWindow: 32768, MaxTokens: 8192},
+		{Name: "NVIDIA NIM (Qwen3.5-122B)", Provider: "nvidia", Model: "qwen/qwen3.5-122b-a10b", NeedsKey: "NVIDIA_API_KEY", ContextWindow: 262144, MaxTokens: 16384},
+		{Name: "NVIDIA NIM (llama-3.3-70b)", Provider: "nvidia", Model: "meta/llama-3.3-70b-instruct", NeedsKey: "NVIDIA_API_KEY", ContextWindow: 128000, MaxTokens: 8192},
+		{Name: "Anthropic Claude (OAuth)", Provider: "anthropic", Model: "claude-sonnet-4-5-20250929", NeedsKey: "", ContextWindow: 200000, MaxTokens: 64000},
+		{Name: "Anthropic Claude (API key)", Provider: "anthropic", Model: "claude-sonnet-4-5-20250929", NeedsKey: "ANTHROPIC_API_KEY", ContextWindow: 200000, MaxTokens: 64000},
+		{Name: "Custom model", Provider: "", Model: "", NeedsKey: "", ContextWindow: 128000, MaxTokens: 8192},
 	}
 }
 
@@ -80,17 +82,14 @@ func RunStartup(skipStartup bool) (provider, model string) {
 			fmt.Print("  Model ID: ")
 			scanner.Scan()
 			model = strings.TrimSpace(scanner.Text())
-			return provider, model
-		}
+			return provider, model		}
 
 		// Anthropic provider: let user pick the model
 		if choice.Provider == "anthropic" {
 			model = pickAnthropicModel(scanner)
-			return choice.Provider, model
-		}
+			return choice.Provider, model		}
 
-		return choice.Provider, choice.Model
-	}
+		return choice.Provider, choice.Model	}
 }
 
 func pickAnthropicModel(scanner *bufio.Scanner) string {

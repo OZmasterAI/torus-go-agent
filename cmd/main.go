@@ -41,6 +41,16 @@ func main() {
 		cfg.Agent.Model = startModel
 	}
 
+	// Auto-detect model specs: models.json → OpenRouter API → config.json defaults
+	models := config.LoadModels(cfgDir)
+	if info := config.ResolveModelInfo(cfg.Agent.Model, cfg.Agent.Provider, models); info.ContextWindow > 0 {
+		cfg.Agent.ContextWindow = info.ContextWindow
+		if info.MaxTokens > 0 {
+			cfg.Agent.MaxTokens = info.MaxTokens
+		}
+		log.Printf("[main] model %s: context=%d, maxTokens=%d (auto-detected)", cfg.Agent.Model, info.ContextWindow, info.MaxTokens)
+	}
+
 	soul := config.LoadTorus(cfgDir)
 	key := cfg.APIKey()
 	if key == "" && cfg.Agent.Provider == "anthropic" {
