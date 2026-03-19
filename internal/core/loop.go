@@ -17,6 +17,7 @@ type Agent struct {
 	Summarize     func(string) (string, error) // LLM summarize callback for compaction
 	OnStreamDelta func(delta string)                                    // called for each text delta during streaming; nil = use Complete
 	OnToolUse     func(name string, args map[string]any, result *ToolResult) // called after each tool execution; nil = silent
+	Steering      chan Message // async steering: any goroutine can push messages, polled between tool rounds and at exit
 }
 
 // SetSmartProvider sets the provider used for simple messages when smart routing is enabled.
@@ -236,6 +237,13 @@ func (a *Agent) Run(ctx context.Context, userMessage string) (string, error) {
 				continue // back to top of loop
 			}
 
+			// Drain async steering channel — if messages arrived, force another turn
+			if a.drainSteering() > 0 {
+				finalText = ""
+				a.hooks.Fire(ctx, HookOnTurnEnd, &HookData{AgentID: "main", Response: resp})
+				continue
+			}
+
 			a.hooks.Fire(ctx, HookOnTurnEnd, &HookData{AgentID: "main", Response: resp})
 			break
 		}
@@ -328,6 +336,9 @@ func (a *Agent) Run(ctx context.Context, userMessage string) (string, error) {
 			}
 		}
 
+		// Drain async steering channel (non-blocking)
+		a.drainSteering()
+
 		a.hooks.Fire(ctx, HookOnTurnEnd, &HookData{AgentID: "main", Response: resp})
 		_ = userNodeID // used above
 	}
@@ -385,3 +396,22 @@ func (a *Agent) Hooks() *HookRegistry { return a.hooks }
 
 // AddTool appends a tool to the agent's config after creation.
 func (a *Agent) AddTool(t Tool) { a.config.Tools = append(a.config.Tools, t) }
+
+// drainSteering non-blocking reads all messages from the Steering channel
+// and adds them to the DAG. Returns the number of messages drained.
+func (a *Agent) drainSteering() int {
+	if a.Steering == nil {
+		return 0
+	}
+	n := 0
+	for {
+		select {
+		case msg := <-a.Steering:
+			head, _ := a.dag.GetHead()
+			a.dag.AddNode(head, msg.Role, msg.Content, "", "", 0)
+			n++
+		default:
+			return n
+		}
+	}
+}

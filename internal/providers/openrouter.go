@@ -442,11 +442,16 @@ func (p *OpenRouterProvider) parseOpenAISSE(ctx context.Context, resp *http.Resp
 		finished   bool // guard against duplicate finish chunks
 	)
 
+	aborted := false
 	send := func(ev t.StreamEvent) bool {
 		select {
 		case ch <- ev:
 			return true
 		case <-ctx.Done():
+			if !aborted {
+				aborted = true
+				ch <- t.StreamEvent{Type: t.EventError, Error: fmt.Errorf("aborted: %w", ctx.Err())}
+			}
 			return false
 		}
 	}
