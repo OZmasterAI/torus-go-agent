@@ -24,9 +24,7 @@ func (a *Agent) SetSmartProvider(p Provider) { a.smartProvider = p }
 
 // NewAgent creates a new agent.
 func NewAgent(config AgentConfig, provider Provider, hooks *HookRegistry, dag *DAG) *Agent {
-	if config.MaxTurns == 0 {
-		config.MaxTurns = 30
-	}
+	// MaxTurns: 0 = unlimited, >0 = cap. Default 30 set by caller (cmd/main.go).
 	return &Agent{
 		config:   config,
 		provider: provider,
@@ -75,7 +73,7 @@ func (a *Agent) Run(ctx context.Context, userMessage string) (string, error) {
 
 	var finalText string
 
-	for turn := 0; turn < a.config.MaxTurns; turn++ {
+	for turn := 0; a.config.MaxTurns == 0 || turn < a.config.MaxTurns; turn++ {
 		// Fire turn start
 		a.hooks.Fire(ctx, HookOnTurnStart, &HookData{AgentID: "main", Meta: map[string]any{"turn": turn}})
 
