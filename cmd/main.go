@@ -19,6 +19,7 @@ import (
 	"go_sdk_agent/internal/features"
 	"go_sdk_agent/internal/providers"
 	"go_sdk_agent/internal/safety"
+	"go_sdk_agent/internal/tools"
 	"go_sdk_agent/internal/ui"
 )
 
@@ -185,7 +186,7 @@ func main() {
 	}
 
 	// Build tools: default 6 + MCP tools
-	tools := core.BuildDefaultTools()
+	defaultTools := tools.BuildDefaultTools()
 
 	// Load MCP servers
 	var mcpClient *features.MCPClient
@@ -198,7 +199,7 @@ func main() {
 				log.Printf("[mcp] connected to %s", name)
 			}
 		}
-		tools = append(tools, mcpClient.AsTools()...)
+		defaultTools = append(defaultTools, mcpClient.AsTools()...)
 		defer mcpClient.Close()
 	}
 
@@ -221,7 +222,7 @@ func main() {
 			MaxTokens: cfg.Agent.MaxTokens,
 		},
 		SystemPrompt:      soul,
-		Tools:             tools,
+		Tools:             defaultTools,
 		MaxTurns:          30,
 		ContextWindow:     cfg.Agent.ContextWindow,
 		SmartRouting:      cfg.Agent.SmartRouting,
@@ -281,7 +282,7 @@ func main() {
 		},
 		Execute: func(args map[string]any) (*core.ToolResult, error) {
 			query, _ := args["query"].(string)
-			limit := int(core.GF(args, "limit", 5))
+			limit := int(tools.GF(args, "limit", 5))
 			rows, err := dag.SearchAll(query, limit)
 			if err != nil {
 				return &core.ToolResult{Content: "Error: " + err.Error(), IsError: true}, nil

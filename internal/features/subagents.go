@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"go_sdk_agent/internal/core"
+	"go_sdk_agent/internal/tools"
 	"go_sdk_agent/internal/types"
 )
 
@@ -370,7 +371,7 @@ func (m *SubAgentManager) Wait(id string) *SubAgentResult {
 //   - "tester"     — bash, read, glob, grep (no write/edit)
 //   - anything else — all 6 tools
 func DefaultToolsForType(agentType string) []Tool {
-	all := core.BuildDefaultTools()
+	all := tools.BuildDefaultTools()
 	switch agentType {
 	case "researcher":
 		return filterTools(all, "read", "glob", "grep")
