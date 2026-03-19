@@ -103,8 +103,10 @@ func main() {
 	}
 	defer dag.Close()
 
-	// Create hooks + register secret scanner
+	// Create hooks + telemetry + safety scanners
 	hooks := core.NewHookRegistry()
+	telemetry := features.NewTelemetryCollector()
+	telemetry.RegisterHooks(hooks)
 	hooks.Register(core.HookBeforeToolCall, "secret-scan", func(ctx context.Context, d *core.HookData) error {
 		if d.ToolName == "write" || d.ToolName == "edit" {
 			content, _ := d.ToolArgs["content"].(string)
@@ -350,6 +352,38 @@ func main() {
 		},
 	})
 
+	// Add delegate tool — synchronous agent-as-tool (LLM calls another agent, waits for result)
+	agent.AddTool(core.Tool{
+		Name:        "delegate",
+		Description: "Delegate a task to a sub-agent and wait for the result. Use for tasks that need focused work. Types: builder, researcher, tester.",
+		InputSchema: map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"task":       map[string]any{"type": "string", "description": "Task for the sub-agent"},
+				"agent_type": map[string]any{"type": "string", "description": "builder, researcher, or tester"},
+			},
+			"required": []string{"task", "agent_type"},
+		},
+		Execute: func(args map[string]any) (*core.ToolResult, error) {
+			task, _ := args["task"].(string)
+			agentType, _ := args["agent_type"].(string)
+			id, err := subMgr.SpawnWithProvider(agent, prov, soul, features.SubAgentConfig{
+				Task:      task,
+				AgentType: agentType,
+				Tools:     features.DefaultToolsForType(agentType),
+				MaxTurns:  20,
+			})
+			if err != nil {
+				return &core.ToolResult{Content: "Delegate failed: " + err.Error(), IsError: true}, nil
+			}
+			result := subMgr.Wait(id)
+			if result.Error != nil {
+				return &core.ToolResult{Content: "Sub-agent error: " + result.Error.Error(), IsError: true}, nil
+			}
+			return &core.ToolResult{Content: result.Text}, nil
+		},
+	})
+
 	// Connect DAG to hooks for mutation events
 	dag.SetHooks(hooks)
 
@@ -382,5 +416,6 @@ func main() {
 	hooks.Fire(context.Background(), core.HookOnAppShutdown, &core.HookData{
 		AgentID: "main",
 	})
+	log.Printf("[telemetry] %s", telemetry.Summary())
 	_ = subMgr // keep reference alive
 }
