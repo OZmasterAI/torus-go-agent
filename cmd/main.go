@@ -229,7 +229,7 @@ func main() {
 		SmartRoutingModel: cfg.Agent.SmartRoutingModel,
 	}, prov, hooks, dag)
 
-	// Wire smart routing provider if configured
+	// Wire smart routing if configured
 	if cfg.Agent.SmartRouting && cfg.Agent.SmartRoutingModel != "" {
 		var smartProv providers.Provider
 		switch cfg.Agent.Provider {
@@ -240,7 +240,12 @@ func main() {
 		default:
 			smartProv = providers.NewOpenRouterProvider(key, cfg.Agent.SmartRoutingModel)
 		}
-		agent.SetSmartProvider(smartProv)
+		agent.RouteProvider = func(userMessage string) core.Provider {
+			if features.IsSimpleMessage(userMessage) {
+				return smartProv
+			}
+			return prov
+		}
 		log.Printf("[main] smart routing enabled: simple → %s", cfg.Agent.SmartRoutingModel)
 	}
 

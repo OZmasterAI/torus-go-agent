@@ -1,4 +1,4 @@
-package core
+package features
 
 import (
 	"regexp"
@@ -59,22 +59,3 @@ func IsSimpleMessage(text string) bool {
 	return true
 }
 
-// RouteMessage returns the model ID that should handle this message.
-//
-// If SmartRouting is disabled (the default), the configured provider model is
-// always returned. When SmartRouting is enabled and IsSimpleMessage is true,
-// SmartRoutingModel is returned — falling back to the provider model when
-// SmartRoutingModel is empty.
-func RouteMessage(text string, config AgentConfig) string {
-	if !config.SmartRouting {
-		return config.Provider.Model
-	}
-
-	if IsSimpleMessage(text) {
-		if config.SmartRoutingModel != "" {
-			return config.SmartRoutingModel
-		}
-	}
-
-	return config.Provider.Model
-}

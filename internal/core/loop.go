@@ -10,7 +10,6 @@ import (
 type Agent struct {
 	config        AgentConfig
 	provider      Provider
-	smartProvider Provider          // optional cheaper model for simple messages
 	hooks         *HookRegistry
 	dag           *DAG
 	compaction    CompactionConfig
@@ -18,10 +17,8 @@ type Agent struct {
 	OnStreamDelta func(delta string)                                    // called for each text delta during streaming; nil = use Complete
 	OnToolUse     func(name string, args map[string]any, result *ToolResult) // called after each tool execution; nil = silent
 	Steering      chan Message // async steering: any goroutine can push messages, polled between tool rounds and at exit
+	RouteProvider func(userMessage string) Provider // optional: pick provider per turn; nil = always use main provider
 }
-
-// SetSmartProvider sets the provider used for simple messages when smart routing is enabled.
-func (a *Agent) SetSmartProvider(p Provider) { a.smartProvider = p }
 
 // NewAgent creates a new agent.
 func NewAgent(config AgentConfig, provider Provider, hooks *HookRegistry, dag *DAG) *Agent {
@@ -164,14 +161,10 @@ func (a *Agent) Run(ctx context.Context, userMessage string) (string, error) {
 			toolDefs = append(toolDefs, t)
 		}
 
-		// Smart routing: pick provider based on message complexity
+		// Pick provider — use RouteProvider callback if set, otherwise main provider
 		activeProvider := a.provider
-		if a.smartProvider != nil && a.config.SmartRouting {
-			routed := RouteMessage(userMessage, a.config)
-			if routed != a.config.Provider.Model {
-				activeProvider = a.smartProvider
-				log.Printf("[loop] smart routing: using %s for simple message", routed)
-			}
+		if a.RouteProvider != nil {
+			activeProvider = a.RouteProvider(userMessage)
 		}
 
 		// Call LLM — use streaming if callback is set, otherwise non-streaming
