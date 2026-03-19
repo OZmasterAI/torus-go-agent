@@ -4,7 +4,17 @@
     "provider": "nvidia",
     "model": "z-ai/glm4.7",
     "maxTokens": 16384,
-    "contextWindow": 262144
+    "contextWindow": 262144,
+    "compaction": "llm",
+    "compactionTrigger": "both",
+    "compactionThreshold": 75,
+    "compactionMaxMessages": 50,
+    "compactionKeepLastN": 20,
+    "continuousCompression": true,
+    "compressionKeepLast": 10,
+    "zoneBudgeting": true,
+    "zoneArchivePercent": 25,
+    "compressionMinMessages": 0
   },
   "data": { "dir": "../data" }
 }

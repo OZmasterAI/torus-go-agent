@@ -42,10 +42,6 @@ type CompactionConfig struct {
 
 	// ContextWindow is the token ceiling for the model in use (e.g. 200000 for claude-3-5-sonnet).
 	ContextWindow int
-
-	// CompactionModel is the model ID used for LLM-mode summarisation.
-	// Falls back to extractKeyContent if empty or if the summarise call fails.
-	CompactionModel string
 }
 
 // defaultCompactionConfig fills in zero-value fields with sensible defaults.
