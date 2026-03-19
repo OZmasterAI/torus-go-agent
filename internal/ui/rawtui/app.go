@@ -14,6 +14,7 @@ import (
 	"golang.org/x/term"
 
 	"go_sdk_agent/internal/core"
+	"go_sdk_agent/internal/features"
 )
 
 // chatMsgKind identifies a message type in the display buffer.
@@ -82,9 +83,15 @@ type App struct {
 	agent         *core.Agent
 	model         string
 	contextWindow int
+	skills        *features.SkillRegistry
 	agentRunning  bool
 	streamingText string
 	needsTextSep  bool
+
+	// Command completion
+	cmdComplete    bool // true when showing command completions
+	cmdMatches     []string
+	cmdIdx         int
 
 	// Pending tool call for box rendering
 	pendingToolCall string
@@ -112,7 +119,7 @@ type toolTimerTickMsg struct{}
 type agentTickMsg struct{}
 
 // NewApp creates a new raw TUI app wired to the given agent.
-func NewApp(agent *core.Agent, model string, contextWindow int) *App {
+func NewApp(agent *core.Agent, model string, contextWindow int, skills *features.SkillRegistry) *App {
 	cwd, _ := os.Getwd()
 	hist := NewHistory(cwd, 0)
 	_ = hist.Load()
@@ -120,6 +127,7 @@ func NewApp(agent *core.Agent, model string, contextWindow int) *App {
 		agent:         agent,
 		model:         model,
 		contextWindow: contextWindow,
+		skills:        skills,
 		resultCh:      make(chan any, 16),
 		inputState:    inputState{history: hist},
 	}
@@ -171,7 +179,7 @@ func (a *App) Run() error {
 	}()
 
 	// Show startup info
-	a.messages = append(a.messages, chatMessage{kind: msgInfo, content: fmt.Sprintf("Model: %s", a.model)})
+	a.messages = append(a.messages, chatMessage{kind: msgInfo, content: fmt.Sprintf("Model: %s — type /help for commands", a.model)})
 
 	a.render()
 
@@ -504,6 +512,19 @@ func (a *App) buildInputRows() []string {
 	}
 	rows = append(rows, sep)
 
+	// Command completion dropdown
+	if a.cmdComplete && len(a.cmdMatches) > 0 {
+		for i, m := range a.cmdMatches {
+			prefix := "  "
+			if i == a.cmdIdx {
+				prefix = "\033[7m "
+				rows = append(rows, prefix+m+" \033[0m")
+			} else {
+				rows = append(rows, "\033[2m"+prefix+m+"\033[0m")
+			}
+		}
+	}
+
 	if a.ctrlCHint {
 		rows = append(rows, "\033[1;38;5;4mPress Ctrl-C again to exit\033[0m")
 	}
@@ -636,11 +657,13 @@ func (a *App) handleByte(ch byte, stdinCh chan byte, readByte func() (byte, bool
 	}
 	if ch == 0x17 { // Ctrl+W
 		a.deleteWordBackward()
+		a.updateCmdComplete()
 		a.renderInput()
 		return false
 	}
 	if ch == 0x15 { // Ctrl+U
 		a.killToStart()
+		a.updateCmdComplete()
 		a.renderInput()
 		return false
 	}
@@ -660,6 +683,15 @@ func (a *App) handleByte(ch byte, stdinCh chan byte, readByte func() (byte, bool
 		return false
 	}
 	if ch == '\t' {
+		if a.cmdComplete && len(a.cmdMatches) > 0 {
+			a.cmdIdx = (a.cmdIdx + 1) % len(a.cmdMatches)
+			a.renderInput()
+		} else {
+			a.updateCmdComplete()
+			if a.cmdComplete {
+				a.renderInput()
+			}
+		}
 		return false
 	}
 	if ch == '\n' { // Shift+Enter (LF)
@@ -668,12 +700,18 @@ func (a *App) handleByte(ch byte, stdinCh chan byte, readByte func() (byte, bool
 		return false
 	}
 	if ch == '\r' { // Enter
+		if a.cmdComplete && len(a.cmdMatches) > 0 {
+			a.acceptCmdComplete()
+			a.renderInput()
+			return false
+		}
 		a.handleEnter()
 		return false
 	}
 	if ch == 127 || ch == 0x08 { // Backspace
 		if a.cursor > 0 {
 			a.deleteBeforeCursor()
+			a.updateCmdComplete()
 			a.renderInput()
 		}
 		return false
@@ -684,6 +722,7 @@ func (a *App) handleByte(ch byte, stdinCh chan byte, readByte func() (byte, bool
 		return true
 	}
 	a.insertAtCursor(r)
+	a.updateCmdComplete()
 	a.renderInput()
 	return false
 }
@@ -697,6 +736,12 @@ func (a *App) handleEscapeSequence(stdinCh chan byte, readByte func() (byte, boo
 			return
 		}
 	case <-time.After(50 * time.Millisecond):
+		// Bare Escape pressed
+		if a.cmdComplete {
+			a.dismissCmdComplete()
+			a.renderInput()
+			return
+		}
 		a.inputState.reset()
 		a.renderInput()
 		return
@@ -844,6 +889,7 @@ func (a *App) handleEnter() {
 	if a.agentRunning {
 		return
 	}
+	a.dismissCmdComplete()
 	val := strings.TrimSpace(strings.ReplaceAll(a.value(), "\r", ""))
 	if val == "" {
 		return
@@ -852,23 +898,212 @@ func (a *App) handleEnter() {
 	if a.history != nil {
 		a.history.Add(val)
 	}
-	if val == "/clear" {
-		a.messages = nil
-		a.streamingText = ""
-		a.pendingToolCall = ""
-		a.inputState.reset()
-		a.render()
-		return
-	}
-	if val == "/exit" || val == "/quit" {
-		a.quit = true
-		return
+
+	// Handle slash commands
+	if strings.HasPrefix(val, "/") {
+		if a.handleCommand(val) {
+			return
+		}
 	}
 
 	a.messages = append(a.messages, chatMessage{kind: msgUser, content: val, leadBlank: true})
 	a.inputState.reset()
 	a.startAgent(val)
 	a.render()
+}
+
+// builtinCommands returns the list of built-in slash command names.
+func (a *App) builtinCommands() []string {
+	return []string{"/clear", "/exit", "/quit", "/help", "/new", "/skills"}
+}
+
+// allCommands returns built-in + skill command names.
+func (a *App) allCommands() []string {
+	cmds := a.builtinCommands()
+	if a.skills != nil {
+		for _, s := range a.skills.List() {
+			cmds = append(cmds, "/"+s.Name)
+		}
+	}
+	return cmds
+}
+
+// handleCommand processes a slash command. Returns true if the input was consumed.
+func (a *App) handleCommand(val string) bool {
+	// Extract command name (first token)
+	fields := strings.Fields(val)
+	cmd := fields[0]
+
+	switch cmd {
+	case "/clear":
+		branchID := a.agent.DAG().CurrentBranchID()
+		a.agent.Hooks().Fire(context.Background(), core.HookPreClear, &core.HookData{
+			AgentID: "main", Meta: map[string]any{"branch": branchID},
+		})
+		a.agent.DAG().ResetHead()
+		a.agent.Hooks().Fire(context.Background(), core.HookPostClear, &core.HookData{
+			AgentID: "main", Meta: map[string]any{"branch": branchID},
+		})
+		a.messages = nil
+		a.streamingText = ""
+		a.pendingToolCall = ""
+		a.sessionInputTokens = 0
+		a.sessionOutputTokens = 0
+		a.messages = append(a.messages, chatMessage{kind: msgSuccess, content: "Context cleared."})
+		a.inputState.reset()
+		a.render()
+		return true
+
+	case "/exit", "/quit":
+		a.quit = true
+		return true
+
+	case "/help":
+		a.showHelp()
+		a.inputState.reset()
+		a.render()
+		return true
+
+	case "/new":
+		a.handleNewBranch()
+		a.inputState.reset()
+		a.render()
+		return true
+
+	case "/skills":
+		a.showSkills()
+		a.inputState.reset()
+		a.render()
+		return true
+
+	default:
+		// Check skill commands
+		if a.skills != nil {
+			if skillName, ok := a.skills.IsSkillCommand(val); ok {
+				if skill, found := a.skills.Get(skillName); found {
+					beforeSkill := &core.HookData{
+						AgentID: "main",
+						Meta:    map[string]any{"skill": skillName, "input": val},
+					}
+					a.agent.Hooks().Fire(context.Background(), core.HookBeforeSkill, beforeSkill)
+					if !beforeSkill.Block {
+						prompt := a.skills.FormatSkillPrompt(skill, val)
+						a.agent.Hooks().Fire(context.Background(), core.HookAfterSkill, &core.HookData{
+							AgentID: "main",
+							Meta:    map[string]any{"skill": skillName, "input": val},
+						})
+						a.messages = append(a.messages, chatMessage{
+							kind: msgUser, content: val, leadBlank: true,
+						})
+						a.inputState.reset()
+						a.startAgent(prompt)
+						a.render()
+						return true
+					}
+				}
+			}
+		}
+	}
+	return false
+}
+
+func (a *App) handleNewBranch() {
+	oldBranch := a.agent.DAG().CurrentBranchID()
+	a.agent.Hooks().Fire(context.Background(), core.HookBeforeNewBranch, &core.HookData{
+		AgentID: "main", Meta: map[string]any{"old_branch": oldBranch},
+	})
+	newBranch, _ := a.agent.DAG().NewBranch(fmt.Sprintf("session-%d", time.Now().Unix()))
+	a.agent.Hooks().Fire(context.Background(), core.HookAfterNewBranch, &core.HookData{
+		AgentID: "main", Meta: map[string]any{"old_branch": oldBranch, "new_branch": newBranch},
+	})
+	a.messages = nil
+	a.streamingText = ""
+	a.pendingToolCall = ""
+	a.sessionInputTokens = 0
+	a.sessionOutputTokens = 0
+	a.messages = append(a.messages, chatMessage{
+		kind: msgSuccess, content: fmt.Sprintf("New conversation started (branch: %s).", newBranch),
+	})
+}
+
+func (a *App) showHelp() {
+	var sb strings.Builder
+	sb.WriteString("Commands:\n")
+	sb.WriteString("  /help     — Show this help\n")
+	sb.WriteString("  /clear    — Clear context on current branch\n")
+	sb.WriteString("  /new      — Start new conversation branch\n")
+	sb.WriteString("  /skills   — List available skills\n")
+	sb.WriteString("  /exit     — Exit\n")
+	sb.WriteString("\n")
+	sb.WriteString("Keys:\n")
+	sb.WriteString("  Enter       — Send message\n")
+	sb.WriteString("  Shift+Enter — New line\n")
+	sb.WriteString("  Tab         — Complete /command\n")
+	sb.WriteString("  Ctrl+C ×2   — Exit\n")
+	sb.WriteString("  Ctrl+D      — Exit\n")
+	sb.WriteString("  Ctrl+W      — Delete word\n")
+	sb.WriteString("  Ctrl+U      — Clear to start of line\n")
+	sb.WriteString("  Ctrl+A/E    — Home / End")
+	a.messages = append(a.messages, chatMessage{kind: msgInfo, content: sb.String(), leadBlank: true})
+}
+
+func (a *App) showSkills() {
+	if a.skills == nil {
+		a.messages = append(a.messages, chatMessage{kind: msgInfo, content: "No skills loaded."})
+		return
+	}
+	list := a.skills.List()
+	if len(list) == 0 {
+		a.messages = append(a.messages, chatMessage{kind: msgInfo, content: "No skills found."})
+		return
+	}
+	var sb strings.Builder
+	sb.WriteString("Available skills:\n")
+	for _, s := range list {
+		sb.WriteString(fmt.Sprintf("  /%s — %s\n", s.Name, s.Description))
+	}
+	a.messages = append(a.messages, chatMessage{kind: msgInfo, content: strings.TrimRight(sb.String(), "\n"), leadBlank: true})
+}
+
+// ─── Command completion ───
+
+func (a *App) updateCmdComplete() {
+	val := a.value()
+	if !strings.HasPrefix(val, "/") || strings.Contains(val, " ") || strings.Contains(val, "\n") {
+		a.dismissCmdComplete()
+		return
+	}
+	prefix := strings.ToLower(val)
+	var matches []string
+	for _, cmd := range a.allCommands() {
+		if strings.HasPrefix(strings.ToLower(cmd), prefix) && cmd != val {
+			matches = append(matches, cmd)
+		}
+	}
+	if len(matches) == 0 {
+		a.dismissCmdComplete()
+		return
+	}
+	a.cmdComplete = true
+	a.cmdMatches = matches
+	if a.cmdIdx >= len(matches) {
+		a.cmdIdx = 0
+	}
+}
+
+func (a *App) dismissCmdComplete() {
+	a.cmdComplete = false
+	a.cmdMatches = nil
+	a.cmdIdx = 0
+}
+
+func (a *App) acceptCmdComplete() {
+	if !a.cmdComplete || len(a.cmdMatches) == 0 {
+		return
+	}
+	selected := a.cmdMatches[a.cmdIdx]
+	a.setValue(selected)
+	a.dismissCmdComplete()
 }
 
 // ─── Agent ───
