@@ -16,13 +16,32 @@ import (
 
 const openrouterBaseURL = "https://openrouter.ai/api/v1"
 
-// OpenRouterProvider calls any OpenAI-compatible API (OpenRouter, NVIDIA NIM, etc).
+// authStyle controls how the API key is sent in HTTP requests.
+type authStyle int
+
+const (
+	authBearer authStyle = iota // Authorization: Bearer <key>
+	authAPIKey                  // api-key: <key> (Azure OpenAI)
+)
+
+// OpenRouterProvider calls any OpenAI-compatible API (OpenRouter, NVIDIA NIM, OpenAI, Grok, Azure, etc).
 type OpenRouterProvider struct {
 	providerName string
 	APIKey       string
 	Model        string
 	BaseURL      string
+	endpointPath string    // override for chat completions path (default: "/chat/completions")
+	auth         authStyle
 	client       *http.Client
+}
+
+// chatEndpoint returns the full URL for the chat completions endpoint.
+func (p *OpenRouterProvider) chatEndpoint() string {
+	path := p.endpointPath
+	if path == "" {
+		path = "/chat/completions"
+	}
+	return p.BaseURL + path
 }
 
 // NewOpenRouterProvider creates a provider for OpenRouter models.
@@ -44,6 +63,57 @@ func NewNvidiaProvider(apiKey, model string) *OpenRouterProvider {
 		Model:        model,
 		BaseURL:      "https://integrate.api.nvidia.com/v1",
 		client:       &http.Client{},
+	}
+}
+
+// NewOpenAIProvider creates a native provider for OpenAI models (gpt-4o, o1, etc).
+func NewOpenAIProvider(apiKey, model string) *OpenRouterProvider {
+	return &OpenRouterProvider{
+		providerName: "openai",
+		APIKey:       apiKey,
+		Model:        model,
+		BaseURL:      "https://api.openai.com/v1",
+		client:       &http.Client{},
+	}
+}
+
+// NewGrokProvider creates a native provider for xAI Grok models.
+func NewGrokProvider(apiKey, model string) *OpenRouterProvider {
+	return &OpenRouterProvider{
+		providerName: "grok",
+		APIKey:       apiKey,
+		Model:        model,
+		BaseURL:      "https://api.x.ai/v1",
+		client:       &http.Client{},
+	}
+}
+
+// NewAzureOpenAIProvider creates a provider for Azure-hosted OpenAI models.
+// resource is your Azure resource name, deployment is the model deployment name,
+// apiVersion is e.g. "2024-06-01".
+func NewAzureOpenAIProvider(apiKey, resource, deployment, apiVersion string) *OpenRouterProvider {
+	if apiVersion == "" {
+		apiVersion = "2024-06-01"
+	}
+	baseURL := fmt.Sprintf("https://%s.openai.azure.com/openai/deployments/%s", resource, deployment)
+	return &OpenRouterProvider{
+		providerName: "azure",
+		APIKey:       apiKey,
+		Model:        deployment,
+		BaseURL:      baseURL,
+		endpointPath: "/chat/completions?api-version=" + apiVersion,
+		auth:         authAPIKey,
+		client:       &http.Client{},
+	}
+}
+
+// setAuthHeader sets the appropriate auth header based on the provider's auth style.
+func (p *OpenRouterProvider) setAuthHeader(req *http.Request) {
+	switch p.auth {
+	case authAPIKey:
+		req.Header.Set("api-key", p.APIKey)
+	default:
+		req.Header.Set("Authorization", "Bearer "+p.APIKey)
 	}
 }
 
@@ -230,13 +300,13 @@ func (p *OpenRouterProvider) Complete(ctx context.Context, systemPrompt string, 
 
 	_ = len(body) // debug: request size available if needed
 
-	httpReq, err := http.NewRequestWithContext(ctx, "POST", p.BaseURL+"/chat/completions", bytes.NewReader(body))
+	httpReq, err := http.NewRequestWithContext(ctx, "POST", p.chatEndpoint(), bytes.NewReader(body))
 	if err != nil {
 		return nil, fmt.Errorf("create request: %w", err)
 	}
 
 	httpReq.Header.Set("Content-Type", "application/json")
-	httpReq.Header.Set("Authorization", "Bearer "+p.APIKey)
+	p.setAuthHeader(httpReq)
 
 	resp, err := p.client.Do(httpReq)
 	if err != nil {
@@ -396,13 +466,13 @@ func (p *OpenRouterProvider) StreamComplete(ctx context.Context, systemPrompt st
 
 	_ = len(body) // debug: stream request size available if needed
 
-	httpReq, err := http.NewRequestWithContext(ctx, "POST", p.BaseURL+"/chat/completions", bytes.NewReader(body))
+	httpReq, err := http.NewRequestWithContext(ctx, "POST", p.chatEndpoint(), bytes.NewReader(body))
 	if err != nil {
 		return nil, fmt.Errorf("create request: %w", err)
 	}
 
 	httpReq.Header.Set("Content-Type", "application/json")
-	httpReq.Header.Set("Authorization", "Bearer "+p.APIKey)
+	p.setAuthHeader(httpReq)
 
 	resp, err := p.client.Do(httpReq)
 	if err != nil {

@@ -30,6 +30,7 @@ type MessageSummary struct {
 	Preview   string // first ~80 chars of text content
 	Index     int    // position in the chain (0 = root)
 	Timestamp int64
+	Aliases   []string // human-readable aliases for this node
 }
 
 // New creates a new conversation branch, firing hooks. Returns the new branch ID.
@@ -192,23 +193,29 @@ func ListMessages(dag *core.DAG, branchID string) ([]MessageSummary, error) {
 	var result []MessageSummary
 	for i, node := range ancestors {
 		preview := extractPreview(node.Content, 80)
+		aliases, _ := dag.GetAliases(node.ID)
 		result = append(result, MessageSummary{
 			NodeID:    node.ID,
 			Role:      node.Role,
 			Preview:   preview,
 			Index:     i,
 			Timestamp: node.Timestamp,
+			Aliases:   aliases,
 		})
 	}
 	return result, nil
 }
 
-// Fork creates a new branch from a specific node.
-func Fork(dag *core.DAG, fromNodeID, name string) (string, error) {
+// Fork creates a new branch from a specific node or alias.
+func Fork(dag *core.DAG, fromNodeOrAlias, name string) (string, error) {
+	nodeID, err := dag.ResolveNodeOrAlias(fromNodeOrAlias)
+	if err != nil {
+		return "", fmt.Errorf("resolve %q: %w", fromNodeOrAlias, err)
+	}
 	if name == "" {
 		name = fmt.Sprintf("fork-%d", time.Now().Unix())
 	}
-	return dag.Branch(fromNodeID, name)
+	return dag.Branch(nodeID, name)
 }
 
 // ForkFromHead forks from the current head.
@@ -295,7 +302,11 @@ func FormatMessageList(messages []MessageSummary) string {
 		if len(role) > 9 {
 			role = role[:9]
 		}
-		sb.WriteString(fmt.Sprintf("  %d) [%s] %s\n", m.Index, role, m.Preview))
+		aliasStr := ""
+		if len(m.Aliases) > 0 {
+			aliasStr = " (" + strings.Join(m.Aliases, ", ") + ")"
+		}
+		sb.WriteString(fmt.Sprintf("  %d) [%s] %s%s\n", m.Index, role, m.Preview, aliasStr))
 	}
 	return sb.String()
 }

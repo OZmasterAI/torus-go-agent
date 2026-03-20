@@ -30,10 +30,19 @@ type TelegramConfig struct {
 	AllowedUsers []int64 `json:"allowedUsers"`
 }
 
+// RoutingEntry defines a weighted provider for multi-provider routing.
+type RoutingEntry struct {
+	Provider string `json:"provider"`
+	Model    string `json:"model"`
+	Weight   int    `json:"weight"`
+}
+
 // AgentConfig holds agent/model settings.
 type AgentConfig struct {
-	Provider          string `json:"provider"`
-	Model             string `json:"model"`
+	Provider          string         `json:"provider"`
+	Model             string         `json:"model"`
+	Routing           []RoutingEntry `json:"routing,omitempty"`       // weighted multi-provider routing
+	FallbackOrder     []string       `json:"fallbackOrder,omitempty"` // "provider:model" keys in fallback order
 	MaxTokens         int    `json:"maxTokens"`     // max output tokens per response
 	ContextWindow         int    `json:"contextWindow"`         // model's full context window size
 	Compaction            string `json:"compaction"`
@@ -49,6 +58,11 @@ type AgentConfig struct {
 	ZoneArchivePercent    int    `json:"zoneArchivePercent"`    // % of usable budget for archive zone (default 30)
 	SmartRouting          bool   `json:"smartRouting"`
 	SmartRoutingModel string `json:"smartRoutingModel"`
+	AzureResource    string `json:"azureResource,omitempty"`   // Azure OpenAI resource name
+	AzureDeployment  string `json:"azureDeployment,omitempty"` // Azure OpenAI deployment name
+	AzureAPIVersion  string `json:"azureApiVersion,omitempty"` // Azure API version (default "2024-06-01")
+	VertexProject    string `json:"vertexProject,omitempty"`   // Google Cloud project ID
+	VertexRegion     string `json:"vertexRegion,omitempty"`    // Google Cloud region (e.g. "us-central1")
 }
 
 // DataConfig holds data directory settings.
@@ -190,11 +204,26 @@ func (c *Config) DataDir(configDir string) string {
 
 // APIKey resolves the API key from environment based on provider.
 func (c *Config) APIKey() string {
-	switch strings.ToLower(c.Agent.Provider) {
+	return APIKeyFor(c.Agent.Provider)
+}
+
+// APIKeyFor resolves the API key for a given provider name.
+func APIKeyFor(provider string) string {
+	switch strings.ToLower(provider) {
 	case "anthropic":
 		return os.Getenv("ANTHROPIC_API_KEY")
 	case "nvidia":
 		return os.Getenv("NVIDIA_API_KEY")
+	case "openai":
+		return os.Getenv("OPENAI_API_KEY")
+	case "grok":
+		return os.Getenv("XAI_API_KEY")
+	case "azure":
+		return os.Getenv("AZURE_OPENAI_API_KEY")
+	case "gemini":
+		return os.Getenv("GEMINI_API_KEY")
+	case "vertex":
+		return os.Getenv("VERTEX_ACCESS_TOKEN")
 	default:
 		return os.Getenv("OPENROUTER_API_KEY")
 	}

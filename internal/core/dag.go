@@ -64,6 +64,10 @@ CREATE TABLE IF NOT EXISTS branches (
 	head_node_id TEXT NOT NULL,
 	forked_from TEXT DEFAULT ''
 );
+CREATE TABLE IF NOT EXISTS node_aliases (
+	alias TEXT PRIMARY KEY,
+	node_id TEXT NOT NULL
+);
 `
 
 func NewDAG(dbPath string) (*DAG, error) {
@@ -343,5 +347,95 @@ func (d *DAG) SearchAll(query string, maxResults int) (string, error) {
 		return "", nil
 	}
 	return fmt.Sprintf("Found %d matches:\n\n%s", len(results), strings.Join(results, "\n\n")), nil
+}
+
+// --- Node Aliases ---
+
+// SetAlias assigns a human-readable alias to a node. Overwrites if the alias already exists.
+func (d *DAG) SetAlias(nodeID, alias string) error {
+	_, err := d.db.Exec(
+		"INSERT INTO node_aliases (alias, node_id) VALUES (?, ?) ON CONFLICT(alias) DO UPDATE SET node_id = ?",
+		alias, nodeID, nodeID,
+	)
+	return err
+}
+
+// ResolveAlias returns the node ID for a given alias, or sql.ErrNoRows if not found.
+func (d *DAG) ResolveAlias(alias string) (string, error) {
+	var nodeID string
+	err := d.db.QueryRow("SELECT node_id FROM node_aliases WHERE alias = ?", alias).Scan(&nodeID)
+	return nodeID, err
+}
+
+// GetAliases returns all aliases for a given node.
+func (d *DAG) GetAliases(nodeID string) ([]string, error) {
+	rows, err := d.db.Query("SELECT alias FROM node_aliases WHERE node_id = ?", nodeID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var aliases []string
+	for rows.Next() {
+		var a string
+		rows.Scan(&a)
+		aliases = append(aliases, a)
+	}
+	return aliases, nil
+}
+
+// DeleteAlias removes an alias.
+func (d *DAG) DeleteAlias(alias string) error {
+	_, err := d.db.Exec("DELETE FROM node_aliases WHERE alias = ?", alias)
+	return err
+}
+
+// ResolveNodeOrAlias tries to resolve an input as an alias first, then falls back to treating it as a node ID.
+func (d *DAG) ResolveNodeOrAlias(input string) (string, error) {
+	nodeID, err := d.ResolveAlias(input)
+	if err == nil {
+		return nodeID, nil
+	}
+	// Check if it's a valid node ID directly.
+	var exists int
+	if d.db.QueryRow("SELECT COUNT(*) FROM nodes WHERE id = ?", input).Scan(&exists); exists > 0 {
+		return input, nil
+	}
+	return "", fmt.Errorf("node or alias %q not found", input)
+}
+
+// --- GetSubtree ---
+
+// GetSubtree returns all descendants of a node (children, grandchildren, etc.)
+// using a recursive CTE. Results are ordered by timestamp ascending.
+func (d *DAG) GetSubtree(nodeID string) ([]Node, error) {
+	rows, err := d.db.Query(`
+		WITH RECURSIVE subtree(id) AS (
+			SELECT id FROM nodes WHERE parent_id = ?
+			UNION ALL
+			SELECT n.id FROM nodes n JOIN subtree s ON n.parent_id = s.id
+		)
+		SELECT n.id, n.parent_id, n.role, n.content, n.model, n.provider, n.timestamp, n.token_count
+		FROM nodes n JOIN subtree s ON n.id = s.id
+		ORDER BY n.timestamp ASC
+	`, nodeID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var nodes []Node
+	for rows.Next() {
+		var n Node
+		var pid sql.NullString
+		var cj string
+		if err := rows.Scan(&n.ID, &pid, &n.Role, &cj, &n.Model, &n.Provider, &n.Timestamp, &n.TokenCount); err != nil {
+			return nil, err
+		}
+		if pid.Valid {
+			n.ParentID = pid.String
+		}
+		json.Unmarshal([]byte(cj), &n.Content)
+		nodes = append(nodes, n)
+	}
+	return nodes, nil
 }
 

@@ -103,14 +103,28 @@ func main() {
 	}
 
 	// Create provider
-	var prov providers.Provider
-	switch cfg.Agent.Provider {
-	case "anthropic":
-		prov = providers.NewAnthropicProvider(key, cfg.Agent.Model)
-	case "nvidia":
-		prov = providers.NewNvidiaProvider(key, cfg.Agent.Model)
-	default:
-		prov = providers.NewOpenRouterProvider(key, cfg.Agent.Model)
+	agentCfg = &cfg.Agent
+	prov := makeProvider(cfg.Agent.Provider, key, cfg.Agent.Model)
+
+	// Wire weighted routing + fallback if configured
+	router := providers.NewRouter(prov)
+	if len(cfg.Agent.Routing) > 0 {
+		var entries []providers.RoutingEntry
+		for _, r := range cfg.Agent.Routing {
+			rKey := config.APIKeyFor(r.Provider)
+			rProv := makeProvider(r.Provider, rKey, r.Model)
+			router.AddProvider(rProv)
+			entries = append(entries, providers.RoutingEntry{
+				Key:    r.Provider + ":" + r.Model,
+				Weight: r.Weight,
+			})
+		}
+		router.SetWeights(entries)
+		log.Printf("[main] weighted routing enabled: %d providers", len(entries))
+	}
+	if len(cfg.Agent.FallbackOrder) > 0 {
+		router.SetFallbackOrder(cfg.Agent.FallbackOrder)
+		log.Printf("[main] fallback chain: %v", cfg.Agent.FallbackOrder)
 	}
 
 	// Create DAG
@@ -272,15 +286,7 @@ func main() {
 
 	// Wire smart routing if configured
 	if cfg.Agent.SmartRouting && cfg.Agent.SmartRoutingModel != "" {
-		var smartProv providers.Provider
-		switch cfg.Agent.Provider {
-		case "anthropic":
-			smartProv = providers.NewAnthropicProvider(key, cfg.Agent.SmartRoutingModel)
-		case "nvidia":
-			smartProv = providers.NewNvidiaProvider(key, cfg.Agent.SmartRoutingModel)
-		default:
-			smartProv = providers.NewOpenRouterProvider(key, cfg.Agent.SmartRoutingModel)
-		}
+		smartProv := makeProvider(cfg.Agent.Provider, key, cfg.Agent.SmartRoutingModel)
 		agent.RouteProvider = func(userMessage string) core.Provider {
 			if features.IsSimpleMessage(userMessage) {
 				return smartProv
@@ -343,14 +349,7 @@ func main() {
 	// Set up compaction summarize callback — use compactionModel if set, otherwise session's model
 	compactProv := prov
 	if cfg.Agent.CompactionModel != "" {
-		switch cfg.Agent.Provider {
-		case "anthropic":
-			compactProv = providers.NewAnthropicProvider(key, cfg.Agent.CompactionModel)
-		case "nvidia":
-			compactProv = providers.NewNvidiaProvider(key, cfg.Agent.CompactionModel)
-		default:
-			compactProv = providers.NewOpenRouterProvider(key, cfg.Agent.CompactionModel)
-		}
+		compactProv = makeProvider(cfg.Agent.Provider, key, cfg.Agent.CompactionModel)
 		log.Printf("[main] compaction model: %s", cfg.Agent.CompactionModel)
 	}
 	agent.Summarize = func(keyContent string) (string, error) {
@@ -460,4 +459,37 @@ func main() {
 	})
 	log.Printf("[telemetry] %s", telemetry.Summary())
 	_ = subMgr // keep reference alive
+}
+
+// agentCfg is set from main() so makeProvider can access Azure/Vertex fields.
+var agentCfg *config.AgentConfig
+
+// makeProvider creates a Provider for the given provider name, API key, and model.
+func makeProvider(providerName, apiKey, model string) providers.Provider {
+	switch strings.ToLower(providerName) {
+	case "anthropic":
+		return providers.NewAnthropicProvider(apiKey, model)
+	case "nvidia":
+		return providers.NewNvidiaProvider(apiKey, model)
+	case "openai":
+		return providers.NewOpenAIProvider(apiKey, model)
+	case "grok":
+		return providers.NewGrokProvider(apiKey, model)
+	case "gemini":
+		return providers.NewGeminiProvider(apiKey, model)
+	case "azure":
+		return providers.NewAzureOpenAIProvider(apiKey, agentCfg.AzureResource, agentCfg.AzureDeployment, agentCfg.AzureAPIVersion)
+	case "vertex":
+		region := "us-central1"
+		if agentCfg != nil && agentCfg.VertexRegion != "" {
+			region = agentCfg.VertexRegion
+		}
+		project := ""
+		if agentCfg != nil {
+			project = agentCfg.VertexProject
+		}
+		return providers.NewVertexAIProvider(apiKey, project, region, model)
+	default:
+		return providers.NewOpenRouterProvider(apiKey, model)
+	}
 }
