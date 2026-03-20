@@ -14,6 +14,7 @@ import (
 	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/lipgloss"
 
+	"go_sdk_agent/internal/commands"
 	"go_sdk_agent/internal/config"
 	"go_sdk_agent/internal/core"
 	"go_sdk_agent/internal/features"
@@ -693,14 +694,7 @@ func (m Model) sidebarFlagsStartLine() int {
 // ── Slash command handlers ────────────────────────────────────────────────────
 
 func (m *Model) handleNewBranch() (tea.Model, tea.Cmd) {
-	oldBranch := m.agent.DAG().CurrentBranchID()
-	m.agent.Hooks().Fire(context.Background(), core.HookBeforeNewBranch, &core.HookData{
-		AgentID: "main", Meta: map[string]any{"old_branch": oldBranch},
-	})
-	newBranch, _ := m.agent.DAG().NewBranch(fmt.Sprintf("session-%d", time.Now().Unix()))
-	m.agent.Hooks().Fire(context.Background(), core.HookAfterNewBranch, &core.HookData{
-		AgentID: "main", Meta: map[string]any{"old_branch": oldBranch, "new_branch": newBranch},
-	})
+	commands.New(m.agent.DAG(), m.agent.Hooks())
 	m.messages = m.messages[:0]
 	m.messages = append(m.messages, displayMsg{role: "assistant", text: "New conversation started (previous preserved on old branch)."})
 	m.totalTokensIn, m.totalTokensOut, m.totalCost = 0, 0, 0
@@ -712,14 +706,7 @@ func (m *Model) handleNewBranch() (tea.Model, tea.Cmd) {
 }
 
 func (m *Model) handleClear() (tea.Model, tea.Cmd) {
-	branchID := m.agent.DAG().CurrentBranchID()
-	m.agent.Hooks().Fire(context.Background(), core.HookPreClear, &core.HookData{
-		AgentID: "main", Meta: map[string]any{"branch": branchID},
-	})
-	m.agent.DAG().ResetHead()
-	m.agent.Hooks().Fire(context.Background(), core.HookPostClear, &core.HookData{
-		AgentID: "main", Meta: map[string]any{"branch": branchID},
-	})
+	commands.Clear(m.agent.DAG(), m.agent.Hooks())
 	m.messages = m.messages[:0]
 	m.messages = append(m.messages, displayMsg{role: "assistant", text: "Context cleared on current branch."})
 	m.totalTokensIn, m.totalTokensOut, m.totalCost = 0, 0, 0

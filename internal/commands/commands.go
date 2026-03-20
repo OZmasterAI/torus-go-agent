@@ -4,6 +4,7 @@
 package commands
 
 import (
+	"context"
 	"fmt"
 	"strconv"
 	"strings"
@@ -29,6 +30,45 @@ type MessageSummary struct {
 	Preview   string // first ~80 chars of text content
 	Index     int    // position in the chain (0 = root)
 	Timestamp int64
+}
+
+// New creates a new conversation branch, firing hooks. Returns the new branch ID.
+func New(dag *core.DAG, hooks *core.HookRegistry) (string, error) {
+	oldBranch := dag.CurrentBranchID()
+	if hooks != nil {
+		hooks.Fire(context.Background(), core.HookBeforeNewBranch, &core.HookData{
+			AgentID: "main", Meta: map[string]any{"old_branch": oldBranch},
+		})
+	}
+	newBranch, err := dag.NewBranch(fmt.Sprintf("session-%d", time.Now().Unix()))
+	if err != nil {
+		return "", err
+	}
+	if hooks != nil {
+		hooks.Fire(context.Background(), core.HookAfterNewBranch, &core.HookData{
+			AgentID: "main", Meta: map[string]any{"old_branch": oldBranch, "new_branch": newBranch},
+		})
+	}
+	return newBranch, nil
+}
+
+// Clear resets the head on the current branch, firing hooks.
+func Clear(dag *core.DAG, hooks *core.HookRegistry) error {
+	branchID := dag.CurrentBranchID()
+	if hooks != nil {
+		hooks.Fire(context.Background(), core.HookPreClear, &core.HookData{
+			AgentID: "main", Meta: map[string]any{"branch": branchID},
+		})
+	}
+	if err := dag.ResetHead(); err != nil {
+		return err
+	}
+	if hooks != nil {
+		hooks.Fire(context.Background(), core.HookPostClear, &core.HookData{
+			AgentID: "main", Meta: map[string]any{"branch": branchID},
+		})
+	}
+	return nil
 }
 
 // ListBranches returns all branches with message counts and current marker.

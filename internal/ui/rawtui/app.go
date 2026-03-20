@@ -13,6 +13,7 @@ import (
 
 	"golang.org/x/term"
 
+	"go_sdk_agent/internal/commands"
 	"go_sdk_agent/internal/core"
 	"go_sdk_agent/internal/features"
 )
@@ -936,14 +937,7 @@ func (a *App) handleCommand(val string) bool {
 
 	switch cmd {
 	case "/clear":
-		branchID := a.agent.DAG().CurrentBranchID()
-		a.agent.Hooks().Fire(context.Background(), core.HookPreClear, &core.HookData{
-			AgentID: "main", Meta: map[string]any{"branch": branchID},
-		})
-		a.agent.DAG().ResetHead()
-		a.agent.Hooks().Fire(context.Background(), core.HookPostClear, &core.HookData{
-			AgentID: "main", Meta: map[string]any{"branch": branchID},
-		})
+		commands.Clear(a.agent.DAG(), a.agent.Hooks())
 		a.messages = nil
 		a.streamingText = ""
 		a.pendingToolCall = ""
@@ -1008,14 +1002,7 @@ func (a *App) handleCommand(val string) bool {
 }
 
 func (a *App) handleNewBranch() {
-	oldBranch := a.agent.DAG().CurrentBranchID()
-	a.agent.Hooks().Fire(context.Background(), core.HookBeforeNewBranch, &core.HookData{
-		AgentID: "main", Meta: map[string]any{"old_branch": oldBranch},
-	})
-	newBranch, _ := a.agent.DAG().NewBranch(fmt.Sprintf("session-%d", time.Now().Unix()))
-	a.agent.Hooks().Fire(context.Background(), core.HookAfterNewBranch, &core.HookData{
-		AgentID: "main", Meta: map[string]any{"old_branch": oldBranch, "new_branch": newBranch},
-	})
+	newBranch, _ := commands.New(a.agent.DAG(), a.agent.Hooks())
 	a.messages = nil
 	a.streamingText = ""
 	a.pendingToolCall = ""
