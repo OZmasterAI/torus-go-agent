@@ -14,31 +14,38 @@ import (
 	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/lipgloss"
 
+	"go_sdk_agent/internal/config"
 	"go_sdk_agent/internal/core"
 	"go_sdk_agent/internal/features"
 )
 
 // ── Styles ────────────────────────────────────────────────────────────────────
 
-var torusFrames = []string{"◐", "◓", "◑", "◒"}
+// Amber glow colors for the bouncing progress bar.
+var (
+	glowBright = lipgloss.NewStyle().Foreground(lipgloss.Color("214"))
+	glowMed    = lipgloss.NewStyle().Foreground(lipgloss.Color("208"))
+	glowDim    = lipgloss.NewStyle().Foreground(lipgloss.Color("172"))
+	glowFaint  = lipgloss.NewStyle().Foreground(lipgloss.Color("130"))
+	glowTrack  = lipgloss.NewStyle().Foreground(lipgloss.Color("238"))
+)
 
 var (
-	styleUser    = lipgloss.NewStyle().Foreground(lipgloss.Color("10")).Bold(true)
+	styleUser    = lipgloss.NewStyle().Foreground(lipgloss.Color("166")).Bold(true)
 	styleError   = lipgloss.NewStyle().Foreground(lipgloss.Color("9")).Bold(true)
 	styleCursor  = lipgloss.NewStyle().Reverse(true)
-	stylePrompt  = lipgloss.NewStyle().Foreground(lipgloss.Color("10")).Bold(true)
+	stylePrompt  = lipgloss.NewStyle().Foreground(lipgloss.Color("166")).Bold(true)
 	styleDim     = lipgloss.NewStyle().Foreground(lipgloss.Color("242"))
-	styleSpinner = lipgloss.NewStyle().Foreground(lipgloss.Color("39"))
 
 	// Header
 	styleHeaderBar = lipgloss.NewStyle().
-			Background(lipgloss.Color("17")).
-			Foreground(lipgloss.Color("39")).
+			Background(lipgloss.Color("52")).
+			Foreground(lipgloss.Color("166")).
 			Bold(true).
 			Padding(0, 1)
 	styleHeaderDim = lipgloss.NewStyle().
-			Background(lipgloss.Color("17")).
-			Foreground(lipgloss.Color("243"))
+			Background(lipgloss.Color("52")).
+			Foreground(lipgloss.Color("130"))
 	styleSeparator = lipgloss.NewStyle().Foreground(lipgloss.Color("236"))
 
 	// Status bar
@@ -51,7 +58,7 @@ var (
 
 	// Tool cards
 	styleToolHeader = lipgloss.NewStyle().
-				Foreground(lipgloss.Color("214")).
+				Foreground(lipgloss.Color("166")).
 				Bold(true)
 	styleToolDim = lipgloss.NewStyle().Foreground(lipgloss.Color("245"))
 	styleToolSep = lipgloss.NewStyle().Foreground(lipgloss.Color("238"))
@@ -61,9 +68,9 @@ var (
 	// Sidebar
 	styleSidebarBorder = lipgloss.NewStyle().
 				Border(lipgloss.RoundedBorder()).
-				BorderForeground(lipgloss.Color("238"))
+				BorderForeground(lipgloss.Color("130"))
 	styleSidebarTitle = lipgloss.NewStyle().
-				Foreground(lipgloss.Color("39")).
+				Foreground(lipgloss.Color("166")).
 				Bold(true)
 	styleSidebarFile = lipgloss.NewStyle().Foreground(lipgloss.Color("252"))
 	styleSidebarCount = lipgloss.NewStyle().Foreground(lipgloss.Color("245"))
@@ -72,21 +79,21 @@ var (
 	styleACNormal   = lipgloss.NewStyle().Foreground(lipgloss.Color("252"))
 	styleACSelected = lipgloss.NewStyle().
 				Foreground(lipgloss.Color("0")).
-				Background(lipgloss.Color("39"))
+				Background(lipgloss.Color("130"))
 
-	// Overlay dialog (command palette + session switcher)
+	// Overlay dialog
 	styleOverlayBorder = lipgloss.NewStyle().
 				Border(lipgloss.RoundedBorder()).
-				BorderForeground(lipgloss.Color("39")).
+				BorderForeground(lipgloss.Color("130")).
 				Padding(0, 1)
 	styleOverlayTitle = lipgloss.NewStyle().
-				Foreground(lipgloss.Color("39")).
+				Foreground(lipgloss.Color("166")).
 				Bold(true)
 	styleOverlayHint = lipgloss.NewStyle().
 				Foreground(lipgloss.Color("243")).
 				Italic(true)
 	styleKeybind = lipgloss.NewStyle().
-				Foreground(lipgloss.Color("214"))
+				Foreground(lipgloss.Color("166"))
 )
 
 // Layout constants
@@ -178,6 +185,7 @@ type displayMsg struct {
 type Model struct {
 	agent     *core.Agent
 	modelName string
+	agentCfg  config.AgentConfig
 	skills    *features.SkillRegistry
 
 	// Input
@@ -195,12 +203,15 @@ type Model struct {
 	// Streaming channels
 	deltaCh chan string
 	toolCh  chan toolEvent
+	steeringCh chan core.Message
 
 	// Status
 	statusLine   string
 	processing   bool
 	streaming    bool
 	spinnerFrame int
+	barPos       int
+	barDir       int
 	startTime    time.Time
 
 	// Usage
@@ -237,11 +248,13 @@ type Model struct {
 	err    error
 }
 
-func newModel(agent *core.Agent, modelName string, skills *features.SkillRegistry) Model {
+func newModel(agent *core.Agent, modelName string, cfg config.AgentConfig, skills *features.SkillRegistry) Model {
 	return Model{
 		agent:         agent,
 		modelName:     modelName,
+		agentCfg:      cfg,
 		skills:        skills,
+		barDir:        1,
 		startTime:     time.Now(),
 		statusLine:    "starting...",
 		modifiedFiles: make(map[string]int),
@@ -249,6 +262,25 @@ func newModel(agent *core.Agent, modelName string, skills *features.SkillRegistr
 			{role: "assistant", text: "Type a message. Ctrl+D or /exit to quit. /skills to list skills."},
 		},
 	}
+}
+
+func (m *Model) resizeViewport() {
+	if !m.ready || m.height == 0 {
+		return
+	}
+	extraLines := inputLines
+	if m.processing {
+		extraLines = inputLines + 1
+	}
+	if m.acMode {
+		extraLines += min(len(m.acList), acMaxResults) + 1
+	}
+	vpHeight := m.height - headerLines - statusLines - extraLines
+	if vpHeight < 1 {
+		vpHeight = 1
+	}
+	m.viewport.Width = m.chatWidth()
+	m.viewport.Height = vpHeight
 }
 
 // ── tea.Model interface ───────────────────────────────────────────────────────
@@ -264,24 +296,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.height = msg.Height
 		m.showSidebar = m.width >= sidebarMinW
 
-		vpWidth := m.chatWidth()
-		vpHeight := m.height - headerLines - statusLines - inputLines
-		if m.acMode {
-			vpHeight -= min(len(m.acList), acMaxResults) + 1
-		}
-		if vpHeight < 1 {
-			vpHeight = 1
-		}
-
 		if !m.ready {
-			m.viewport = viewport.New(vpWidth, vpHeight)
+			m.viewport = viewport.New(m.chatWidth(), 1)
 			m.ready = true
-		} else {
-			m.viewport.Width = vpWidth
-			m.viewport.Height = vpHeight
 		}
+		m.resizeViewport()
 
-		m.glamRenderer = newGlamourRenderer(vpWidth - 4)
+		m.glamRenderer = newGlamourRenderer(m.chatWidth() - 4)
 		for i := range m.messages {
 			m.messages[i].rendered = ""
 		}
@@ -376,7 +397,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case tea.KeyEnter:
 			input := strings.TrimSpace(m.input)
-			if input == "" || m.processing {
+			if input == "" {
+				return m, nil
+			}
+			if m.processing {
+				if m.agent.Steering != nil {
+					m.agent.Steering <- core.Message{Role: "user", Content: []core.ContentBlock{{Type: "text", Text: input}}}
+					m.messages = append(m.messages, displayMsg{role: "user", text: "\u21aa " + input})
+					m.input = ""
+					m.rebuildContent()
+				}
 				return m, nil
 			}
 			if input == "/exit" || input == "/quit" {
@@ -423,6 +453,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			toolCh := make(chan toolEvent, 32)
 			m.deltaCh = deltaCh
 			m.toolCh = toolCh
+			if m.agent.Steering == nil {
+				m.agent.Steering = make(chan core.Message, 16)
+			}
+			m.resizeViewport()
 			m.rebuildContent()
 			return m, tea.Batch(
 				runAgentStream(m.agent, input, deltaCh, toolCh),
@@ -510,7 +544,20 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// ── Tick ─────────────────────────────────────────────────────────────
 	case tickMsg:
 		if m.processing {
-			m.spinnerFrame = (m.spinnerFrame + 1) % len(torusFrames)
+			m.spinnerFrame++
+			barW := m.width - 22
+			if barW < 10 {
+				barW = 10
+			}
+			m.barPos += m.barDir * 2
+			if m.barPos >= barW-1 {
+				m.barPos = barW - 1
+				m.barDir = -1
+			}
+			if m.barPos <= 0 {
+				m.barPos = 0
+				m.barDir = 1
+			}
 			elapsed := time.Since(m.startTime)
 			m.statusLine = m.buildStatus(m.totalTokensIn, m.totalTokensOut, m.totalCost, elapsed)
 			return m, tick()
@@ -523,6 +570,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.streaming = false
 		m.deltaCh = nil
 		m.toolCh = nil
+		m.resizeViewport()
 		m.totalTokensIn += msg.tokensIn
 		m.totalTokensOut += msg.tokensOut
 		m.totalCost += msg.cost
@@ -552,6 +600,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.streaming = false
 		m.deltaCh = nil
 		m.toolCh = nil
+		m.resizeViewport()
 		m.err = msg.err
 		if len(m.messages) > 0 {
 			last := m.messages[len(m.messages)-1]
@@ -564,12 +613,81 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		})
 		m.rebuildContent()
 		return m, nil
+
+	case tea.MouseMsg:
+		return m.handleMouse(msg)
 	}
 
 	// Forward other messages to viewport
 	var cmd tea.Cmd
 	m.viewport, cmd = m.viewport.Update(msg)
 	return m, cmd
+}
+
+func (m Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
+	switch msg.Type {
+	case tea.MouseLeft:
+		if m.showSidebar && msg.X >= m.width-sidebarWidth {
+			return m.handleSidebarClick(msg)
+		}
+	case tea.MouseWheelUp:
+		m.viewport.LineUp(3)
+	case tea.MouseWheelDown:
+		m.viewport.LineDown(3)
+	}
+	// Consume all mouse events — never let raw escape codes leak
+	return m, nil
+}
+
+func (m *Model) handleSidebarClick(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
+	contentY := msg.Y - headerLines - 1
+	flagsStart := m.sidebarFlagsStartLine()
+	flagIdx := contentY - flagsStart
+	if flagIdx >= 0 && flagIdx < 4 {
+		switch flagIdx {
+		case 0:
+			m.agentCfg.SmartRouting = !m.agentCfg.SmartRouting
+		case 1:
+			m.agentCfg.ContinuousCompression = !m.agentCfg.ContinuousCompression
+		case 2:
+			m.agentCfg.ZoneBudgeting = !m.agentCfg.ZoneBudgeting
+		case 3:
+			if m.agentCfg.Compaction == "" || m.agentCfg.Compaction == "none" {
+				m.agentCfg.Compaction = "llm"
+			} else {
+				m.agentCfg.Compaction = "none"
+			}
+		}
+	}
+	return m, nil
+}
+
+func (m Model) sidebarFlagsStartLine() int {
+	line := 0
+	line++ // Session title
+	line++ // Tools
+	line++ // Turns
+	line++ // CTX
+	if m.totalTokensIn+m.totalTokensOut > 0 {
+		line++
+	}
+	if m.totalCost > 0 {
+		line++
+	}
+	line++ // blank
+	line++ // Files title
+	if len(m.modifiedFiles) == 0 {
+		line++
+	} else {
+		line += len(m.modifiedFiles)
+	}
+	line++ // blank
+	line++ // Config title
+	line++ // provider
+	line++ // maxTok/ctxWin
+	line++ // blank
+	line++ // Flags title
+	return line
 }
 
 // ── Slash command handlers ────────────────────────────────────────────────────
@@ -845,18 +963,15 @@ func (m Model) View() string {
 			sb.WriteByte('\n')
 		}
 
-		// Input line
-		inputLine := stylePrompt.Render("❯ ") + m.input + styleCursor.Render(" ")
 		if m.processing {
-			spinner := styleSpinner.Render(torusFrames[m.spinnerFrame])
-			elapsed := time.Since(m.startTime)
-			if m.streaming && len(m.messages) > 0 && m.messages[len(m.messages)-1].text != "" {
-				inputLine = styleDim.Render(fmt.Sprintf("%s streaming... %.1fs", spinner, elapsed.Seconds()))
-			} else {
-				inputLine = styleDim.Render(fmt.Sprintf("%s thinking... %.1fs", spinner, elapsed.Seconds()))
-			}
+			sb.WriteString(m.renderProgressBar())
+			sb.WriteByte('\n')
+			inputLine := stylePrompt.Render("❯ ") + m.input + styleCursor.Render(" ")
+			sb.WriteString(inputLine)
+		} else {
+			inputLine := stylePrompt.Render("❯ ") + m.input + styleCursor.Render(" ")
+			sb.WriteString(inputLine)
 		}
-		sb.WriteString(inputLine)
 	}
 
 	return sb.String()
@@ -1040,34 +1155,23 @@ func renderDiff(oldStr, newStr string, maxWidth int) string {
 // ── Sidebar ───────────────────────────────────────────────────────────────────
 
 func (m Model) renderSidebar() string {
-	w := sidebarWidth - 4 // inner width (border + padding)
-	var sb strings.Builder
-
-	// Files section
-	sb.WriteString(styleSidebarTitle.Render("Files Modified"))
-	sb.WriteByte('\n')
-	if len(m.modifiedFiles) == 0 {
-		sb.WriteString(styleDim.Render(" (none)"))
-		sb.WriteByte('\n')
-	} else {
-		for path, count := range m.modifiedFiles {
-			name := filepath.Base(path)
-			if len(name) > w-6 {
-				name = name[:w-6] + "…"
-			}
-			sb.WriteString(styleSidebarFile.Render(" "+name) + " " + styleSidebarCount.Render(fmt.Sprintf("(%d)", count)))
-			sb.WriteByte('\n')
-		}
+	w := sidebarWidth - 4
+	extraLines := inputLines
+	if m.processing {
+		extraLines = inputLines + 1
 	}
-	sb.WriteByte('\n')
-
-	// Stats section
-	sb.WriteString(styleSidebarTitle.Render("Session"))
-	sb.WriteByte('\n')
-	sb.WriteString(fmt.Sprintf(" Tools: %d\n", len(m.toolEvents)))
-	sb.WriteString(fmt.Sprintf(" Turns: %d\n", m.turnCount()))
-
-	// Context %
+	vpHeight := m.height - headerLines - statusLines - extraLines
+	if vpHeight < 1 {
+		vpHeight = 1
+	}
+	innerH := vpHeight - 2
+	if innerH < 1 {
+		innerH = 1
+	}
+	var lines []string
+	lines = append(lines, styleSidebarTitle.Render("Session"))
+	lines = append(lines, fmt.Sprintf(" Tools: %d", len(m.toolEvents)))
+	lines = append(lines, fmt.Sprintf(" Turns: %d", m.turnCount()))
 	ctxPct := 0.0
 	head, _ := m.agent.DAG().GetHead()
 	if head != "" {
@@ -1075,29 +1179,59 @@ func (m Model) renderSidebar() string {
 		est := core.EstimateTokens(msgs)
 		ctxPct = float64(est) / 200000.0 * 100
 	}
-	sb.WriteString(fmt.Sprintf(" CTX: %.0f%%\n", ctxPct))
-
+	lines = append(lines, fmt.Sprintf(" CTX: %.0f%%", ctxPct))
 	totalTok := m.totalTokensIn + m.totalTokensOut
 	if totalTok > 0 {
-		sb.WriteString(fmt.Sprintf(" Tokens: %s\n", fmtTok(totalTok)))
+		lines = append(lines, fmt.Sprintf(" Tokens: %s", fmtTok(totalTok)))
 	}
 	if m.totalCost > 0 {
-		sb.WriteString(fmt.Sprintf(" Cost: $%.2f\n", m.totalCost))
+		lines = append(lines, fmt.Sprintf(" Cost: $%.2f", m.totalCost))
 	}
-
-	// Calculate available height for sidebar
-	vpHeight := m.height - headerLines - statusLines - inputLines
-	if vpHeight < 1 {
-		vpHeight = 1
+	lines = append(lines, "")
+	lines = append(lines, styleSidebarTitle.Render("Files"))
+	if len(m.modifiedFiles) == 0 {
+		lines = append(lines, styleDim.Render(" (none)"))
+	} else {
+		for path, count := range m.modifiedFiles {
+			name := filepath.Base(path)
+			if len(name) > w-6 {
+				name = name[:w-6] + "…"
+			}
+			lines = append(lines, styleSidebarFile.Render(" "+name)+" "+styleSidebarCount.Render(fmt.Sprintf("(%d)", count)))
+		}
 	}
-
-	content := sb.String()
-
+	lines = append(lines, "")
+	prov := m.agentCfg.Provider
+	if prov == "" {
+		prov = "default"
+	}
+	lines = append(lines, styleSidebarTitle.Render("Config"))
+	lines = append(lines, styleDim.Render(fmt.Sprintf(" %s", truncStr(prov, w-2))))
+	lines = append(lines, styleDim.Render(fmt.Sprintf(" %s/%s", fmtTok(m.agentCfg.MaxTokens), fmtTok(m.agentCfg.ContextWindow))))
+	lines = append(lines, "")
+	lines = append(lines, styleSidebarTitle.Render("Flags"))
+	lines = append(lines, flagStr("Smart", m.agentCfg.SmartRouting))
+	lines = append(lines, flagStr("Compress", m.agentCfg.ContinuousCompression))
+	lines = append(lines, flagStr("Zones", m.agentCfg.ZoneBudgeting))
+	compact := m.agentCfg.Compaction != "" && m.agentCfg.Compaction != "none"
+	lines = append(lines, flagStr("Compact", compact))
+	if len(lines) > innerH {
+		lines = lines[:innerH]
+	}
+	content := strings.Join(lines, "\n")
 	return styleSidebarBorder.
 		Width(sidebarWidth - 2).
-		Height(vpHeight - 2).
+		Height(innerH).
 		Render(content)
 }
+
+func flagStr(name string, on bool) string {
+	if on {
+		return glowBright.Render(" ●") + " " + styleDim.Render(name)
+	}
+	return styleDim.Render(" ○") + " " + styleDim.Render(name)
+}
+
 
 // ── Autocomplete ──────────────────────────────────────────────────────────────
 
@@ -1490,6 +1624,40 @@ func wrapText(text string, maxWidth int) string {
 	return strings.TrimRight(result, "\n")
 }
 
+func (m Model) renderProgressBar() string {
+	barW := m.width - 22
+	if barW < 10 {
+		barW = 10
+	}
+	var bar strings.Builder
+	for i := 0; i < barW; i++ {
+		dist := m.barPos - i
+		if dist < 0 {
+			dist = -dist
+		}
+		switch {
+		case dist == 0:
+			bar.WriteString(glowBright.Render("\u2501"))
+		case dist == 1:
+			bar.WriteString(glowMed.Render("\u2501"))
+		case dist == 2:
+			bar.WriteString(glowDim.Render("\u2501"))
+		case dist == 3:
+			bar.WriteString(glowFaint.Render("\u2501"))
+		default:
+			bar.WriteString(glowTrack.Render("\u2501"))
+		}
+	}
+	elapsed := time.Since(m.startTime)
+	status := ""
+	if m.streaming && len(m.messages) > 0 && m.messages[len(m.messages)-1].text != "" {
+		status = fmt.Sprintf(" streaming %.1fs", elapsed.Seconds())
+	} else {
+		status = fmt.Sprintf(" thinking %.1fs", elapsed.Seconds())
+	}
+	return bar.String() + styleDim.Render(status)
+}
+
 // ── Commands ──────────────────────────────────────────────────────────────────
 
 func runAgentStream(agent *core.Agent, input string, deltaCh chan<- string, toolCh chan<- toolEvent) tea.Cmd {
@@ -1551,15 +1719,15 @@ func waitForToolEvent(ch <-chan toolEvent) tea.Cmd {
 }
 
 func tick() tea.Cmd {
-	return tea.Tick(250*time.Millisecond, func(t time.Time) tea.Msg {
+	return tea.Tick(60*time.Millisecond, func(t time.Time) tea.Msg {
 		return tickMsg(t)
 	})
 }
 
 // ── Entry point ───────────────────────────────────────────────────────────────
 
-func StartTUI(agent *core.Agent, modelName string, skills *features.SkillRegistry) error {
-	m := newModel(agent, modelName, skills)
+func StartTUI(agent *core.Agent, modelName string, cfg config.AgentConfig, skills *features.SkillRegistry) error {
+	m := newModel(agent, modelName, cfg, skills)
 	p := tea.NewProgram(m, tea.WithAltScreen(), tea.WithMouseCellMotion())
 	_, err := p.Run()
 	return err

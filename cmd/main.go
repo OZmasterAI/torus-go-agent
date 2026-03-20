@@ -39,9 +39,25 @@ func main() {
 			skipSetup = true
 		}
 	}
-	if startProvider, startModel := ui.RunStartup(skipSetup); startProvider != "" {
-		cfg.Agent.Provider = startProvider
-		cfg.Agent.Model = startModel
+	setup := ui.RunStartup(skipSetup)
+	if setup.Provider != "" {
+		cfg.Agent.Provider = setup.Provider
+		cfg.Agent.Model = setup.Model
+	}
+	if setup.Config != nil {
+		cfg.Agent.MaxTokens = setup.Config.MaxTokens
+		cfg.Agent.ContextWindow = setup.Config.ContextWindow
+		cfg.Agent.Compaction = setup.Config.Compaction
+		cfg.Agent.CompactionTrigger = setup.Config.CompactionTrigger
+		cfg.Agent.CompactionThreshold = setup.Config.CompactionThreshold
+		cfg.Agent.CompactionMaxMessages = setup.Config.CompactionMaxMessages
+		cfg.Agent.CompactionKeepLastN = setup.Config.CompactionKeepLastN
+		cfg.Agent.ContinuousCompression = setup.Config.ContinuousCompression
+		cfg.Agent.CompressionKeepLast = setup.Config.CompressionKeepLast
+		cfg.Agent.CompressionMinMessages = setup.Config.CompressionMinMessages
+		cfg.Agent.ZoneBudgeting = setup.Config.ZoneBudgeting
+		cfg.Agent.ZoneArchivePercent = setup.Config.ZoneArchivePercent
+		cfg.Agent.SmartRouting = setup.Config.SmartRouting
 	}
 
 	// Auto-detect model specs: models.json → OpenRouter API → config.json defaults
@@ -55,6 +71,8 @@ func main() {
 	}
 
 	soul := config.LoadTorus(cfgDir)
+	soul = strings.ReplaceAll(soul, "{{MODEL}}", cfg.Agent.Provider+"/"+cfg.Agent.Model)
+	schema := config.LoadSchema(cfgDir)
 	key := cfg.APIKey()
 	if key == "" && cfg.Agent.Provider == "anthropic" {
 		oauthKey, err := providers.GetAnthropicKey()
@@ -132,20 +150,40 @@ func main() {
 		return nil
 	})
 
-	// Inject DAG schema + live branch state so the LLM knows the active branch.
-	dagSchemaBase := "[SYSTEM: DAG schema] tables: nodes(id, parent_id, role, content, model, provider, timestamp, token_count), branches(id, name, head_node_id, forked_from). DB path: " + filepath.Join(dataDir, "conversations.db")
+	// Inject live DAG state per turn (static schema now in TORUS.md).
 	hooks.Register(core.HookBeforeContextBuild, "dag-context", func(ctx context.Context, d *core.HookData) error {
 		brID, brName, headNode, msgCount := dag.CurrentBranchInfo()
-		threshold := cfg.Agent.CompactionThreshold
-		if threshold <= 0 {
-			threshold = 80
-		}
-		contextLine := fmt.Sprintf("[SYSTEM: DAG context] active_branch: %s, name: %s, head: %s, messages: %d, context_window: %d, compaction_threshold: %d%%", brID, brName, headNode, msgCount, cfg.Agent.ContextWindow, threshold)
-		schema := core.Message{
+		contextLine := fmt.Sprintf("[DAG state] branch: %s (%s), head: %s, messages: %d", brID, brName, headNode, msgCount)
+		state := core.Message{
 			Role:    core.RoleUser,
-			Content: []core.ContentBlock{{Type: "text", Text: dagSchemaBase + "\n" + contextLine}},
+			Content: []core.ContentBlock{{Type: "text", Text: contextLine}},
 		}
-		d.Messages = append([]core.Message{schema}, d.Messages...)
+		d.Messages = append([]core.Message{state}, d.Messages...)
+		return nil
+	})
+
+	// Inject SCHEMA.md as first DAG node on branch start (survives compaction).
+	injectSchema := func() {
+		if schema == "" {
+			return
+		}
+		head, _ := dag.GetHead()
+		if head != "" {
+			// Branch already has messages — don't double-inject
+			return
+		}
+		dag.AddNode("", core.RoleUser, []core.ContentBlock{{Type: "text", Text: schema}}, "", "", 0)
+	}
+	// On app start: inject into current branch if empty
+	injectSchema()
+	// On /new: inject into the fresh branch
+	hooks.Register(core.HookAfterNewBranch, "schema-inject", func(ctx context.Context, d *core.HookData) error {
+		injectSchema()
+		return nil
+	})
+	// On /clear: re-inject after head is wiped
+	hooks.Register(core.HookPostClear, "schema-inject", func(ctx context.Context, d *core.HookData) error {
+		injectSchema()
 		return nil
 	})
 

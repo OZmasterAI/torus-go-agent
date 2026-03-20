@@ -199,3 +199,12 @@ func (c *Config) APIKey() string {
 		return os.Getenv("OPENROUTER_API_KEY")
 	}
 }
+
+// LoadSchema reads the SCHEMA.md architecture file from configDir.
+func LoadSchema(configDir string) string {
+	data, err := os.ReadFile(filepath.Join(configDir, "SCHEMA.md"))
+	if err != nil {
+		return ""
+	}
+	return string(data)
+}

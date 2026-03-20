@@ -228,8 +228,7 @@ func (p *OpenRouterProvider) Complete(ctx context.Context, systemPrompt string, 
 		return nil, fmt.Errorf("marshal: %w", err)
 	}
 
-	// Debug: log request body to stderr
-	fmt.Fprintf(os.Stderr, "[openrouter] request size: %d bytes, model: %s, messages: %d, tools: %d\n", len(body), p.Model, len(apiMsgs), len(apiTools))
+	_ = len(body) // debug: request size available if needed
 
 	httpReq, err := http.NewRequestWithContext(ctx, "POST", p.BaseURL+"/chat/completions", bytes.NewReader(body))
 	if err != nil {
@@ -395,7 +394,7 @@ func (p *OpenRouterProvider) StreamComplete(ctx context.Context, systemPrompt st
 		return nil, fmt.Errorf("marshal: %w", err)
 	}
 
-	fmt.Fprintf(os.Stderr, "[openrouter] stream request: %d bytes, model: %s\n", len(body), p.Model)
+	_ = len(body) // debug: stream request size available if needed
 
 	httpReq, err := http.NewRequestWithContext(ctx, "POST", p.BaseURL+"/chat/completions", bytes.NewReader(body))
 	if err != nil {

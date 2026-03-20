@@ -15,5 +15,5 @@ type tuiChannel struct{}
 func (t *tuiChannel) Name() string { return "tui" }
 
 func (t *tuiChannel) Start(agent *core.Agent, cfg config.Config, skills *features.SkillRegistry) error {
-	return ui.StartTUI(agent, cfg.Agent.Model, skills)
+	return ui.StartTUI(agent, cfg.Agent.Model, cfg.Agent, skills)
 }

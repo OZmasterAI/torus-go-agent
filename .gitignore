@@ -8,3 +8,5 @@ data/
 crash.log
 .claude-state.json
 tui/node_modules/
+.torus/
+trigger_compact.py
