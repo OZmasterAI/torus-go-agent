@@ -71,6 +71,49 @@ func Clear(dag *core.DAG, hooks *core.HookRegistry) error {
 	return nil
 }
 
+// Compact forces a manual compaction on the current branch.
+// Uses the same CompactDAG logic as the automatic trigger in the loop.
+func Compact(dag *core.DAG, hooks *core.HookRegistry, compaction core.CompactionConfig, summarize func(string) (string, error)) (string, error) {
+	if compaction.Mode == core.CompactionOff {
+		return "", fmt.Errorf("compaction is disabled (mode: off)")
+	}
+
+	head, err := dag.GetHead()
+	if err != nil || head == "" {
+		return "", fmt.Errorf("no messages to compact")
+	}
+	messages, err := dag.PromptFrom(head)
+	if err != nil {
+		return "", err
+	}
+	if len(messages) < compaction.KeepLastN+2 {
+		return "", fmt.Errorf("only %d messages — need more than %d to compact", len(messages), compaction.KeepLastN)
+	}
+
+	preCount := len(messages)
+	if hooks != nil {
+		hooks.Fire(context.Background(), core.HookPreCompact, &core.HookData{
+			AgentID: "main", Messages: messages,
+			Meta: map[string]any{"mode": string(compaction.Mode), "message_count": preCount, "manual": true},
+		})
+	}
+
+	if err := core.CompactDAG(dag, compaction, summarize); err != nil {
+		return "", fmt.Errorf("compaction failed: %w", err)
+	}
+
+	newHead, _ := dag.GetHead()
+	newMessages, _ := dag.PromptFrom(newHead)
+	if hooks != nil {
+		hooks.Fire(context.Background(), core.HookPostCompact, &core.HookData{
+			AgentID: "main",
+			Meta: map[string]any{"mode": string(compaction.Mode), "messages_before": preCount, "messages_after": len(newMessages), "manual": true},
+		})
+	}
+
+	return fmt.Sprintf("Compacted: %d → %d messages (kept last %d)", preCount, len(newMessages), compaction.KeepLastN), nil
+}
+
 // ListBranches returns all branches with message counts and current marker.
 func ListBranches(dag *core.DAG) ([]BranchSummary, error) {
 	branches, err := dag.ListBranches()
