@@ -150,7 +150,9 @@ func ContinuousCompress(messages []Message, keepLast, minMessages int) []Message
 	copy(result[verbatimStart:], messages[verbatimStart:])
 
 	// Older messages: compress based on age + score
-	for i := 0; i < verbatimStart; i++ {
+	// Skip index 0 (schema message) — never compress the first message
+	result[0] = messages[0]
+	for i := 1; i < verbatimStart; i++ {
 		score := ScoreMessage(messages[i])
 		age := verbatimStart - i // how far back from the verbatim boundary
 
@@ -245,9 +247,14 @@ func ApplyZoneBudget(messages []Message, budget ZoneBudget) []Message {
 	}
 
 	// Archive = messages before historyStart, trimmed to archiveBudget
+	// Always include index 0 (schema message) regardless of budget
 	var archive []Message
 	archiveTokens := 0
-	for i := 0; i < historyStart; i++ {
+	if historyStart > 0 {
+		archive = append(archive, messages[0])
+		archiveTokens += estimateTokens(messages[0:1])
+	}
+	for i := 1; i < historyStart; i++ {
 		msgTokens := estimateTokens(messages[i : i+1])
 		if archiveTokens+msgTokens > archiveBudget {
 			break
