@@ -619,7 +619,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				tick(),
 			)
 
-		case tea.KeyBackspace, tea.KeyDelete:
+		case tea.KeyBackspace:
 			runes := []rune(m.input)
 			pos := m.cursorPos
 			if pos > len(runes) {
@@ -629,10 +629,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				deleted := runes[pos-1]
 				m.input = string(runes[:pos-1]) + string(runes[pos:])
 				m.cursorPos = pos - 1
-				// If we deleted the @, exit autocomplete
 				if deleted == '@' {
 					m.acMode = false
 				}
+			}
+			return m, nil
+
+		case tea.KeyDelete:
+			runes := []rune(m.input)
+			pos := m.cursorPos
+			if pos < len(runes) {
+				m.input = string(runes[:pos]) + string(runes[pos+1:])
 			}
 			return m, nil
 
@@ -1678,6 +1685,9 @@ func newGlamourRenderer(width int) *glamour.TermRenderer {
 	return r
 }
 
+// osc8LinkRe matches markdown-style [text](url) links in rendered output.
+var osc8LinkRe = regexp.MustCompile(`\[([^\]]+)\]\((https?://[^\s)]+)\)`)
+
 func (m Model) glamourRender(text string) string {
 	if m.glamRenderer == nil {
 		return text
@@ -1686,7 +1696,10 @@ func (m Model) glamourRender(text string) string {
 	if err != nil {
 		return text
 	}
-	return strings.TrimRight(rendered, "\n")
+	rendered = strings.TrimRight(rendered, "\n")
+	// Convert markdown links to clickable OSC 8 hyperlinks
+	rendered = osc8LinkRe.ReplaceAllString(rendered, "\033]8;;$2\033\\$1\033]8;;\033\\")
+	return rendered
 }
 
 func ctxBar(pct float64, barLen int) string {
@@ -2156,7 +2169,7 @@ func (m *Model) insertAtCursor(text string) {
 	m.cursorPos = pos + len(inserted)
 }
 
-// renderInputLine renders the input prompt with cursor at the correct position.
+// renderInputLine renders the input prompt with a thin beam cursor.
 func (m Model) renderInputLine() string {
 	prompt := stylePrompt.Render("❯ ")
 	runes := []rune(m.input)
@@ -2165,12 +2178,9 @@ func (m Model) renderInputLine() string {
 		pos = len(runes)
 	}
 	before := string(runes[:pos])
-	if pos < len(runes) {
-		atCursor := string(runes[pos : pos+1])
-		after := string(runes[pos+1:])
-		return prompt + before + styleCursor.Render(atCursor) + after
-	}
-	return prompt + before + styleCursor.Render(" ")
+	after := string(runes[pos:])
+	cursor := styleCursor.Render("│")
+	return prompt + before + cursor + after
 }
 
 // fmtDuration formats a duration for compact display in tool cards.
