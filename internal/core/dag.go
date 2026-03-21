@@ -124,7 +124,9 @@ func (d *DAG) AddNode(parentID string, role t.Role, content []t.ContentBlock, mo
 	if err != nil {
 		return "", fmt.Errorf("insert: %w", err)
 	}
-	d.db.Exec("UPDATE branches SET head_node_id = ? WHERE id = ?", id, d.branchID)
+	if _, err := d.db.Exec("UPDATE branches SET head_node_id = ? WHERE id = ?", id, d.branchID); err != nil {
+		return "", fmt.Errorf("update head: %w", err)
+	}
 	if d.hooks != nil {
 		d.hooks.Fire(context.Background(), HookOnNodeAdded, &HookData{
 			AgentID: "main",
