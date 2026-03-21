@@ -477,9 +477,6 @@ func (o *AgentConfigOverrides) toggleBool(idx int) {
 	}
 }
 
-// torusFrames provides spinner characters used by the main TUI (tui.go).
-var torusFrames = []string{"◐", "◓", "◑", "◒"}
-
 // ProviderChoice holds a provider option for the startup menu (flat, for backward compat).
 type ProviderChoice struct {
 	Name          string
@@ -727,9 +724,6 @@ var (
 	footerStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("242")).
 			Italic(true)
-
-	// styleSpinner is used by the main TUI (tui.go) for its spinner.
-	styleSpinner = lipgloss.NewStyle().Foreground(lipgloss.Color("39"))
 
 	// Torus character luminance styles (orange gradient, matching TORUS title).
 	torusDimStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("166")) // orange

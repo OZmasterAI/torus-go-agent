@@ -50,7 +50,8 @@ var (
 	styleHeaderDim = lipgloss.NewStyle().
 			Background(lipgloss.Color("52")).
 			Foreground(lipgloss.Color("130"))
-	styleSeparator = lipgloss.NewStyle().Foreground(lipgloss.Color("236"))
+	styleSeparator    = lipgloss.NewStyle().Foreground(lipgloss.Color("236"))
+	styleInputBorder  = lipgloss.NewStyle().Foreground(lipgloss.Color("#ff4d01"))
 
 	// Status bar
 	styleStatus = lipgloss.NewStyle().
@@ -104,7 +105,7 @@ var (
 const (
 	headerLines  = 2
 	statusLines  = 1
-	inputLines   = 2
+	inputLines   = 4 // border + input + border + status
 	sidebarMinW  = 120 // show sidebar when terminal wider than this
 	sidebarWidth = 26
 	acMaxResults = 8
@@ -219,7 +220,6 @@ type Model struct {
 	statusPhrase string
 	processing   bool
 	streaming    bool
-	spinnerFrame int
 	barPos       int
 	barDir       int
 	startTime    time.Time
@@ -309,9 +309,9 @@ func (m *Model) resizeViewport() {
 	if !m.ready || m.height == 0 {
 		return
 	}
-	extraLines := inputLines
+	extraLines := inputLines // border + input + border + status
 	if m.processing {
-		extraLines = inputLines + 1
+		extraLines += 2 // blank line + progress bar
 	}
 	if m.acMode {
 		extraLines += min(len(m.acList), acMaxResults) + 1
@@ -740,7 +740,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// ── Tick ─────────────────────────────────────────────────────────────
 	case tickMsg:
 		if m.processing {
-			m.spinnerFrame++
 			barW := 30
 			if m.width < 80 {
 				barW = 20
@@ -1117,7 +1116,35 @@ func (m Model) View() string {
 	sb.WriteString(chatView)
 	sb.WriteByte('\n')
 
-	// Status bar
+	// Input border (orange line)
+	inputBorder := styleInputBorder.Render(strings.Repeat("─", m.width))
+
+	// Overlay or normal input area
+	if m.overlay != overlayNone {
+		sb.WriteString(m.renderOverlay())
+	} else {
+		// Autocomplete dropdown (if active)
+		if m.acMode && len(m.acList) > 0 {
+			sb.WriteString(m.renderAutocomplete())
+			sb.WriteByte('\n')
+		}
+
+		// Progress bar above the input borders (with blank line spacing)
+		if m.processing {
+			sb.WriteByte('\n')
+			sb.WriteString(m.renderProgressBar())
+			sb.WriteByte('\n')
+		}
+
+		sb.WriteString(inputBorder)
+		sb.WriteByte('\n')
+		sb.WriteString(m.renderInputLine())
+		sb.WriteByte('\n')
+		sb.WriteString(inputBorder)
+		sb.WriteByte('\n')
+	}
+
+	// Status bar (below input)
 	statusLine := m.statusLine
 	if !m.processing {
 		preEst := 0
@@ -1142,26 +1169,6 @@ func (m Model) View() string {
 		padded = statusLine + strings.Repeat(" ", m.width-len(statusLine))
 	}
 	sb.WriteString(styleStatus.Render(padded))
-	sb.WriteByte('\n')
-
-	// Overlay or normal input area
-	if m.overlay != overlayNone {
-		sb.WriteString(m.renderOverlay())
-	} else {
-		// Autocomplete dropdown (if active)
-		if m.acMode && len(m.acList) > 0 {
-			sb.WriteString(m.renderAutocomplete())
-			sb.WriteByte('\n')
-		}
-
-		if m.processing {
-			sb.WriteString(m.renderProgressBar())
-			sb.WriteByte('\n')
-			sb.WriteString(m.renderInputLine())
-		} else {
-			sb.WriteString(m.renderInputLine())
-		}
-	}
 
 	return sb.String()
 }
