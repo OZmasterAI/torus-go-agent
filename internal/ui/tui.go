@@ -164,7 +164,15 @@ func defaultPaletteCommands(skills *features.SkillRegistry) []paletteCommand {
 	cmds := []paletteCommand{
 		{name: "New conversation", key: "", command: "/new"},
 		{name: "Clear context", key: "", command: "/clear"},
-		{name: "Switch session", key: "Ctrl+B", command: "::sessions"},
+		{name: "Compact context", key: "", command: "/compact"},
+		{name: "Fork branch", key: "", command: "/fork"},
+		{name: "Switch branch", key: "Ctrl+B", command: "::sessions"},
+		{name: "List branches", key: "", command: "/branches"},
+		{name: "Show messages", key: "", command: "/messages"},
+		{name: "Steering mode", key: "", command: "/steering"},
+		{name: "Session stats", key: "", command: "/stats"},
+		{name: "Running agents", key: "", command: "/agents"},
+		{name: "MCP tools", key: "", command: "/mcp-tools"},
 		{name: "Show keybindings", key: "?", command: "::help"},
 		{name: "List skills", key: "", command: "/skills"},
 		{name: "Exit", key: "Ctrl+D", command: "/exit"},
@@ -197,6 +205,9 @@ type Model struct {
 	modelName string
 	agentCfg  config.AgentConfig
 	skills    *features.SkillRegistry
+	telemetry *features.TelemetryCollector
+	subMgr    *features.SubAgentManager
+	mcpClient *features.MCPClient
 
 	// Input
 	input     string
@@ -262,12 +273,30 @@ type Model struct {
 	err    error
 }
 
-func newModel(agent *core.Agent, modelName string, cfg config.AgentConfig, skills *features.SkillRegistry) Model {
+// TUIExtras holds optional dependencies for slash commands that need them.
+type TUIExtras struct {
+	Telemetry *features.TelemetryCollector
+	SubMgr    *features.SubAgentManager
+	MCPClient *features.MCPClient
+}
+
+func newModel(agent *core.Agent, modelName string, cfg config.AgentConfig, skills *features.SkillRegistry, extras *TUIExtras) Model {
+	var tel *features.TelemetryCollector
+	var sub *features.SubAgentManager
+	var mcp *features.MCPClient
+	if extras != nil {
+		tel = extras.Telemetry
+		sub = extras.SubMgr
+		mcp = extras.MCPClient
+	}
 	m := Model{
 		agent:         agent,
 		modelName:     modelName,
 		agentCfg:      cfg,
 		skills:        skills,
+		telemetry:     tel,
+		subMgr:        sub,
+		mcpClient:     mcp,
 		barDir:        1,
 		startTime:     time.Now(),
 		statusLine:    "starting...",
@@ -578,6 +607,33 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			if input == "/skills" && m.skills != nil {
 				return m.handleSkills()
+			}
+			if input == "/compact" {
+				return m.handleCompact()
+			}
+			if strings.HasPrefix(input, "/fork") {
+				return m.handleFork(strings.TrimPrefix(input, "/fork"))
+			}
+			if strings.HasPrefix(input, "/switch") {
+				return m.handleSwitch(strings.TrimPrefix(input, "/switch"))
+			}
+			if strings.HasPrefix(input, "/steering") {
+				return m.handleSteering(strings.TrimPrefix(input, "/steering"))
+			}
+			if input == "/branches" {
+				return m.handleBranches()
+			}
+			if strings.HasPrefix(input, "/messages") {
+				return m.handleMessages(strings.TrimPrefix(input, "/messages"))
+			}
+			if input == "/stats" {
+				return m.handleStats()
+			}
+			if input == "/agents" {
+				return m.handleAgents()
+			}
+			if input == "/mcp-tools" {
+				return m.handleMCPTools()
 			}
 			// Check skills
 			if m.skills != nil {
@@ -1082,6 +1138,22 @@ func (m *Model) executePaletteCommand(cmd string) (tea.Model, tea.Cmd) {
 		return m.handleNewBranch()
 	case "/clear":
 		return m.handleClear()
+	case "/compact":
+		return m.handleCompact()
+	case "/fork":
+		return m.handleFork("")
+	case "/branches":
+		return m.handleBranches()
+	case "/messages":
+		return m.handleMessages("")
+	case "/steering":
+		return m.handleSteering("")
+	case "/stats":
+		return m.handleStats()
+	case "/agents":
+		return m.handleAgents()
+	case "/mcp-tools":
+		return m.handleMCPTools()
 	case "/skills":
 		return m.handleSkills()
 	case "/exit":
@@ -1093,10 +1165,9 @@ func (m *Model) executePaletteCommand(cmd string) (tea.Model, tea.Cmd) {
 		m.openHelp()
 		return m, nil
 	default:
-		// Skill commands — inject as input
+		// Skill commands — inject as input and fire
 		if strings.HasPrefix(cmd, "/") {
 			m.input = cmd
-			// Simulate Enter press by setting input and letting the user confirm
 		}
 		return m, nil
 	}
@@ -2213,8 +2284,8 @@ func fmtDuration(d time.Duration) string {
 
 // ── Entry point ───────────────────────────────────────────────────────────────
 
-func StartTUI(agent *core.Agent, modelName string, cfg config.AgentConfig, skills *features.SkillRegistry) error {
-	m := newModel(agent, modelName, cfg, skills)
+func StartTUI(agent *core.Agent, modelName string, cfg config.AgentConfig, skills *features.SkillRegistry, extras *TUIExtras) error {
+	m := newModel(agent, modelName, cfg, skills, extras)
 	p := tea.NewProgram(m, tea.WithAltScreen(), tea.WithMouseCellMotion())
 	_, err := p.Run()
 	return err

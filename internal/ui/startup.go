@@ -1100,7 +1100,7 @@ func (m setupModel) currentModels() []ModelChoice {
 func (m setupModel) menuLen() int {
 	switch m.phase {
 	case 0:
-		return 3
+		return 2
 	case 1:
 		return len(m.groups)
 	case 2:

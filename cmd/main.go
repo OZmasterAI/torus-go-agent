@@ -12,7 +12,7 @@ import (
 
 	"torus_go_agent/internal/channels"
 	_ "torus_go_agent/internal/channels/telegram" // register telegram channel
-	_ "torus_go_agent/internal/channels/tui"      // register tui channel
+	tuichan "torus_go_agent/internal/channels/tui"
 	"torus_go_agent/internal/config"
 	"torus_go_agent/internal/core"
 	"torus_go_agent/internal/features"
@@ -468,6 +468,13 @@ func main() {
 		if arg == "--telegram" {
 			channelName = "telegram"
 		}
+	}
+
+	// Pass extras to TUI channel for /stats, /agents, /mcp-tools
+	tuichan.Extras = &ui.TUIExtras{
+		Telemetry: telemetry,
+		SubMgr:    subMgr,
+		MCPClient: mcpClient,
 	}
 
 	ch, err := channels.Get(channelName)
