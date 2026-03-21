@@ -210,9 +210,11 @@ func (d *DAG) GetHead() (string, error) {
 }
 
 // CurrentBranchInfo returns the active branch ID, name, head node, and ancestor count.
-func (d *DAG) CurrentBranchInfo() (branchID, branchName, headNode string, msgCount int) {
+func (d *DAG) CurrentBranchInfo() (branchID, branchName, headNode string, msgCount int, err error) {
 	branchID = d.branchID
-	d.db.QueryRow("SELECT name, head_node_id FROM branches WHERE id = ?", d.branchID).Scan(&branchName, &headNode)
+	if err = d.db.QueryRow("SELECT name, head_node_id FROM branches WHERE id = ?", d.branchID).Scan(&branchName, &headNode); err != nil {
+		return
+	}
 	if headNode != "" {
 		cur := headNode
 		for cur != "" {

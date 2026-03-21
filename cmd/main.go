@@ -193,7 +193,10 @@ func main() {
 
 	// Inject live DAG state per turn (static schema now in TORUS.md).
 	hooks.Register(core.HookBeforeContextBuild, "dag-context", func(ctx context.Context, d *core.HookData) error {
-		brID, brName, headNode, msgCount := dag.CurrentBranchInfo()
+		brID, brName, headNode, msgCount, err := dag.CurrentBranchInfo()
+		if err != nil {
+			return nil // skip context injection on error
+		}
 		contextLine := fmt.Sprintf("[DAG state] branch: %s (%s), head: %s, messages: %d", brID, brName, headNode, msgCount)
 		state := types.Message{
 			Role:    types.RoleUser,
