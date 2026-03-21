@@ -33,6 +33,7 @@ type AgentConfigOverrides struct {
 	ZoneBudgeting          bool
 	ZoneArchivePercent     int
 	SmartRouting           bool
+	SteeringAggressive     bool
 }
 
 func defaultOverrides() *AgentConfigOverrides {
@@ -50,6 +51,7 @@ func defaultOverrides() *AgentConfigOverrides {
 		ZoneBudgeting:          true,
 		ZoneArchivePercent:     25,
 		SmartRouting:           false,
+		SteeringAggressive:     false,
 	}
 }
 
@@ -72,6 +74,7 @@ var configFields = []configField{
 	{"ZoneBudgeting", "bool"},
 	{"ZoneArchivePercent", "int"},
 	{"SmartRouting", "bool"},
+	{"SteeringAggressive", "bool"},
 }
 
 func (o *AgentConfigOverrides) getValue(idx int) string {
@@ -111,6 +114,11 @@ func (o *AgentConfigOverrides) getValue(idx int) string {
 			return "true"
 		}
 		return "false"
+	case 13:
+		if o.SteeringAggressive {
+			return "true"
+		}
+		return "false"
 	}
 	return ""
 }
@@ -144,6 +152,8 @@ func (o *AgentConfigOverrides) setValue(idx int, val string) {
 		o.ZoneArchivePercent = n
 	case 12:
 		o.SmartRouting = val == "true"
+	case 13:
+		o.SteeringAggressive = val == "true"
 	}
 }
 
@@ -155,6 +165,8 @@ func (o *AgentConfigOverrides) toggleBool(idx int) {
 		o.ZoneBudgeting = !o.ZoneBudgeting
 	case 12:
 		o.SmartRouting = !o.SmartRouting
+	case 13:
+		o.SteeringAggressive = !o.SteeringAggressive
 	}
 }
 

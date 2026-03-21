@@ -644,7 +644,7 @@ func (m *Model) handleSidebarClick(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 	contentY := msg.Y - headerLines - 1
 	flagsStart := m.sidebarFlagsStartLine()
 	flagIdx := contentY - flagsStart
-	if flagIdx >= 0 && flagIdx < 4 {
+	if flagIdx >= 0 && flagIdx < 5 {
 		switch flagIdx {
 		case 0:
 			m.agentCfg.SmartRouting = !m.agentCfg.SmartRouting
@@ -657,6 +657,12 @@ func (m *Model) handleSidebarClick(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 				m.agentCfg.Compaction = "llm"
 			} else {
 				m.agentCfg.Compaction = "none"
+			}
+		case 4:
+			if m.agent.GetSteeringMode() == "aggressive" {
+				m.agent.SetSteeringMode("mild")
+			} else {
+				m.agent.SetSteeringMode("aggressive")
 			}
 		}
 	}
@@ -1201,6 +1207,7 @@ func (m Model) renderSidebar() string {
 	lines = append(lines, flagStr("Zones", m.agentCfg.ZoneBudgeting))
 	compact := m.agentCfg.Compaction != "" && m.agentCfg.Compaction != "none"
 	lines = append(lines, flagStr("Compact", compact))
+	lines = append(lines, flagStr("Steer+", m.agent.GetSteeringMode() == "aggressive"))
 	if len(lines) > innerH {
 		lines = lines[:innerH]
 	}

@@ -58,6 +58,9 @@ func main() {
 		cfg.Agent.ZoneBudgeting = setup.Config.ZoneBudgeting
 		cfg.Agent.ZoneArchivePercent = setup.Config.ZoneArchivePercent
 		cfg.Agent.SmartRouting = setup.Config.SmartRouting
+		if setup.Config.SteeringAggressive {
+			cfg.Agent.SteeringMode = "aggressive"
+		}
 	}
 
 	// Auto-detect model specs: models.json → OpenRouter API → config.json defaults
@@ -318,6 +321,10 @@ func main() {
 			compCfg.KeepLastN = cfg.Agent.CompactionKeepLastN
 		}
 		agent.SetCompaction(compCfg)
+	}
+
+	if cfg.Agent.SteeringMode != "" {
+		agent.SetSteeringMode(cfg.Agent.SteeringMode)
 	}
 
 	// Add recall_branch tool — search across all DAG branches

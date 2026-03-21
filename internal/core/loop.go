@@ -13,6 +13,7 @@ type Agent struct {
 	hooks         *HookRegistry
 	dag           *DAG
 	compaction    CompactionConfig
+	steeringMode  string // "mild" (default) or "aggressive"
 	Summarize     func(string) (string, error)
 	OnStreamDelta func(delta string)
 	OnToolUse     func(name string, args map[string]any, result *ToolResult)
@@ -235,6 +236,10 @@ func (a *Agent) runLoop(ctx context.Context, userMessage string, ch chan<- Agent
 
 		toolCalls := ExtractToolCalls(resp)
 		for _, tc := range toolCalls {
+			// Aggressive steering: check before each tool, skip remaining if user steered
+			if a.steeringMode == "aggressive" && a.drainSteering() > 0 {
+				break
+			}
 			toolData := &HookData{AgentID: "main", ToolName: tc.Name, ToolArgs: tc.Input, Meta: map[string]any{}}
 			a.hooks.Fire(ctx, HookBeforeToolCall, toolData)
 			tc.Name = toolData.ToolName
@@ -323,6 +328,13 @@ func (a *Agent) findTool(name string) *Tool {
 func (a *Agent) DAG() *DAG                { return a.dag }
 func (a *Agent) Hooks() *HookRegistry     { return a.hooks }
 func (a *Agent) AddTool(t Tool)            { a.config.Tools = append(a.config.Tools, t) }
+func (a *Agent) SetSteeringMode(mode string) { a.steeringMode = mode }
+func (a *Agent) GetSteeringMode() string {
+	if a.steeringMode == "" {
+		return "mild"
+	}
+	return a.steeringMode
+}
 
 func (a *Agent) drainSteering() int {
 	if a.Steering == nil {

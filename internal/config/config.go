@@ -58,6 +58,7 @@ type AgentConfig struct {
 	ZoneArchivePercent    int    `json:"zoneArchivePercent"`    // % of usable budget for archive zone (default 30)
 	SmartRouting          bool   `json:"smartRouting"`
 	SmartRoutingModel string `json:"smartRoutingModel"`
+	SteeringMode      string `json:"steeringMode,omitempty"` // "mild" (default) or "aggressive"
 	AzureResource    string `json:"azureResource,omitempty"`   // Azure OpenAI resource name
 	AzureDeployment  string `json:"azureDeployment,omitempty"` // Azure OpenAI deployment name
 	AzureAPIVersion  string `json:"azureApiVersion,omitempty"` // Azure API version (default "2024-06-01")

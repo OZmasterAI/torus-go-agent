@@ -327,3 +327,19 @@ func extractPreview(content []core.ContentBlock, maxLen int) string {
 	}
 	return "(empty)"
 }
+
+// Steering toggles or shows the steering mode on an agent.
+// Empty args shows current mode. "aggressive" or "mild" sets it.
+func Steering(agent *core.Agent, args string) string {
+	args = strings.TrimSpace(args)
+	if args == "" {
+		return fmt.Sprintf("Steering mode: %s", agent.GetSteeringMode())
+	}
+	switch strings.ToLower(args) {
+	case "aggressive", "mild":
+		agent.SetSteeringMode(strings.ToLower(args))
+		return fmt.Sprintf("Steering mode set to: %s", agent.GetSteeringMode())
+	default:
+		return fmt.Sprintf("Unknown mode %q — use \"mild\" or \"aggressive\"", args)
+	}
+}
