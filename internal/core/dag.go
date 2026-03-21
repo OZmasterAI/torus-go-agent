@@ -87,7 +87,14 @@ func NewDAG(dbPath string) (*DAG, error) {
 		return nil, fmt.Errorf("schema: %w", err)
 	}
 	// Migration: add forked_from column if missing (existing databases).
-	db.Exec("ALTER TABLE branches ADD COLUMN forked_from TEXT DEFAULT ''")
+	var colCount int
+	db.QueryRow("SELECT COUNT(*) FROM pragma_table_info('branches') WHERE name='forked_from'").Scan(&colCount)
+	if colCount == 0 {
+		if _, err := db.Exec("ALTER TABLE branches ADD COLUMN forked_from TEXT DEFAULT ''"); err != nil {
+			db.Close()
+			return nil, fmt.Errorf("migration forked_from: %w", err)
+		}
+	}
 
 
 	d := &DAG{db: db}
