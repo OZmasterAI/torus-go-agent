@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/charmbracelet/bubbles/progress"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/glamour"
@@ -25,13 +26,14 @@ import (
 
 // ── Styles ────────────────────────────────────────────────────────────────────
 
-// Amber glow colors for the bouncing progress bar.
+// Orange glow colors for the bouncing progress bar (5-step gradient + track).
 var (
-	glowBright = lipgloss.NewStyle().Foreground(lipgloss.Color("214"))
-	glowMed    = lipgloss.NewStyle().Foreground(lipgloss.Color("208"))
-	glowDim    = lipgloss.NewStyle().Foreground(lipgloss.Color("172"))
-	glowFaint  = lipgloss.NewStyle().Foreground(lipgloss.Color("130"))
-	glowTrack  = lipgloss.NewStyle().Foreground(lipgloss.Color("238"))
+	glowBright = lipgloss.NewStyle().Foreground(lipgloss.Color("#ff6600")) // hot orange core
+	glowMed    = lipgloss.NewStyle().Foreground(lipgloss.Color("#ff4d01")) // neon orange
+	glowDim    = lipgloss.NewStyle().Foreground(lipgloss.Color("#cc3d00")) // warm orange
+	glowFaint  = lipgloss.NewStyle().Foreground(lipgloss.Color("#993300")) // dim orange
+	glowFaint2 = lipgloss.NewStyle().Foreground(lipgloss.Color("#662200")) // between faint and track
+	glowTrack  = lipgloss.NewStyle().Foreground(lipgloss.Color("#331100")) // very dim track
 )
 
 var (
@@ -53,10 +55,10 @@ var (
 	styleSeparator    = lipgloss.NewStyle().Foreground(lipgloss.Color("236"))
 	styleInputBorder  = lipgloss.NewStyle().Foreground(lipgloss.Color("#ff4d01"))
 
-	// Status bar
+	// Status bar — neon orange on dark background
 	styleStatus = lipgloss.NewStyle().
-			Background(lipgloss.Color("236")).
-			Foreground(lipgloss.Color("252"))
+			Background(lipgloss.Color("#1a0a00")).
+			Foreground(lipgloss.Color("#ff4d01"))
 	styleScrollHint = lipgloss.NewStyle().
 				Foreground(lipgloss.Color("243")).
 				Italic(true)
@@ -223,6 +225,7 @@ type Model struct {
 	barPos       int
 	barDir       int
 	startTime    time.Time
+	ctxProgress  progress.Model
 
 	// Usage
 	totalTokensIn  int
@@ -268,6 +271,11 @@ func newModel(agent *core.Agent, modelName string, cfg config.AgentConfig, skill
 		startTime:     time.Now(),
 		statusLine:    "starting...",
 		modifiedFiles: make(map[string]int),
+		ctxProgress: progress.New(
+			progress.WithGradient("#ff4d01", "#ff8c00"),
+			progress.WithoutPercentage(),
+			progress.WithWidth(12),
+		),
 	}
 
 	// Load existing branch history from DAG
@@ -1709,22 +1717,6 @@ func (m Model) glamourRender(text string) string {
 	return rendered
 }
 
-func ctxBar(pct float64, barLen int) string {
-	if pct < 0 {
-		pct = 0
-	}
-	if pct > 100 {
-		pct = 100
-	}
-	filled := int(pct / 100 * float64(barLen))
-	if filled > barLen {
-		filled = barLen
-	}
-	empty := barLen - filled
-	bar := strings.Repeat("█", filled) + strings.Repeat("░", empty)
-	return fmt.Sprintf("%s %.0f%%", bar, pct)
-}
-
 func (m Model) buildStatus(tokIn, tokOut int, cost float64, elapsed time.Duration) string {
 	var parts []string
 	parts = append(parts, fmt.Sprintf("[%s]", m.modelName))
@@ -1740,7 +1732,7 @@ func (m Model) buildStatus(tokIn, tokOut int, cost float64, elapsed time.Duratio
 		}
 		ctxPct = float64(est) / ctxWin * 100
 	}
-	parts = append(parts, "CTX:"+ctxBar(ctxPct, 8))
+	parts = append(parts, "CTX:"+m.ctxProgress.ViewAs(ctxPct/100.0)+fmt.Sprintf(" %.0f%%", ctxPct))
 
 	totalTok := tokIn + tokOut
 	if totalTok > 0 {
@@ -1984,6 +1976,8 @@ func (m Model) renderProgressBar() string {
 			bar.WriteString(glowDim.Render("\u2501"))
 		case dist == 3:
 			bar.WriteString(glowFaint.Render("\u2501"))
+		case dist == 4:
+			bar.WriteString(glowFaint2.Render("\u2501"))
 		default:
 			bar.WriteString(glowTrack.Render("\u2501"))
 		}
