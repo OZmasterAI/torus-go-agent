@@ -525,7 +525,6 @@ func DefaultProviderGroups() []ProviderGroup {
 			AuthMethods: []AuthMethod{{Name: "API key", NeedsKey: "OPENROUTER_API_KEY"}},
 			Categories: []ModelCategory{
 				{Name: "FREE MODELS", Models: []ModelChoice{
-					{Name: "hunter-alpha", ID: "openrouter/hunter-alpha", ContextWindow: 128000, MaxTokens: 8192},
 					{Name: "nemotron-3-super (free)", ID: "nvidia/nemotron-3-super-120b-a12b:free", ContextWindow: 131072, MaxTokens: 8192},
 					{Name: "step-3.5-flash (free)", ID: "stepfun/step-3.5-flash:free", ContextWindow: 128000, MaxTokens: 8192},
 					{Name: "Custom model ID", ID: ""},

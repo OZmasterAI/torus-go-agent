@@ -11,10 +11,8 @@ import (
 	"github.com/joho/godotenv"
 
 	"torus_go_agent/internal/channels"
-	_ "torus_go_agent/internal/channels/http"     // register http channel
 	_ "torus_go_agent/internal/channels/telegram" // register telegram channel
 	_ "torus_go_agent/internal/channels/tui"      // register tui channel
-	_ "torus_go_agent/internal/channels/tui2"     // register tui2 channel (raw terminal)
 	"torus_go_agent/internal/config"
 	"torus_go_agent/internal/core"
 	"torus_go_agent/internal/features"
@@ -464,17 +462,11 @@ func main() {
 		Meta:    map[string]any{"provider": cfg.Agent.Provider, "model": cfg.Agent.Model},
 	})
 
-	// Select channel: --telegram/--http flag or default to TUI
+	// Select channel: --telegram flag or default to TUI
 	channelName := "tui"
 	for _, arg := range os.Args[1:] {
 		if arg == "--telegram" {
 			channelName = "telegram"
-		}
-		if arg == "--http" {
-			channelName = "http"
-		}
-		if arg == "--tui2" {
-			channelName = "tui2"
 		}
 	}
 
