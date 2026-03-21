@@ -30,6 +30,7 @@ type AgentEvent struct {
 	ToolResult *t.ToolResult   // tool_end: result
 	Error      error           // error: the error
 	StatusHook string          // status: hook name that triggered this update
+	Usage      *t.Usage        // turn_end: token usage for this turn
 }
 
 // HasToolUse checks if an assistant message wants to use tools.

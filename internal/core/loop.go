@@ -230,17 +230,17 @@ func (a *Agent) runLoop(ctx context.Context, userMessage string, ch chan<- Agent
 					a.dag.AddNode(fHead, msg.Role, msg.Content, "", "", 0)
 				}
 				finalText = ""
-				emit(AgentEvent{Type: EventAgentTurnEnd, Turn: turn})
+				emit(AgentEvent{Type: EventAgentTurnEnd, Turn: turn, Usage: &resp.Usage})
 				a.hooks.Fire(ctx, HookOnTurnEnd, &HookData{AgentID: "main", Response: resp})
 				continue
 			}
 			if a.drainSteering() > 0 {
 				finalText = ""
-				emit(AgentEvent{Type: EventAgentTurnEnd, Turn: turn})
+				emit(AgentEvent{Type: EventAgentTurnEnd, Turn: turn, Usage: &resp.Usage})
 				a.hooks.Fire(ctx, HookOnTurnEnd, &HookData{AgentID: "main", Response: resp})
 				continue
 			}
-			emit(AgentEvent{Type: EventAgentTurnEnd, Turn: turn})
+			emit(AgentEvent{Type: EventAgentTurnEnd, Turn: turn, Usage: &resp.Usage})
 			a.hooks.Fire(ctx, HookOnTurnEnd, &HookData{AgentID: "main", Response: resp})
 			break
 		}
@@ -297,7 +297,7 @@ func (a *Agent) runLoop(ctx context.Context, userMessage string, ch chan<- Agent
 		}
 		a.drainSteering()
 
-		emit(AgentEvent{Type: EventAgentTurnEnd, Turn: turn})
+		emit(AgentEvent{Type: EventAgentTurnEnd, Turn: turn, Usage: &resp.Usage})
 		a.hooks.Fire(ctx, HookOnTurnEnd, &HookData{AgentID: "main", Response: resp})
 		_ = userNodeID
 	}

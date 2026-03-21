@@ -2145,6 +2145,8 @@ func runAgentStream(agent *core.Agent, input string, deltaCh chan<- string, tool
 		var finalText string
 		var finalErr error
 		var toolStartTime time.Time
+		var totalIn, totalOut int
+		var totalCost float64
 		for ev := range agent.RunStream(context.Background(), input) {
 			switch ev.Type {
 			case core.EventAgentTextDelta:
@@ -2166,6 +2168,12 @@ func runAgentStream(agent *core.Agent, input string, deltaCh chan<- string, tool
 					duration: dur,
 				}
 				toolStartTime = time.Time{}
+			case core.EventAgentTurnEnd:
+				if ev.Usage != nil {
+					totalIn += ev.Usage.InputTokens
+					totalOut += ev.Usage.OutputTokens
+					totalCost += ev.Usage.Cost
+				}
 			case core.EventAgentDone:
 				finalText = ev.Text
 			case core.EventStatusUpdate:
@@ -2182,8 +2190,11 @@ func runAgentStream(agent *core.Agent, input string, deltaCh chan<- string, tool
 			return agentErrorMsg{err: finalErr}
 		}
 		return agentResponseMsg{
-			text:    finalText,
-			elapsed: elapsed,
+			text:      finalText,
+			tokensIn:  totalIn,
+			tokensOut: totalOut,
+			cost:      totalCost,
+			elapsed:   elapsed,
 		}
 	}
 }

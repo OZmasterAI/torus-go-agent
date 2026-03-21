@@ -35,6 +35,8 @@ func (m *Model) handleFork(args string) (tea.Model, tea.Cmd) {
 		branchID, err = commands.ForkBack(m.agent.DAG(), n, "")
 	case "node":
 		branchID, err = commands.Fork(m.agent.DAG(), value, "")
+	case "branch":
+		return m.handleBranches()
 	}
 	if err != nil {
 		m.messages = append(m.messages, displayMsg{role: "error", text: fmt.Sprintf("fork: %v", err), isError: true})
