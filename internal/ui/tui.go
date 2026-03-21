@@ -243,7 +243,6 @@ type Model struct {
 	totalTokensIn  int
 	totalTokensOut int
 	totalCost      float64
-	preEstimate    int
 
 	// Tool tracking
 	toolEvents    []toolEvent

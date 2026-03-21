@@ -790,7 +790,6 @@ type setupModel struct {
 
 	// Config customization (phase 5 = choose config mode, phase 6 = edit settings)
 	configOverrides *AgentConfigOverrides
-	configCursor    int    // cursor for config editing in phase 6
 	editingConfig   bool   // true when editing a numeric/string value
 	editBuffer      string // text buffer for numeric/string input
 
@@ -1298,7 +1297,6 @@ func (m setupModel) selectItem() (tea.Model, tea.Cmd) {
 			m.phase = 6
 			m.cursor = 0
 			m.scrollOffset = 0
-			m.configCursor = 0
 		}
 
 	case 6: // Edit config
