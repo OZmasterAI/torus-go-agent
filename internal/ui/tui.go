@@ -1164,7 +1164,11 @@ func (m Model) renderSidebar() string {
 	if head != "" {
 		msgs, _ := m.agent.DAG().PromptFrom(head)
 		est := core.EstimateTokens(msgs)
-		ctxPct = float64(est) / 200000.0 * 100
+		ctxWin := float64(m.agentCfg.ContextWindow)
+		if ctxWin <= 0 {
+			ctxWin = 128000
+		}
+		ctxPct = float64(est) / ctxWin * 100
 	}
 	lines = append(lines, fmt.Sprintf(" CTX: %.0f%%", ctxPct))
 	totalTok := m.totalTokensIn + m.totalTokensOut
@@ -1506,7 +1510,11 @@ func (m Model) buildStatus(tokIn, tokOut int, cost float64, elapsed time.Duratio
 	if head != "" {
 		msgs, _ := m.agent.DAG().PromptFrom(head)
 		est := core.EstimateTokens(msgs)
-		ctxPct = float64(est) / 200000.0 * 100
+		ctxWin := float64(m.agentCfg.ContextWindow)
+		if ctxWin <= 0 {
+			ctxWin = 128000
+		}
+		ctxPct = float64(est) / ctxWin * 100
 	}
 	parts = append(parts, "CTX:"+ctxBar(ctxPct, 8))
 
