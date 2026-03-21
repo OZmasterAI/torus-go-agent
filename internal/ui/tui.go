@@ -255,7 +255,7 @@ type Model struct {
 }
 
 func newModel(agent *core.Agent, modelName string, cfg config.AgentConfig, skills *features.SkillRegistry) Model {
-	return Model{
+	m := Model{
 		agent:         agent,
 		modelName:     modelName,
 		agentCfg:      cfg,
@@ -264,10 +264,41 @@ func newModel(agent *core.Agent, modelName string, cfg config.AgentConfig, skill
 		startTime:     time.Now(),
 		statusLine:    "starting...",
 		modifiedFiles: make(map[string]int),
-		messages: []displayMsg{
-			{role: "assistant", text: "Type a message. Ctrl+D or /exit to quit. /skills to list skills."},
-		},
 	}
+
+	// Load existing branch history from DAG
+	head, _ := agent.DAG().GetHead()
+	if head != "" {
+		ancestors, _ := agent.DAG().GetAncestors(head)
+		for _, node := range ancestors {
+			if node.Role == "system" {
+				continue
+			}
+			text := ""
+			for _, b := range node.Content {
+				if b.Text != "" {
+					text = b.Text
+					break
+				}
+			}
+			if text == "" {
+				continue
+			}
+			role := node.Role
+			if role == "tool" {
+				continue // skip tool results in history view
+			}
+			m.messages = append(m.messages, displayMsg{role: role, text: text})
+		}
+	}
+
+	if len(m.messages) == 0 {
+		m.messages = []displayMsg{
+			{role: "assistant", text: "Type a message. Ctrl+D or /exit to quit. /skills to list skills."},
+		}
+	}
+
+	return m
 }
 
 func (m *Model) resizeViewport() {
