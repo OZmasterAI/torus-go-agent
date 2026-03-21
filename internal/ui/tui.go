@@ -33,7 +33,7 @@ var (
 	glowDim    = lipgloss.NewStyle().Foreground(lipgloss.Color("#cc3d00")) // warm orange
 	glowFaint  = lipgloss.NewStyle().Foreground(lipgloss.Color("#993300")) // dim orange
 	glowFaint2 = lipgloss.NewStyle().Foreground(lipgloss.Color("#662200")) // between faint and track
-	glowTrack  = lipgloss.NewStyle().Foreground(lipgloss.Color("#331100")) // very dim track
+	glowTrack  = lipgloss.NewStyle().Foreground(lipgloss.Color("#2b2a2a")) // neutral dark track
 )
 
 var (

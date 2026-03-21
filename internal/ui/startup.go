@@ -639,7 +639,6 @@ var (
 	colorBrightAmber = lipgloss.Color("166")
 	colorOrange      = lipgloss.Color("130")
 	colorMutedGold   = lipgloss.Color("130")
-	colorDarkBg      = lipgloss.Color("52")
 )
 
 // Styles derived from the palette.
@@ -655,8 +654,7 @@ var (
 	menuPanelStyle = lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
 			BorderForeground(colorOrange).
-			Padding(1, 2).
-			Background(colorDarkBg)
+			Padding(1, 2)
 
 	menuItemStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("252"))

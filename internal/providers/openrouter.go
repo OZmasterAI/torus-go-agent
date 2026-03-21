@@ -298,7 +298,6 @@ func (p *OpenRouterProvider) Complete(ctx context.Context, systemPrompt string, 
 		return nil, fmt.Errorf("marshal: %w", err)
 	}
 
-	_ = len(body) // debug: request size available if needed
 
 	httpReq, err := http.NewRequestWithContext(ctx, "POST", p.chatEndpoint(), bytes.NewReader(body))
 	if err != nil {
@@ -464,7 +463,6 @@ func (p *OpenRouterProvider) StreamComplete(ctx context.Context, systemPrompt st
 		return nil, fmt.Errorf("marshal: %w", err)
 	}
 
-	_ = len(body) // debug: stream request size available if needed
 
 	httpReq, err := http.NewRequestWithContext(ctx, "POST", p.chatEndpoint(), bytes.NewReader(body))
 	if err != nil {
