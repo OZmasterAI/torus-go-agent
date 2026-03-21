@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"io/fs"
+	"math"
 	"path/filepath"
 	"strings"
 	"time"
@@ -80,7 +81,7 @@ var (
 	styleACNormal   = lipgloss.NewStyle().Foreground(lipgloss.Color("252"))
 	styleACSelected = lipgloss.NewStyle().
 				Foreground(lipgloss.Color("0")).
-				Background(lipgloss.Color("130"))
+				Background(lipgloss.Color("214"))
 
 	// Overlay dialog
 	styleOverlayBorder = lipgloss.NewStyle().
@@ -1319,14 +1320,17 @@ func (m Model) renderPalette() string {
 	sb.WriteByte('\n')
 
 	// Filtered commands
+	keybindSelected := lipgloss.NewStyle().Foreground(lipgloss.Color("19"))
 	for i, cmd := range m.overlayItems {
 		style := styleACNormal
+		kbStyle := styleKeybind
 		if i == m.overlayIdx {
 			style = styleACSelected
+			kbStyle = keybindSelected
 		}
 		entry := " " + cmd.name + " "
 		if cmd.key != "" {
-			entry += styleKeybind.Render("["+cmd.key+"]") + " "
+			entry += kbStyle.Render("["+cmd.key+"]") + " "
 		}
 		sb.WriteString("  " + style.Render(entry))
 		sb.WriteByte('\n')
@@ -1667,8 +1671,35 @@ func (m Model) renderProgressBar() string {
 	if phrase == "" {
 		phrase = "Toroidal meditation running..."
 	}
-	status := fmt.Sprintf(" %s %.1fs", phrase, elapsed.Seconds())
-	return bar.String() + styleDim.Render(status)
+	timeStr := styleDim.Render(fmt.Sprintf(" %.1fs", elapsed.Seconds()))
+	amberStyle := amberCycle(elapsed).Italic(true)
+	return bar.String() + amberStyle.Render(" "+phrase) + timeStr
+}
+
+// amberCycle returns a lipgloss style that smoothly cycles through amber/orange shades
+// using true-color RGB interpolation. Completes a full cycle every 3 seconds.
+func amberCycle(elapsed time.Duration) lipgloss.Style {
+	// Amber gradient keypoints: bright amber → deep orange → dark amber → back
+	type rgb struct{ r, g, b int }
+	keys := []rgb{
+		{255, 191, 0},   // bright amber
+		{249, 115, 22},  // orange (#f97316)
+		{194, 65, 12},   // deep orange
+		{130, 50, 10},   // dark amber
+		{194, 65, 12},   // deep orange (return)
+		{249, 115, 22},  // orange (return)
+	}
+	// Smooth interpolation: 3 second full cycle
+	t := math.Mod(elapsed.Seconds()*2, float64(len(keys)))
+	i := int(t)
+	frac := t - float64(i)
+	a := keys[i%len(keys)]
+	b := keys[(i+1)%len(keys)]
+	r := a.r + int(float64(b.r-a.r)*frac)
+	g := a.g + int(float64(b.g-a.g)*frac)
+	bl := a.b + int(float64(b.b-a.b)*frac)
+	color := fmt.Sprintf("#%02x%02x%02x", r, g, bl)
+	return lipgloss.NewStyle().Foreground(lipgloss.Color(color))
 }
 
 // ── Torus Status Phrases ──────────────────────────────────────────────────────
