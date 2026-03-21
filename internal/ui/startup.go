@@ -731,11 +731,11 @@ var (
 	// styleSpinner is used by the main TUI (tui.go) for its spinner.
 	styleSpinner = lipgloss.NewStyle().Foreground(lipgloss.Color("39"))
 
-	// Torus character luminance styles.
-	torusDimStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("130"))
-	torusMidStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("172"))
-	torusBrightStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("208"))
-	torusMaxStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("214"))
+	// Torus character luminance styles (orange gradient, matching TORUS title).
+	torusDimStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("166")) // orange
+	torusMidStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("172")) // bright orange
+	torusBrightStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("208")) // amber
+	torusMaxStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("214")) // light amber
 
 	textInputStyle = lipgloss.NewStyle().
 			Foreground(colorBrightAmber).
@@ -1371,7 +1371,7 @@ func (m setupModel) View() string {
 		coloredTorus := colorTorus(m.torusFrame)
 
 		torusPanel := lipgloss.NewStyle().
-			Width(44).
+			Width(38).
 			Render(coloredTorus)
 
 		joined := lipgloss.JoinHorizontal(lipgloss.Top, torusPanel, "  ", menuPanel)
@@ -1519,9 +1519,17 @@ func (m setupModel) renderMenu() string {
 
 func renderTorus(a, b float64) string {
 	const (
-		width  = 40
-		height = 20
+		width  = 36
+		height = 18
+
+		// Canonical donut parameters (a1k0n.net)
+		r1      = 1.0  // tube (minor) radius
+		r2      = 2.0  // torus (major) radius
+		k2      = 5.0  // distance from viewer
+		thetaSp = 0.03 // theta step — finer = denser
+		phiSp   = 0.01 // phi step — finer = denser
 	)
+	k1 := float64(width) * k2 * 3.0 / (8.0 * (r1 + r2))
 
 	output := make([][]byte, height)
 	zbuf := make([][]float64, height)
@@ -1535,35 +1543,38 @@ func renderTorus(a, b float64) string {
 
 	chars := ".,-~:;=!*#$@"
 
-	for j := 0.0; j < 6.28; j += 0.07 {
-		for i := 0.0; i < 6.28; i += 0.02 {
-			c := math.Sin(i)
-			d := math.Cos(j)
-			e := math.Sin(a)
-			f := math.Sin(j)
-			g := math.Cos(a)
-			h := d + 2
-			capD := 1.0 / (c*h*e + f*g + 5)
-			l := math.Cos(i)
-			capM := math.Cos(b)
-			n := math.Sin(b)
-			t := c*h*g - f*e
+	cosA, sinA := math.Cos(a), math.Sin(a)
+	cosB, sinB := math.Cos(b), math.Sin(b)
 
-			x := int(float64(width)/2 + 15*capD*(l*h*capM-t*n))
-			y := int(float64(height)/2 + 8*capD*(l*h*n+t*capM))
+	for theta := 0.0; theta < 6.28; theta += thetaSp {
+		cosT, sinT := math.Cos(theta), math.Sin(theta)
+		for phi := 0.0; phi < 6.28; phi += phiSp {
+			cosP, sinP := math.Cos(phi), math.Sin(phi)
 
-			capN := int(8 * ((f*e-c*d*g)*capM - c*d*e - f*g - l*d*n))
+			cx := r2 + r1*cosT
+			cy := r1 * sinT
 
-			if y >= 0 && y < height && x >= 0 && x < width && capD > zbuf[y][x] {
-				zbuf[y][x] = capD
-				idx := capN
+			x3 := cx*(cosB*cosP+sinA*sinB*sinP) - cy*cosA*sinB
+			y3 := cx*(sinB*cosP-sinA*cosB*sinP) + cy*cosA*cosB
+			z := k2 + cosA*cx*sinP + cy*sinA
+			ooz := 1.0 / z
+
+			xp := int(float64(width)/2.0 + k1*ooz*x3)
+			yp := int(float64(height)/2.0 - k1*ooz*y3*0.5)
+
+			lum := cosP*cosT*sinB - cosA*cosT*sinP - sinA*sinT +
+				cosB*(cosA*sinT-cosT*sinA*sinP)
+
+			if yp >= 0 && yp < height && xp >= 0 && xp < width && ooz > zbuf[yp][xp] {
+				zbuf[yp][xp] = ooz
+				idx := int(lum * 8)
 				if idx < 0 {
 					idx = 0
 				}
 				if idx >= len(chars) {
 					idx = len(chars) - 1
 				}
-				output[y][x] = chars[idx]
+				output[yp][xp] = chars[idx]
 			}
 		}
 	}
