@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"os"
 	"strings"
 
 	t "torus_go_agent/internal/types"
@@ -319,8 +318,6 @@ func (p *OpenRouterProvider) Complete(ctx context.Context, systemPrompt string, 
 	}
 
 	if resp.StatusCode != 200 {
-		// Dump the request for debugging
-		fmt.Fprintf(os.Stderr, "[openrouter] ERROR %d. Request body:\n%s\n", resp.StatusCode, string(body))
 		return nil, fmt.Errorf("openrouter API error %d: %s", resp.StatusCode, string(respBody))
 	}
 
@@ -480,7 +477,6 @@ func (p *OpenRouterProvider) StreamComplete(ctx context.Context, systemPrompt st
 	if resp.StatusCode != 200 {
 		defer resp.Body.Close()
 		respBody, _ := io.ReadAll(resp.Body)
-		fmt.Fprintf(os.Stderr, "[openrouter] ERROR %d. Request body:\n%s\n", resp.StatusCode, string(body))
 		return nil, fmt.Errorf("openrouter API error %d: %s", resp.StatusCode, string(respBody))
 	}
 
