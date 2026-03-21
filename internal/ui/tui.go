@@ -674,8 +674,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return m, nil
 				}
 				char := string(msg.Runes)
-				// Filter out leaked mouse escape sequences (SGR mouse: [<N;N;NM/m)
-				if strings.HasPrefix(char, "[<") || strings.HasPrefix(char, "<") {
+				// Filter out leaked mouse/CSI escape sequences
+				if strings.HasPrefix(char, "[") || strings.HasPrefix(char, "<") {
 					return m, nil
 				}
 				if char == "/" && m.input == "" && !m.processing {
@@ -1149,8 +1149,9 @@ func (m Model) View() string {
 			completionStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#ff4d01"))
 			checkStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#00cc66"))
 			elapsed := fmtDuration(m.lastElapsed)
+			sb.WriteString("\n\n")
 			sb.WriteString(checkStyle.Render("  ✔") + completionStyle.Render(fmt.Sprintf(" Worked for %s", elapsed)))
-			sb.WriteByte('\n')
+			sb.WriteString("\n\n")
 		}
 
 		sb.WriteString(inputBorder)
