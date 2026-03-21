@@ -4,8 +4,8 @@ import (
 	"context"
 	"sync"
 
-	"go_sdk_agent/internal/core"
-	"go_sdk_agent/internal/types"
+	"torus_go_agent/internal/core"
+	"torus_go_agent/internal/types"
 )
 
 // RunSequential runs agents one after another. Each agent receives the previous

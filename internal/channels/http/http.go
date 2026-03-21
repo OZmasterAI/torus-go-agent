@@ -16,11 +16,11 @@ import (
 	"os"
 	"sync"
 
-	"go_sdk_agent/internal/channels"
-	"go_sdk_agent/internal/config"
-	"go_sdk_agent/internal/commands"
-	"go_sdk_agent/internal/core"
-	"go_sdk_agent/internal/features"
+	"torus_go_agent/internal/channels"
+	"torus_go_agent/internal/config"
+	"torus_go_agent/internal/commands"
+	"torus_go_agent/internal/core"
+	"torus_go_agent/internal/features"
 )
 
 //go:embed web/*

@@ -13,9 +13,9 @@ import (
 
 	"golang.org/x/term"
 
-	"go_sdk_agent/internal/commands"
-	"go_sdk_agent/internal/core"
-	"go_sdk_agent/internal/features"
+	"torus_go_agent/internal/commands"
+	"torus_go_agent/internal/core"
+	"torus_go_agent/internal/features"
 )
 
 // chatMsgKind identifies a message type in the display buffer.

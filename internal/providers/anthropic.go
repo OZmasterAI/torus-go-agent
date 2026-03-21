@@ -10,7 +10,7 @@ import (
 	"net/http"
 	"strings"
 
-	t "go_sdk_agent/internal/types"
+	t "torus_go_agent/internal/types"
 )
 
 const anthropicBaseURL = "https://api.anthropic.com/v1"

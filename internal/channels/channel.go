@@ -5,9 +5,9 @@ package channels
 import (
 	"fmt"
 
-	"go_sdk_agent/internal/config"
-	"go_sdk_agent/internal/core"
-	"go_sdk_agent/internal/features"
+	"torus_go_agent/internal/config"
+	"torus_go_agent/internal/core"
+	"torus_go_agent/internal/features"
 )
 
 // Channel is a user-facing frontend that drives an agent.

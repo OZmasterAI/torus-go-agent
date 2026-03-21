@@ -1,7 +1,7 @@
 // Re-exports from types package for backward compatibility.
 package core
 
-import t "go_sdk_agent/internal/types"
+import t "torus_go_agent/internal/types"
 
 // Re-export all types so existing code in core still compiles.
 type Role = t.Role

@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"math/rand/v2"
 	"sync"
-	t "go_sdk_agent/internal/types"
+	t "torus_go_agent/internal/types"
 )
 
 // Provider is the interface all LLM providers implement.

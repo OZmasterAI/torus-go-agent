@@ -1261,19 +1261,12 @@ func (m setupModel) selectItem() (tea.Model, tea.Cmd) {
 
 	case 0: // Main menu
 		switch m.cursor {
-		case 0: // Use defaults
-			m.provider = "openrouter"
-			m.model = "openrouter/hunter-alpha"
-			m.phase = 5
-			m.cursor = 0
-			m.scrollOffset = 0
-			m.configOverrides = defaultOverrides()
-		case 1: // Use existing config
+		case 0: // Use existing config
 			m.provider = ""
 			m.model = ""
 			m.done = true
 			return m, tea.Quit
-		case 2: // Choose provider & model
+		case 1: // Choose provider & model
 			m.phase = 1
 			m.cursor = 0
 			m.scrollOffset = 0
@@ -1448,7 +1441,6 @@ func (m setupModel) renderMenu() string {
 		b.WriteString(menuHeaderStyle.Render("Setup"))
 		b.WriteByte('\n')
 		items := []string{
-			"Use defaults (OpenRouter / hunter-alpha)",
 			"Use existing config",
 			"Choose provider & model",
 		}

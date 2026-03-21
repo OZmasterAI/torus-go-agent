@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	t "go_sdk_agent/internal/types"
+	t "torus_go_agent/internal/types"
 )
 
 // BuildDefaultTools returns the 6 standard tools.

@@ -191,16 +191,25 @@ func LoadTorus(configDir string) string {
 	return string(data)
 }
 
-// DataDir resolves the data directory path relative to configDir.
+// DataDir resolves the data directory. If configured, uses that (relative to
+// configDir if not absolute). Otherwise uses $XDG_DATA_HOME/torus_go_agent
+// or ~/.local/share/torus_go_agent.
 func (c *Config) DataDir(configDir string) string {
 	d := c.Data.Dir
-	if d == "" {
-		d = "../data"
+	if d != "" {
+		if !filepath.IsAbs(d) {
+			d = filepath.Join(configDir, d)
+		}
+		return d
 	}
-	if !filepath.IsAbs(d) {
-		d = filepath.Join(configDir, d)
+	if xdg := os.Getenv("XDG_DATA_HOME"); xdg != "" {
+		return filepath.Join(xdg, "torus_go_agent")
 	}
-	return d
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return filepath.Join(configDir, "data")
+	}
+	return filepath.Join(home, ".local", "share", "torus_go_agent")
 }
 
 // APIKey resolves the API key from environment based on provider.

@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"go_sdk_agent/internal/core"
+	"torus_go_agent/internal/core"
 )
 
 // BranchSummary is a display-friendly branch listing.

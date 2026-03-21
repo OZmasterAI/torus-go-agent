@@ -10,23 +10,49 @@ import (
 
 	"github.com/joho/godotenv"
 
-	"go_sdk_agent/internal/channels"
-	_ "go_sdk_agent/internal/channels/http"     // register http channel
-	_ "go_sdk_agent/internal/channels/telegram" // register telegram channel
-	_ "go_sdk_agent/internal/channels/tui"      // register tui channel
-	_ "go_sdk_agent/internal/channels/tui2"     // register tui2 channel (raw terminal)
-	"go_sdk_agent/internal/config"
-	"go_sdk_agent/internal/core"
-	"go_sdk_agent/internal/features"
-	"go_sdk_agent/internal/providers"
-	"go_sdk_agent/internal/safety"
-	"go_sdk_agent/internal/tools"
-	"go_sdk_agent/internal/ui"
+	"torus_go_agent/internal/channels"
+	_ "torus_go_agent/internal/channels/http"     // register http channel
+	_ "torus_go_agent/internal/channels/telegram" // register telegram channel
+	_ "torus_go_agent/internal/channels/tui"      // register tui channel
+	_ "torus_go_agent/internal/channels/tui2"     // register tui2 channel (raw terminal)
+	"torus_go_agent/internal/config"
+	"torus_go_agent/internal/core"
+	"torus_go_agent/internal/features"
+	"torus_go_agent/internal/providers"
+	"torus_go_agent/internal/safety"
+	"torus_go_agent/internal/tools"
+	"torus_go_agent/internal/ui"
 )
+
+// resolveConfigDir returns the config directory, checking in order:
+// 1. $TORUS_CONFIG_DIR (explicit override)
+// 2. ./config (local dev — if it exists)
+// 3. $XDG_CONFIG_HOME/torus_go_agent
+// 4. ~/.config/torus_go_agent (created if needed)
+func resolveConfigDir() string {
+	if env := os.Getenv("TORUS_CONFIG_DIR"); env != "" {
+		return env
+	}
+	if info, err := os.Stat(filepath.Join(".", "config")); err == nil && info.IsDir() {
+		return filepath.Join(".", "config")
+	}
+	if xdg := os.Getenv("XDG_CONFIG_HOME"); xdg != "" {
+		d := filepath.Join(xdg, "torus_go_agent")
+		os.MkdirAll(d, 0755)
+		return d
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return filepath.Join(".", "config")
+	}
+	d := filepath.Join(home, ".config", "torus_go_agent")
+	os.MkdirAll(d, 0755)
+	return d
+}
 
 func main() {
 	_ = godotenv.Load() // load .env if present
-	cfgDir := filepath.Join(".", "config")
+	cfgDir := resolveConfigDir()
 	cfg, err := config.LoadConfig(filepath.Join(cfgDir, "config.json"))
 	if err != nil {
 		log.Fatalf("config: %v", err)

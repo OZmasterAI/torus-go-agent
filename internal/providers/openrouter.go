@@ -11,7 +11,7 @@ import (
 	"os"
 	"strings"
 
-	t "go_sdk_agent/internal/types"
+	t "torus_go_agent/internal/types"
 )
 
 const openrouterBaseURL = "https://openrouter.ai/api/v1"

@@ -13,7 +13,7 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"go_sdk_agent/internal/types"
+	"torus_go_agent/internal/types"
 )
 
 // ---------------------------------------------------------------------------
@@ -267,7 +267,7 @@ func (c *MCPClient) AddServer(name, command string, args []string, env map[strin
 	initParams := mcpInitializeParams{
 		ProtocolVersion: "2024-11-05",
 		ClientInfo: mcpClientInfo{
-			Name:    "go_sdk_agent",
+			Name:    "torus_go_agent",
 			Version: "1.0.0",
 		},
 		Capabilities: map[string]any{},

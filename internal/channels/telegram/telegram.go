@@ -9,10 +9,10 @@ import (
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 
-	"go_sdk_agent/internal/channels"
-	"go_sdk_agent/internal/config"
-	"go_sdk_agent/internal/core"
-	"go_sdk_agent/internal/features"
+	"torus_go_agent/internal/channels"
+	"torus_go_agent/internal/config"
+	"torus_go_agent/internal/core"
+	"torus_go_agent/internal/features"
 )
 
 func init() { channels.Register(&telegramChannel{}) }

@@ -1,4 +1,4 @@
-module go_sdk_agent
+module torus_go_agent
 
 go 1.25.7
 

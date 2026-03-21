@@ -6,9 +6,9 @@ import (
 	"sync"
 	"time"
 
-	"go_sdk_agent/internal/core"
-	"go_sdk_agent/internal/tools"
-	"go_sdk_agent/internal/types"
+	"torus_go_agent/internal/core"
+	"torus_go_agent/internal/tools"
+	"torus_go_agent/internal/types"
 )
 
 // Tool is a local alias to avoid repeating the full qualified name throughout this file.

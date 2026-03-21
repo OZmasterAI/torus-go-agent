@@ -1,4 +1,4 @@
-// Package ui provides a Bubble Tea terminal user interface for go_sdk_agent.
+// Package ui provides a Bubble Tea terminal user interface for torus_go_agent.
 package ui
 
 import (
@@ -18,10 +18,10 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/rivo/uniseg"
 
-	"go_sdk_agent/internal/commands"
-	"go_sdk_agent/internal/config"
-	"go_sdk_agent/internal/core"
-	"go_sdk_agent/internal/features"
+	"torus_go_agent/internal/commands"
+	"torus_go_agent/internal/config"
+	"torus_go_agent/internal/core"
+	"torus_go_agent/internal/features"
 )
 
 // ── Styles ────────────────────────────────────────────────────────────────────

@@ -1,11 +1,11 @@
 package tui
 
 import (
-	"go_sdk_agent/internal/channels"
-	"go_sdk_agent/internal/config"
-	"go_sdk_agent/internal/core"
-	"go_sdk_agent/internal/features"
-	"go_sdk_agent/internal/ui"
+	"torus_go_agent/internal/channels"
+	"torus_go_agent/internal/config"
+	"torus_go_agent/internal/core"
+	"torus_go_agent/internal/features"
+	"torus_go_agent/internal/ui"
 )
 
 func init() { channels.Register(&tuiChannel{}) }
