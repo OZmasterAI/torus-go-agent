@@ -233,8 +233,16 @@ func (d *DAG) RemoveNode(nodeID string) error {
 	if parentID.Valid {
 		newHead = parentID.String
 	}
-	d.db.Exec("DELETE FROM nodes WHERE id = ?", nodeID)
-	d.db.Exec("UPDATE branches SET head_node_id = ? WHERE id = ?", newHead, d.branchID)
+	tx, err := d.db.Begin()
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+	tx.Exec("DELETE FROM nodes WHERE id = ?", nodeID)
+	tx.Exec("UPDATE branches SET head_node_id = ? WHERE id = ?", newHead, d.branchID)
+	if err := tx.Commit(); err != nil {
+		tx.Rollback()
+		return fmt.Errorf("remove node: %w", err)
+	}
 	return nil
 }
 
