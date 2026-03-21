@@ -51,7 +51,6 @@ func NewSubAgentManager() *SubAgentManager {
 	return &SubAgentManager{}
 }
 
-// Spawn creates a new isolated DAG branch from the parent's current head, builds a
 // SpawnWithProvider is the entry point for launching sub-agents.  It creates a new Agent on an isolated
 // DAG branch with the given provider, system prompt, and tool set, then runs it in a goroutine.
 func (m *SubAgentManager) SpawnWithProvider(
