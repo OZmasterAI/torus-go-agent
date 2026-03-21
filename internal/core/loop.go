@@ -180,10 +180,7 @@ func (a *Agent) runLoop(ctx context.Context, userMessage string, ch chan<- Agent
 		}
 		messages = llmData.Messages
 
-		var toolDefs []Tool
-		for _, t := range a.config.Tools {
-			toolDefs = append(toolDefs, t)
-		}
+		toolDefs := append([]Tool(nil), a.config.Tools...)
 
 		activeProvider := a.provider
 		if a.RouteProvider != nil {
