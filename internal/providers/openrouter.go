@@ -657,13 +657,3 @@ func (p *OpenRouterProvider) parseOpenAISSE(ctx context.Context, resp *http.Resp
 	})
 }
 
-// ExtractTextOpenAI extracts text from an OpenAI-format response.
-func ExtractTextOpenAI(msg *t.AssistantMessage) string {
-	var parts []string
-	for _, b := range msg.Content {
-		if b.Type == "text" {
-			parts = append(parts, b.Text)
-		}
-	}
-	return strings.Join(parts, "")
-}

@@ -208,16 +208,7 @@ func (p *AnthropicProvider) Complete(ctx context.Context, systemPrompt string, m
 		return nil, fmt.Errorf("create request: %w", err)
 	}
 
-	httpReq.Header.Set("Content-Type", "application/json")
-	if IsOAuthToken(p.APIKey) {
-		httpReq.Header.Set("Authorization", "Bearer "+p.APIKey)
-		httpReq.Header.Set("anthropic-beta", "claude-code-20250219,oauth-2025-04-20")
-		httpReq.Header.Set("user-agent", "claude-cli/1.0.0")
-		httpReq.Header.Set("x-app", "cli")
-	} else {
-		httpReq.Header.Set("x-api-key", p.APIKey)
-	}
-	httpReq.Header.Set("anthropic-version", anthropicVersion)
+	p.setHeaders(httpReq)
 
 	resp, err := p.client.Do(httpReq)
 	if err != nil {
