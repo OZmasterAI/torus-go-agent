@@ -99,20 +99,29 @@ func NewDAG(dbPath string) (*DAG, error) {
 
 	d := &DAG{db: db}
 	var count int
-	db.QueryRow("SELECT COUNT(*) FROM branches").Scan(&count)
+	if err := db.QueryRow("SELECT COUNT(*) FROM branches").Scan(&count); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("count branches: %w", err)
+	}
 	if count == 0 {
 		id := "br_" + genID()
-		db.Exec("INSERT INTO branches (id, name, head_node_id) VALUES (?, ?, ?)", id, "main", "")
+		if _, err := db.Exec("INSERT INTO branches (id, name, head_node_id) VALUES (?, ?, ?)", id, "main", ""); err != nil {
+			db.Close()
+			return nil, fmt.Errorf("create main branch: %w", err)
+		}
 		d.branchID = id
 	} else {
 		// Pick the most recently created branch by finding the newest head node timestamp.
 		// Branches with empty heads (from /new) get timestamp 0, so they sort last unless they're the only option.
-		db.QueryRow(`
+		if err := db.QueryRow(`
 			SELECT b.id FROM branches b
 			LEFT JOIN nodes n ON n.id = b.head_node_id
 			ORDER BY COALESCE(n.timestamp, 0) DESC
 			LIMIT 1
-		`).Scan(&d.branchID)
+		`).Scan(&d.branchID); err != nil {
+			db.Close()
+			return nil, fmt.Errorf("select branch: %w", err)
+		}
 	}
 	return d, nil
 }
