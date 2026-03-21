@@ -623,6 +623,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if input == "/branches" {
 				return m.handleBranches()
 			}
+			if strings.HasPrefix(input, "/alias") {
+				return m.handleAlias(strings.TrimPrefix(input, "/alias"))
+			}
 			if strings.HasPrefix(input, "/messages") {
 				return m.handleMessages(strings.TrimPrefix(input, "/messages"))
 			}
@@ -1151,6 +1154,8 @@ func (m *Model) executePaletteCommand(cmd string) (tea.Model, tea.Cmd) {
 		return m.handleFork("")
 	case "/branches":
 		return m.handleBranches()
+	case "/alias":
+		return m.handleAlias("")
 	case "/messages":
 		return m.handleMessages("")
 	case "/steering":
@@ -1690,6 +1695,7 @@ func (m Model) renderHelp() string {
 		{"/fork", "Fork branch (head, -back N, node ID, branch)"},
 		{"/switch", "Switch branch (list, index, ID)"},
 		{"/branches", "List all branches"},
+		{"/alias", "Name a node (/alias <name> [node-id])"},
 		{"/messages", "Show message history"},
 		{"/steering", "Set steering mode"},
 		{"/stats", "Show session stats"},

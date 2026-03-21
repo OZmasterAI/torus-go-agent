@@ -361,6 +361,13 @@ func (d *DAG) SetAlias(nodeID, alias string) error {
 	return err
 }
 
+// NextAutoAlias returns the next available auto-alias (a1, a2, ...) by finding the current max.
+func (d *DAG) NextAutoAlias() string {
+	var maxN int
+	d.db.QueryRow("SELECT COALESCE(MAX(CAST(SUBSTR(alias, 2) AS INTEGER)), 0) FROM node_aliases WHERE alias GLOB 'a[0-9]*'").Scan(&maxN)
+	return fmt.Sprintf("a%d", maxN+1)
+}
+
 // ResolveAlias returns the node ID for a given alias, or sql.ErrNoRows if not found.
 func (d *DAG) ResolveAlias(alias string) (string, error) {
 	var nodeID string

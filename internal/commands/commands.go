@@ -265,6 +265,35 @@ func ParseForkArgs(args string) (action, value string) {
 	return "node", args
 }
 
+// Alias sets or removes a manual alias on a node. If name is empty, removes aliases from the node.
+// If nodeID is empty, uses the current head.
+func Alias(dag *core.DAG, nodeID, name string) (string, error) {
+	if nodeID == "" {
+		head, err := dag.GetHead()
+		if err != nil || head == "" {
+			return "", fmt.Errorf("no head on current branch")
+		}
+		nodeID = head
+	} else {
+		resolved, err := dag.ResolveNodeOrAlias(nodeID)
+		if err != nil {
+			return "", err
+		}
+		nodeID = resolved
+	}
+	if name == "" {
+		aliases, _ := dag.GetAliases(nodeID)
+		for _, a := range aliases {
+			dag.DeleteAlias(a)
+		}
+		return fmt.Sprintf("Removed aliases from %s", nodeID[:8]), nil
+	}
+	if err := dag.SetAlias(nodeID, name); err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("Aliased %s → %s", nodeID[:8], name), nil
+}
+
 // ParseSwitchArgs parses /switch arguments.
 // Returns: mode ("list", "index", "id"), value string.
 func ParseSwitchArgs(args string) (mode, value string) {

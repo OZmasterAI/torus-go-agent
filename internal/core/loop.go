@@ -214,11 +214,12 @@ func (a *Agent) runLoop(ctx context.Context, userMessage string, ch chan<- Agent
 			resp = afterLLM.Response
 		}
 
-		_, err = a.dag.AddNode(currentHead, t.RoleAssistant, resp.Content, resp.Model, a.provider.Name(), resp.Usage.TotalTokens)
+		nodeID, err := a.dag.AddNode(currentHead, t.RoleAssistant, resp.Content, resp.Model, a.provider.Name(), resp.Usage.TotalTokens)
 		if err != nil {
 			emit(AgentEvent{Type: EventAgentError, Error: fmt.Errorf("add assistant node: %w", err)})
 			return
 		}
+		a.dag.SetAlias(nodeID, a.dag.NextAutoAlias())
 
 		if !HasToolUse(resp) {
 			finalText = ExtractText(resp)

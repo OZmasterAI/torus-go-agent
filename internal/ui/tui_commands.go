@@ -89,6 +89,33 @@ func (m *Model) handleSteering(args string) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+func (m *Model) handleAlias(args string) (tea.Model, tea.Cmd) {
+	parts := strings.Fields(strings.TrimSpace(args))
+	var nodeID, name string
+	switch len(parts) {
+	case 0:
+		m.messages = append(m.messages, displayMsg{role: "error", text: "Usage: /alias <name> [node-id]", isError: true})
+		m.input = ""
+		m.cursorPos = 0
+		m.rebuildContent()
+		return m, nil
+	case 1:
+		name = parts[0]
+	default:
+		name, nodeID = parts[0], parts[1]
+	}
+	result, err := commands.Alias(m.agent.DAG(), nodeID, name)
+	if err != nil {
+		m.messages = append(m.messages, displayMsg{role: "error", text: fmt.Sprintf("alias: %v", err), isError: true})
+	} else {
+		m.messages = append(m.messages, displayMsg{role: "assistant", text: result})
+	}
+	m.input = ""
+	m.cursorPos = 0
+	m.rebuildContent()
+	return m, nil
+}
+
 func (m *Model) handleBranches() (tea.Model, tea.Cmd) {
 	branches, err := commands.ListBranches(m.agent.DAG())
 	if err != nil {
