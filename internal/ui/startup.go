@@ -725,11 +725,11 @@ var (
 			Foreground(lipgloss.Color("242")).
 			Italic(true)
 
-	// Torus character luminance styles (orange gradient, matching TORUS title).
-	torusDimStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("166")) // orange
-	torusMidStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("172")) // bright orange
-	torusBrightStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("208")) // amber
-	torusMaxStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("214")) // light amber
+	// Torus character luminance styles (neon orange gradient).
+	torusDimStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("#993300")) // dim ember
+	torusMidStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("#cc4400")) // warm orange
+	torusBrightStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#ff4d01")) // neon orange
+	torusMaxStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("#ff6600")) // hot orange
 
 	textInputStyle = lipgloss.NewStyle().
 			Foreground(colorBrightAmber).

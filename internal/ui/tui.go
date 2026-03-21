@@ -225,6 +225,7 @@ type Model struct {
 	barPos       int
 	barDir       int
 	startTime    time.Time
+	lastElapsed  time.Duration // duration of last completed response
 	ctxProgress  progress.Model
 
 	// Usage
@@ -604,6 +605,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.cursorPos = 0
 			m.processing = true
 			m.streaming = true
+			m.lastElapsed = 0
 			m.statusPhrase = "Toroidal meditation running..."
 			m.startTime = time.Now()
 			m.statusLine = m.buildStatus(0, 0, 0, 0)
@@ -771,6 +773,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case agentResponseMsg:
 		m.processing = false
 		m.streaming = false
+		m.lastElapsed = msg.elapsed
 		m.deltaCh = nil
 		m.toolCh = nil
 		m.resizeViewport()
@@ -1137,10 +1140,16 @@ func (m Model) View() string {
 			sb.WriteByte('\n')
 		}
 
-		// Progress bar above the input borders (with blank line spacing)
+		// Progress bar (streaming) or completion indicator (done)
 		if m.processing {
 			sb.WriteByte('\n')
 			sb.WriteString(m.renderProgressBar())
+			sb.WriteByte('\n')
+		} else if m.lastElapsed > 0 {
+			completionStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#ff4d01"))
+			checkStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#00cc66"))
+			elapsed := fmtDuration(m.lastElapsed)
+			sb.WriteString(checkStyle.Render("  ✔") + completionStyle.Render(fmt.Sprintf(" Worked for %s", elapsed)))
 			sb.WriteByte('\n')
 		}
 
