@@ -698,15 +698,25 @@ const visibleItems = 10
 
 // ── ASCII art title ───────────────────────────────────────────────────────────
 
-const asciiTitle = ` ████████╗  ██████╗  ██████╗  ██╗   ██╗ ███████╗
- ╚══██╔══╝ ██╔═══██╗ ██╔══██╗ ██║   ██║ ██╔════╝
-    ██║    ██║   ██║ ██████╔╝ ██║   ██║ ███████╗
-    ██║    ██║   ██║ ██╔══██╗ ██║   ██║ ╚════██║
-    ██║    ╚██████╔╝ ██║  ██║ ╚██████╔╝ ███████║
-    ╚═╝     ╚═════╝  ╚═╝  ╚═╝  ╚═════╝  ╚══════╝
-         ╔═╗ ╔═╗  ╔═╗ ╔═╗ ╔═╗ ╔╗╔ ╔╦╗
-         ║ ╦ ║ ║  ╠═╣ ║ ╦ ║╣  ║║║  ║
-         ╚═╝ ╚═╝  ╚ ╚ ╚═╝ ╚═╝ ╝╚╝  ╩`
+const asciiTitle = "" +
+	"::::::::::::    ...     :::::::..    ...    ::: .::::::.                   \n" +
+	";;;;;;;;'''' .;;;;;;;.  ;;;;``;;;;   ;;     ;;;;;;`    `                   \n" +
+	"     [[     ,[[     \\[[, [[[,/[[['  [['     [[['[==/[[[[,                  \n" +
+	"     $$     $$$,     $$$ $$$$$$c    $$      $$$  '''    $                  \n" +
+	"     88,    \"888,_ _,88P 888b \"88bo,88    .d888 88b    dP                  \n" +
+	"     MMM      \"YMMMMMP\"  MMMM   \"W\"  \"YmmMMMM\"\"  \"YMmMY\"                  \n" +
+	"                                                                          \n" +
+	"                                                                          \n" +
+	"  .,-:::::/               :::.                                    `::     \n" +
+	",;;-'````'                ;;`;;                                    ;;     \n" +
+	"[[[   [[[[[[/ ,ccc,      ,[[ '[[,    ,ccc,   ,cc[[[cc. [ccccc,  =[[[[[[.\n" +
+	"\"$$c.    \"$$ $$$\"c$$$   c$$$cc$$$c  $$$cc$$$ $$$___--' $$$$\"$$$    $$     \n" +
+	" `Y8bo,,,o88o888   88    888   888  888   88888b    ,o,888  Y88o   88,   \n" +
+	"   `'YMUP\"YMM \"YUMMP     YMM   \\\"\\\"` \"YUM\" MP \"YUMMMMP\"MMM  \"MMM   MMM   \n" +
+	"                                          MMM                            \n" +
+	"                                    ,c.   ###                            \n" +
+	"                                    \\M###MMU                             \n" +
+	"                                     'YMUP\"                              "
 
 // Neon orange gradient colors for title animation (wave effect).
 var titleGradient = []lipgloss.Color{
@@ -729,9 +739,19 @@ var titleGradient = []lipgloss.Color{
 func renderAnimatedTitle(title string, phase float64) string {
 	lines := strings.Split(title, "\n")
 	gradLen := len(titleGradient)
+	// Find max line width so all lines pad to the same width (uniform centering).
+	maxW := 0
+	for _, line := range lines {
+		if w := len([]rune(line)); w > maxW {
+			maxW = w
+		}
+	}
 	var sb strings.Builder
 	for _, line := range lines {
 		runes := []rune(line)
+		for len(runes) < maxW {
+			runes = append(runes, ' ')
+		}
 		for col, ch := range runes {
 			if ch == ' ' {
 				sb.WriteByte(' ')
