@@ -1,6 +1,10 @@
 package core
 
-import "encoding/json"
+import (
+	"encoding/json"
+
+	t "torus_go_agent/internal/types"
+)
 
 // Tokenizer provides token counting for messages before sending to the LLM.
 // Since no native Go tokenizer exists for Claude models, we use a calibrated
@@ -12,7 +16,7 @@ const charsPerToken = 3.5
 // EstimateTokens returns a calibrated token estimate for a slice of messages.
 // It marshals the messages to JSON and divides by charsPerToken.
 // This is the fast path — O(n) in message content size, no network calls.
-func EstimateTokens(messages []Message) int {
+func EstimateTokens(messages []t.Message) int {
 	data, err := json.Marshal(messages)
 	if err != nil {
 		// Fall back to rough sum of content lengths.
@@ -35,7 +39,7 @@ func EstimateTokensForText(text string) int {
 // EstimatePromptCost returns a total token estimate for a full request:
 // system prompt + messages + tool schemas combined.
 // Tools are marshaled to JSON to account for their schema definitions.
-func EstimatePromptCost(systemPrompt string, messages []Message, tools []Tool) int {
+func EstimatePromptCost(systemPrompt string, messages []t.Message, tools []t.Tool) int {
 	total := EstimateTokensForText(systemPrompt)
 	total += EstimateTokens(messages)
 	if len(tools) > 0 {
@@ -46,17 +50,16 @@ func EstimatePromptCost(systemPrompt string, messages []Message, tools []Tool) i
 
 // estimateToolTokens marshals the tool definitions (name, description, schema)
 // to JSON and estimates their token cost.
-func estimateToolTokens(tools []Tool) int {
+func estimateToolTokens(tools []t.Tool) int {
 	// Marshal only the JSON-visible fields (Execute is tagged json:"-").
 	data, err := json.Marshal(tools)
 	if err != nil {
 		// Rough fallback: sum name + description lengths.
 		total := 0
-		for _, t := range tools {
-			total += len(t.Name) + len(t.Description)
+		for _, tool := range tools {
+			total += len(tool.Name) + len(tool.Description)
 		}
 		return int(float64(total) / charsPerToken)
 	}
 	return int(float64(len(data)) / charsPerToken)
 }
-

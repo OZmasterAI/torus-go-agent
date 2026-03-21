@@ -22,6 +22,7 @@ import (
 	"torus_go_agent/internal/config"
 	"torus_go_agent/internal/core"
 	"torus_go_agent/internal/features"
+	"torus_go_agent/internal/types"
 )
 
 // ── Styles ────────────────────────────────────────────────────────────────────
@@ -587,7 +588,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			if m.processing {
 				if m.agent.Steering != nil {
-					m.agent.Steering <- core.Message{Role: "user", Content: []core.ContentBlock{{Type: "text", Text: input}}}
+					m.agent.Steering <- types.Message{Role: "user", Content: []types.ContentBlock{{Type: "text", Text: input}}}
 					m.messages = append(m.messages, displayMsg{role: "user", text: "\u21aa " + input})
 					m.input = ""
 					m.cursorPos = 0
@@ -672,7 +673,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.toolCh = toolCh
 			m.statusCh = statusCh
 			if m.agent.Steering == nil {
-				m.agent.Steering = make(chan core.Message, 16)
+				m.agent.Steering = make(chan types.Message, 16)
 			}
 			m.resizeViewport()
 			m.rebuildContent()

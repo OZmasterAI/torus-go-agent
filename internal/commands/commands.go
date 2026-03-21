@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"torus_go_agent/internal/core"
+	"torus_go_agent/internal/types"
 )
 
 // BranchSummary is a display-friendly branch listing.
@@ -311,7 +312,7 @@ func FormatMessageList(messages []MessageSummary) string {
 	return sb.String()
 }
 
-func extractPreview(content []core.ContentBlock, maxLen int) string {
+func extractPreview(content []types.ContentBlock, maxLen int) string {
 	for _, b := range content {
 		text := b.Text
 		if text == "" {

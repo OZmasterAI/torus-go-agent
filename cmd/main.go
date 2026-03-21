@@ -19,6 +19,7 @@ import (
 	"torus_go_agent/internal/providers"
 	"torus_go_agent/internal/safety"
 	"torus_go_agent/internal/tools"
+	"torus_go_agent/internal/types"
 	"torus_go_agent/internal/ui"
 )
 
@@ -194,11 +195,11 @@ func main() {
 	hooks.Register(core.HookBeforeContextBuild, "dag-context", func(ctx context.Context, d *core.HookData) error {
 		brID, brName, headNode, msgCount := dag.CurrentBranchInfo()
 		contextLine := fmt.Sprintf("[DAG state] branch: %s (%s), head: %s, messages: %d", brID, brName, headNode, msgCount)
-		state := core.Message{
-			Role:    core.RoleUser,
-			Content: []core.ContentBlock{{Type: "text", Text: contextLine}},
+		state := types.Message{
+			Role:    types.RoleUser,
+			Content: []types.ContentBlock{{Type: "text", Text: contextLine}},
 		}
-		d.Messages = append([]core.Message{state}, d.Messages...)
+		d.Messages = append([]types.Message{state}, d.Messages...)
 		return nil
 	})
 
@@ -212,7 +213,7 @@ func main() {
 			// Branch already has messages — don't double-inject
 			return
 		}
-		dag.AddNode("", core.RoleUser, []core.ContentBlock{{Type: "text", Text: schema}}, "", "", 0)
+		dag.AddNode("", types.RoleUser, []types.ContentBlock{{Type: "text", Text: schema}}, "", "", 0)
 	}
 	// On app start: inject into current branch if empty
 	injectSchema()
@@ -295,8 +296,8 @@ func main() {
 	subMgr := features.NewSubAgentManager()
 
 	// Create agent
-	agent := core.NewAgent(core.AgentConfig{
-		Provider: core.ProviderConfig{
+	agent := core.NewAgent(types.AgentConfig{
+		Provider: types.ProviderConfig{
 			Name:      cfg.Agent.Provider,
 			Model:     cfg.Agent.Model,
 			APIKey:    key,
@@ -313,7 +314,7 @@ func main() {
 	// Wire smart routing if configured
 	if cfg.Agent.SmartRouting && cfg.Agent.SmartRoutingModel != "" {
 		smartProv := makeProvider(cfg.Agent.Provider, key, cfg.Agent.SmartRoutingModel, &cfg.Agent)
-		agent.RouteProvider = func(userMessage string) core.Provider {
+		agent.RouteProvider = func(userMessage string) types.Provider {
 			if features.IsSimpleMessage(userMessage) {
 				return smartProv
 			}
@@ -351,7 +352,7 @@ func main() {
 	}
 
 	// Add recall_branch tool — search across all DAG branches
-	agent.AddTool(core.Tool{
+	agent.AddTool(types.Tool{
 		Name:        "recall_branch",
 		Description: "Search all conversation branches for messages matching a query. Returns relevant excerpts from any branch.",
 		InputSchema: map[string]any{
@@ -362,17 +363,17 @@ func main() {
 			},
 			"required": []string{"query"},
 		},
-		Execute: func(args map[string]any) (*core.ToolResult, error) {
+		Execute: func(args map[string]any) (*types.ToolResult, error) {
 			query, _ := args["query"].(string)
 			limit := int(tools.GF(args, "limit", 5))
 			rows, err := dag.SearchAll(query, limit)
 			if err != nil {
-				return &core.ToolResult{Content: "Error: " + err.Error(), IsError: true}, nil
+				return &types.ToolResult{Content: "Error: " + err.Error(), IsError: true}, nil
 			}
 			if rows == "" {
-				return &core.ToolResult{Content: "(no matches across any branch)"}, nil
+				return &types.ToolResult{Content: "(no matches across any branch)"}, nil
 			}
-			return &core.ToolResult{Content: rows}, nil
+			return &types.ToolResult{Content: rows}, nil
 		},
 	})
 
@@ -384,7 +385,7 @@ func main() {
 	}
 	agent.Summarize = func(keyContent string) (string, error) {
 		prompt := "Summarize this conversation concisely, preserving key decisions, tool results, and context needed to continue:\n\n" + keyContent
-		msgs := []core.Message{{Role: core.RoleUser, Content: []core.ContentBlock{{Type: "text", Text: prompt}}}}
+		msgs := []types.Message{{Role: types.RoleUser, Content: []types.ContentBlock{{Type: "text", Text: prompt}}}}
 		resp, err := compactProv.Complete(context.Background(), "You are a conversation summarizer. Be concise.", msgs, nil, 2048)
 		if err != nil {
 			return "", err
@@ -393,7 +394,7 @@ func main() {
 	}
 
 	// Add spawn tool (needs agent reference, so added after agent creation)
-	agent.AddTool(core.Tool{
+	agent.AddTool(types.Tool{
 		Name:        "spawn",
 		Description: "Spawn a sub-agent to work on a task in the background. Types: builder, researcher, tester.",
 		InputSchema: map[string]any{
@@ -404,7 +405,7 @@ func main() {
 			},
 			"required": []string{"task", "agent_type"},
 		},
-		Execute: func(args map[string]any) (*core.ToolResult, error) {
+		Execute: func(args map[string]any) (*types.ToolResult, error) {
 			task, _ := args["task"].(string)
 			agentType, _ := args["agent_type"].(string)
 			id, err := subMgr.SpawnWithProvider(agent, prov, soul, features.SubAgentConfig{
@@ -414,14 +415,14 @@ func main() {
 				MaxTurns:  20,
 			})
 			if err != nil {
-				return &core.ToolResult{Content: "Spawn failed: " + err.Error(), IsError: true}, nil
+				return &types.ToolResult{Content: "Spawn failed: " + err.Error(), IsError: true}, nil
 			}
-			return &core.ToolResult{Content: fmt.Sprintf("Sub-agent spawned: %s (type: %s)", id, agentType)}, nil
+			return &types.ToolResult{Content: fmt.Sprintf("Sub-agent spawned: %s (type: %s)", id, agentType)}, nil
 		},
 	})
 
 	// Add delegate tool — synchronous agent-as-tool (LLM calls another agent, waits for result)
-	agent.AddTool(core.Tool{
+	agent.AddTool(types.Tool{
 		Name:        "delegate",
 		Description: "Delegate a task to a sub-agent and wait for the result. Use for tasks that need focused work. Types: builder, researcher, tester.",
 		InputSchema: map[string]any{
@@ -432,7 +433,7 @@ func main() {
 			},
 			"required": []string{"task", "agent_type"},
 		},
-		Execute: func(args map[string]any) (*core.ToolResult, error) {
+		Execute: func(args map[string]any) (*types.ToolResult, error) {
 			task, _ := args["task"].(string)
 			agentType, _ := args["agent_type"].(string)
 			id, err := subMgr.SpawnWithProvider(agent, prov, soul, features.SubAgentConfig{
@@ -442,13 +443,13 @@ func main() {
 				MaxTurns:  20,
 			})
 			if err != nil {
-				return &core.ToolResult{Content: "Delegate failed: " + err.Error(), IsError: true}, nil
+				return &types.ToolResult{Content: "Delegate failed: " + err.Error(), IsError: true}, nil
 			}
 			result := subMgr.Wait(id)
 			if result.Error != nil {
-				return &core.ToolResult{Content: "Sub-agent error: " + result.Error.Error(), IsError: true}, nil
+				return &types.ToolResult{Content: "Sub-agent error: " + result.Error.Error(), IsError: true}, nil
 			}
-			return &core.ToolResult{Content: result.Text}, nil
+			return &types.ToolResult{Content: result.Text}, nil
 		},
 	})
 

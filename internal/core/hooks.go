@@ -4,6 +4,8 @@ import (
 	"context"
 	"sort"
 	"sync"
+
+	t "torus_go_agent/internal/types"
 )
 
 type HookPoint string
@@ -47,9 +49,9 @@ type HookData struct {
 	AgentID     string
 	ToolName    string
 	ToolArgs    map[string]any
-	ToolResult  *ToolResult
-	Messages    []Message
-	Response    *AssistantMessage
+	ToolResult  *t.ToolResult
+	Messages    []t.Message
+	Response    *t.AssistantMessage
 	TokensIn    int
 	TokensOut   int
 	Block       bool

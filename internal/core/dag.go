@@ -10,18 +10,19 @@ import (
 	"strings"
 	"time"
 
+	t "torus_go_agent/internal/types"
 	_ "modernc.org/sqlite"
 )
 
 type Node struct {
-	ID         string         `json:"id"`
-	ParentID   string         `json:"parent_id"`
-	Role       string         `json:"role"`
-	Content    []ContentBlock `json:"content"`
-	Model      string         `json:"model"`
-	Provider   string         `json:"provider"`
-	Timestamp  int64          `json:"timestamp"`
-	TokenCount int            `json:"token_count"`
+	ID         string           `json:"id"`
+	ParentID   string           `json:"parent_id"`
+	Role       string           `json:"role"`
+	Content    []t.ContentBlock `json:"content"`
+	Model      string           `json:"model"`
+	Provider   string           `json:"provider"`
+	Timestamp  int64            `json:"timestamp"`
+	TokenCount int              `json:"token_count"`
 }
 
 type BranchInfo struct {
@@ -109,7 +110,7 @@ func NewDAG(dbPath string) (*DAG, error) {
 	return d, nil
 }
 
-func (d *DAG) AddNode(parentID string, role Role, content []ContentBlock, model, provider string, tokenCount int) (string, error) {
+func (d *DAG) AddNode(parentID string, role t.Role, content []t.ContentBlock, model, provider string, tokenCount int) (string, error) {
 	id := "nd_" + genID()
 	cj, err := json.Marshal(content)
 	if err != nil {
@@ -172,14 +173,14 @@ func (d *DAG) GetAncestors(nodeID string) ([]Node, error) {
 	return ancestors, nil
 }
 
-func (d *DAG) PromptFrom(nodeID string) ([]Message, error) {
+func (d *DAG) PromptFrom(nodeID string) ([]t.Message, error) {
 	anc, err := d.GetAncestors(nodeID)
 	if err != nil {
 		return nil, err
 	}
-	msgs := make([]Message, len(anc))
+	msgs := make([]t.Message, len(anc))
 	for i, n := range anc {
-		msgs[i] = Message{Role: Role(n.Role), Content: n.Content}
+		msgs[i] = t.Message{Role: t.Role(n.Role), Content: n.Content}
 	}
 	return msgs, nil
 }

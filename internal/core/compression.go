@@ -3,6 +3,8 @@ package core
 import (
 	"fmt"
 	"strings"
+
+	t "torus_go_agent/internal/types"
 )
 
 // MessageScore represents the importance of a message.
@@ -16,7 +18,7 @@ const (
 )
 
 // ScoreMessage assigns an importance score to a message based on heuristics.
-func ScoreMessage(m Message) MessageScore {
+func ScoreMessage(m t.Message) MessageScore {
 	if len(m.Content) == 0 {
 		return ScoreZero
 	}
@@ -68,17 +70,17 @@ func ScoreMessage(m Message) MessageScore {
 	}
 
 	// User messages with questions — high
-	if m.Role == RoleUser && strings.ContainsAny(text, "?") {
+	if m.Role == t.RoleUser && strings.ContainsAny(text, "?") {
 		return ScoreHigh
 	}
 
 	// Assistant messages with decisions/answers (longer = more likely important)
-	if m.Role == RoleAssistant && textLen > 200 {
+	if m.Role == t.RoleAssistant && textLen > 200 {
 		return ScoreHigh
 	}
 
 	// User instructions (longer messages are usually more important)
-	if m.Role == RoleUser && textLen > 100 {
+	if m.Role == t.RoleUser && textLen > 100 {
 		return ScoreHigh
 	}
 
@@ -88,8 +90,8 @@ func ScoreMessage(m Message) MessageScore {
 // CompressMessage shortens a message's text content to maxChars.
 // Tool results get summarized to their first line + truncation notice.
 // Regular text gets truncated with "..." suffix.
-func CompressMessage(m Message, maxChars int) Message {
-	compressed := Message{Role: m.Role}
+func CompressMessage(m t.Message, maxChars int) t.Message {
+	compressed := t.Message{Role: m.Role}
 	for _, b := range m.Content {
 		switch b.Type {
 		case "tool_result":
@@ -105,7 +107,7 @@ func CompressMessage(m Message, maxChars int) Message {
 				}
 				content = fmt.Sprintf("%s\n[...truncated from %d chars]", firstLine, len(b.Content))
 			}
-			compressed.Content = append(compressed.Content, ContentBlock{
+			compressed.Content = append(compressed.Content, t.ContentBlock{
 				Type:      "tool_result",
 				ToolUseID: b.ToolUseID,
 				Content:   content,
@@ -116,7 +118,7 @@ func CompressMessage(m Message, maxChars int) Message {
 			if len(text) > maxChars {
 				text = text[:maxChars] + "\n[...truncated]"
 			}
-			compressed.Content = append(compressed.Content, ContentBlock{Type: "text", Text: text})
+			compressed.Content = append(compressed.Content, t.ContentBlock{Type: "text", Text: text})
 		default:
 			// Keep tool_use and other blocks as-is
 			compressed.Content = append(compressed.Content, b)
@@ -131,7 +133,7 @@ func CompressMessage(m Message, maxChars int) Message {
 //
 // The keepLast parameter controls how many recent messages are always kept verbatim.
 // The minMessages parameter sets the minimum message count before compression activates (0 = use keepLast).
-func ContinuousCompress(messages []Message, keepLast, minMessages int) []Message {
+func ContinuousCompress(messages []t.Message, keepLast, minMessages int) []t.Message {
 	if keepLast <= 0 {
 		keepLast = 10
 	}
@@ -143,7 +145,7 @@ func ContinuousCompress(messages []Message, keepLast, minMessages int) []Message
 		return messages
 	}
 
-	result := make([]Message, n)
+	result := make([]t.Message, n)
 
 	// Recent messages: keep verbatim
 	verbatimStart := n - keepLast
@@ -161,7 +163,7 @@ func ContinuousCompress(messages []Message, keepLast, minMessages int) []Message
 		switch {
 		case score == ScoreZero:
 			// Drop entirely — replace with empty
-			result[i] = Message{Role: messages[i].Role}
+			result[i] = t.Message{Role: messages[i].Role}
 			continue
 		case age > 30 && score <= ScoreLow:
 			maxChars = 50 // 1 line
@@ -202,7 +204,7 @@ type ZoneBudget struct {
 //   [history messages — fills remaining budget]
 //
 // Messages should already be compressed via ContinuousCompress before calling this.
-func ApplyZoneBudget(messages []Message, budget ZoneBudget) []Message {
+func ApplyZoneBudget(messages []t.Message, budget ZoneBudget) []t.Message {
 	if budget.ContextWindow <= 0 {
 		return messages
 	}
@@ -248,7 +250,7 @@ func ApplyZoneBudget(messages []Message, budget ZoneBudget) []Message {
 
 	// Archive = messages before historyStart, trimmed to archiveBudget
 	// Always include index 0 (schema message) regardless of budget
-	var archive []Message
+	var archive []t.Message
 	archiveTokens := 0
 	if historyStart > 0 {
 		archive = append(archive, messages[0])
@@ -264,7 +266,7 @@ func ApplyZoneBudget(messages []Message, budget ZoneBudget) []Message {
 	}
 
 	// Assemble: archive + history (includes current message)
-	result := make([]Message, 0, len(archive)+n-historyStart)
+	result := make([]t.Message, 0, len(archive)+n-historyStart)
 	result = append(result, archive...)
 	result = append(result, messages[historyStart:]...)
 	return result

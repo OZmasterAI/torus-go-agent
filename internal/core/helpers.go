@@ -2,6 +2,8 @@ package core
 
 import (
 	"strings"
+
+	t "torus_go_agent/internal/types"
 )
 
 // AgentEventType identifies the kind of agent-level event.
@@ -25,13 +27,13 @@ type AgentEvent struct {
 	Turn       int             // turn_start/turn_end: turn number
 	ToolName   string          // tool_start/tool_end: tool name
 	ToolArgs   map[string]any  // tool_start: arguments
-	ToolResult *ToolResult     // tool_end: result
+	ToolResult *t.ToolResult   // tool_end: result
 	Error      error           // error: the error
 	StatusHook string          // status: hook name that triggered this update
 }
 
 // HasToolUse checks if an assistant message wants to use tools.
-func HasToolUse(msg *AssistantMessage) bool {
+func HasToolUse(msg *t.AssistantMessage) bool {
 	for _, b := range msg.Content {
 		if b.Type == "tool_use" {
 			return true
@@ -41,8 +43,8 @@ func HasToolUse(msg *AssistantMessage) bool {
 }
 
 // ExtractToolCalls returns all tool_use blocks from a response.
-func ExtractToolCalls(msg *AssistantMessage) []ContentBlock {
-	var calls []ContentBlock
+func ExtractToolCalls(msg *t.AssistantMessage) []t.ContentBlock {
+	var calls []t.ContentBlock
 	for _, b := range msg.Content {
 		if b.Type == "tool_use" {
 			calls = append(calls, b)
@@ -52,7 +54,7 @@ func ExtractToolCalls(msg *AssistantMessage) []ContentBlock {
 }
 
 // ExtractText returns concatenated text from a response.
-func ExtractText(msg *AssistantMessage) string {
+func ExtractText(msg *t.AssistantMessage) string {
 	var parts []string
 	for _, b := range msg.Content {
 		if b.Type == "text" && b.Text != "" {

@@ -4,26 +4,28 @@ import (
 	"context"
 	"fmt"
 	"log"
+
+	t "torus_go_agent/internal/types"
 )
 
 // Agent is the DAG-based ReAct agent loop.
 type Agent struct {
-	config        AgentConfig
-	provider      Provider
+	config        t.AgentConfig
+	provider      t.Provider
 	hooks         *HookRegistry
 	dag           *DAG
 	compaction    CompactionConfig
 	steeringMode  string // "mild" (default) or "aggressive"
 	Summarize     func(string) (string, error)
 	OnStreamDelta func(delta string)
-	OnToolUse     func(name string, args map[string]any, result *ToolResult)
+	OnToolUse     func(name string, args map[string]any, result *t.ToolResult)
 	OnStatusUpdate func(hookName string)
-	Steering      chan Message
-	RouteProvider func(userMessage string) Provider
+	Steering      chan t.Message
+	RouteProvider func(userMessage string) t.Provider
 }
 
 // NewAgent creates a new agent.
-func NewAgent(config AgentConfig, provider Provider, hooks *HookRegistry, dag *DAG) *Agent {
+func NewAgent(config t.AgentConfig, provider t.Provider, hooks *HookRegistry, dag *DAG) *Agent {
 	return &Agent{
 		config:   config,
 		provider: provider,
@@ -101,8 +103,8 @@ func (a *Agent) runLoop(ctx context.Context, userMessage string, ch chan<- Agent
 	a.hooks.Fire(ctx, HookOnAgentStart, &HookData{AgentID: "main"})
 
 	head, _ := a.dag.GetHead()
-	userContent := []ContentBlock{{Type: "text", Text: userMessage}}
-	userNodeID, err := a.dag.AddNode(head, RoleUser, userContent, "", "", 0)
+	userContent := []t.ContentBlock{{Type: "text", Text: userMessage}}
+	userNodeID, err := a.dag.AddNode(head, t.RoleUser, userContent, "", "", 0)
 	if err != nil {
 		emit(AgentEvent{Type: EventAgentError, Error: fmt.Errorf("add user node: %w", err)})
 		return
@@ -180,14 +182,14 @@ func (a *Agent) runLoop(ctx context.Context, userMessage string, ch chan<- Agent
 		}
 		messages = llmData.Messages
 
-		toolDefs := append([]Tool(nil), a.config.Tools...)
+		toolDefs := append([]t.Tool(nil), a.config.Tools...)
 
 		activeProvider := a.provider
 		if a.RouteProvider != nil {
 			activeProvider = a.RouteProvider(userMessage)
 		}
 
-		var resp *AssistantMessage
+		var resp *t.AssistantMessage
 		var llmErr error
 		streamCh, streamErr := activeProvider.StreamComplete(ctx, a.config.SystemPrompt, messages, toolDefs, a.config.Provider.MaxTokens)
 		if streamErr != nil {
@@ -212,7 +214,7 @@ func (a *Agent) runLoop(ctx context.Context, userMessage string, ch chan<- Agent
 			resp = afterLLM.Response
 		}
 
-		_, err = a.dag.AddNode(currentHead, RoleAssistant, resp.Content, resp.Model, a.provider.Name(), resp.Usage.TotalTokens)
+		_, err = a.dag.AddNode(currentHead, t.RoleAssistant, resp.Content, resp.Model, a.provider.Name(), resp.Usage.TotalTokens)
 		if err != nil {
 			emit(AgentEvent{Type: EventAgentError, Error: fmt.Errorf("add assistant node: %w", err)})
 			return
@@ -255,17 +257,17 @@ func (a *Agent) runLoop(ctx context.Context, userMessage string, ch chan<- Agent
 			tc.Input = toolData.ToolArgs
 			emit(AgentEvent{Type: EventAgentToolStart, ToolName: tc.Name, ToolArgs: tc.Input})
 
-			var result *ToolResult
+			var result *t.ToolResult
 			if toolData.Block {
-				result = &ToolResult{ToolUseID: tc.ID, Content: fmt.Sprintf("[BLOCKED] %s", toolData.BlockReason), IsError: true}
+				result = &t.ToolResult{ToolUseID: tc.ID, Content: fmt.Sprintf("[BLOCKED] %s", toolData.BlockReason), IsError: true}
 			} else {
 				tool := a.findTool(tc.Name)
 				if tool == nil {
-					result = &ToolResult{ToolUseID: tc.ID, Content: fmt.Sprintf("Tool '%s' not found", tc.Name), IsError: true}
+					result = &t.ToolResult{ToolUseID: tc.ID, Content: fmt.Sprintf("Tool '%s' not found", tc.Name), IsError: true}
 				} else {
 					r, execErr := tool.Execute(tc.Input)
 					if execErr != nil {
-						result = &ToolResult{ToolUseID: tc.ID, Content: fmt.Sprintf("Tool error: %s", execErr.Error()), IsError: true}
+						result = &t.ToolResult{ToolUseID: tc.ID, Content: fmt.Sprintf("Tool error: %s", execErr.Error()), IsError: true}
 					} else {
 						result = r
 						result.ToolUseID = tc.ID
@@ -281,8 +283,8 @@ func (a *Agent) runLoop(ctx context.Context, userMessage string, ch chan<- Agent
 			emit(AgentEvent{Type: EventAgentToolEnd, ToolName: tc.Name, ToolArgs: tc.Input, ToolResult: result})
 
 			toolHead, _ := a.dag.GetHead()
-			toolContent := []ContentBlock{{Type: "tool_result", ToolUseID: result.ToolUseID, Content: result.Content, IsError: result.IsError}}
-			a.dag.AddNode(toolHead, RoleTool, toolContent, "", "", 0)
+			toolContent := []t.ContentBlock{{Type: "tool_result", ToolUseID: result.ToolUseID, Content: result.Content, IsError: result.IsError}}
+			a.dag.AddNode(toolHead, t.RoleTool, toolContent, "", "", 0)
 		}
 
 		steerData := &HookData{AgentID: "main", Response: resp, Messages: nil}
@@ -307,15 +309,15 @@ func (a *Agent) runLoop(ctx context.Context, userMessage string, ch chan<- Agent
 	emit(AgentEvent{Type: EventAgentDone, Text: finalText})
 }
 
-func consumeStreamEmit(streamCh <-chan StreamEvent, emit func(AgentEvent)) (*AssistantMessage, error) {
-	var resp *AssistantMessage
+func consumeStreamEmit(streamCh <-chan t.StreamEvent, emit func(AgentEvent)) (*t.AssistantMessage, error) {
+	var resp *t.AssistantMessage
 	for ev := range streamCh {
 		switch ev.Type {
-		case EventTextDelta:
+		case t.EventTextDelta:
 			emit(AgentEvent{Type: EventAgentTextDelta, Text: ev.Text})
-		case EventError:
+		case t.EventError:
 			return nil, ev.Error
-		case EventMessageStop:
+		case t.EventMessageStop:
 			resp = ev.Response
 		}
 	}
@@ -325,7 +327,7 @@ func consumeStreamEmit(streamCh <-chan StreamEvent, emit func(AgentEvent)) (*Ass
 	return resp, nil
 }
 
-func (a *Agent) findTool(name string) *Tool {
+func (a *Agent) findTool(name string) *t.Tool {
 	for i := range a.config.Tools {
 		if a.config.Tools[i].Name == name {
 			return &a.config.Tools[i]
@@ -336,7 +338,7 @@ func (a *Agent) findTool(name string) *Tool {
 
 func (a *Agent) DAG() *DAG                { return a.dag }
 func (a *Agent) Hooks() *HookRegistry     { return a.hooks }
-func (a *Agent) AddTool(t Tool)            { a.config.Tools = append(a.config.Tools, t) }
+func (a *Agent) AddTool(tool t.Tool)        { a.config.Tools = append(a.config.Tools, tool) }
 func (a *Agent) SetSteeringMode(mode string) { a.steeringMode = mode }
 func (a *Agent) GetSteeringMode() string {
 	if a.steeringMode == "" {

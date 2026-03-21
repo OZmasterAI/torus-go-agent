@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+
+	t "torus_go_agent/internal/types"
 )
 
 // CompactionMode controls how the context window is managed when it fills up.
@@ -64,7 +66,7 @@ var estimateTokens = EstimateTokens
 
 // NeedsCompaction returns true when compaction should trigger based on the
 // configured trigger mode: "tokens" (default), "messages", or "both".
-func NeedsCompaction(messages []Message, cfg CompactionConfig) bool {
+func NeedsCompaction(messages []t.Message, cfg CompactionConfig) bool {
 	cfg = defaultCompactionConfig(cfg)
 	if cfg.Mode == CompactionOff {
 		return false
@@ -100,14 +102,14 @@ func NeedsCompaction(messages []Message, cfg CompactionConfig) bool {
 // last keepLastN messages. Everything in between is dropped.
 //
 // If len(messages) <= keepLastN+1 the slice is returned unchanged.
-func CompactSliding(messages []Message, keepLastN int) []Message {
+func CompactSliding(messages []t.Message, keepLastN int) []t.Message {
 	if keepLastN <= 0 {
 		keepLastN = 10
 	}
 	if len(messages) <= keepLastN+1 {
 		return messages
 	}
-	result := make([]Message, 0, keepLastN+1)
+	result := make([]t.Message, 0, keepLastN+1)
 	result = append(result, messages[0]) // always keep the first
 	tail := messages[len(messages)-keepLastN:]
 	result = append(result, tail...)
@@ -124,7 +126,7 @@ func CompactSliding(messages []Message, keepLastN int) []Message {
 // Falls back to extractKeyContent (no LLM call) when:
 //   - summarize is nil
 //   - the summarize call returns an error
-func CompactLLM(messages []Message, keepLastN int, summarize func(string) (string, error)) ([]Message, error) {
+func CompactLLM(messages []t.Message, keepLastN int, summarize func(string) (string, error)) ([]t.Message, error) {
 	if keepLastN <= 0 {
 		keepLastN = 10
 	}
@@ -148,16 +150,16 @@ func CompactLLM(messages []Message, keepLastN int, summarize func(string) (strin
 		summary = keyContent
 	}
 
-	summaryMsg := Message{
-		Role: RoleAssistant,
-		Content: []ContentBlock{{
+	summaryMsg := t.Message{
+		Role: t.RoleAssistant,
+		Content: []t.ContentBlock{{
 			Type: "text",
 			Text: fmt.Sprintf("[Context Summary]\n\n%s", summary),
 		}},
 	}
 
 	tail := messages[len(messages)-keepLastN:]
-	result := make([]Message, 0, 2+len(tail))
+	result := make([]t.Message, 0, 2+len(tail))
 	result = append(result, messages[0])
 	result = append(result, summaryMsg)
 	result = append(result, tail...)
@@ -167,17 +169,17 @@ func CompactLLM(messages []Message, keepLastN int, summarize func(string) (strin
 // extractKeyContent walks messages and builds a concise textual representation
 // of the conversation, prefixed with speaker labels. The result is truncated
 // to 2000 characters so it is always safe to embed in a downstream prompt.
-func extractKeyContent(messages []Message) string {
+func extractKeyContent(messages []t.Message) string {
 	var sb strings.Builder
 	for _, m := range messages {
 		switch m.Role {
-		case RoleUser:
+		case t.RoleUser:
 			sb.WriteString("[User]\n")
-		case RoleAssistant:
+		case t.RoleAssistant:
 			sb.WriteString("[Assistant]\n")
-		case RoleSystem:
+		case t.RoleSystem:
 			sb.WriteString("[System]\n")
-		case RoleTool:
+		case t.RoleTool:
 			// Tool messages may contain multiple blocks; label each.
 		}
 		for _, b := range m.Content {
@@ -286,11 +288,11 @@ func CompactDAG(dag *DAG, cfg CompactionConfig, summarize func(string) (string, 
 	}
 
 	// --- 6. Add summary node ---
-	summaryContent := []ContentBlock{{
+	summaryContent := []t.ContentBlock{{
 		Type: "text",
 		Text: fmt.Sprintf("[Context Summary]\n\n%s", summary),
 	}}
-	summaryNodeID, err := dag.AddNode(rootNode.ID, RoleAssistant, summaryContent, "", "", estimateTokens([]Message{{Role: RoleAssistant, Content: summaryContent}}))
+	summaryNodeID, err := dag.AddNode(rootNode.ID, t.RoleAssistant, summaryContent, "", "", estimateTokens([]t.Message{{Role: t.RoleAssistant, Content: summaryContent}}))
 	if err != nil {
 		return fmt.Errorf("compactDAG add summary node: %w", err)
 	}
@@ -299,7 +301,7 @@ func CompactDAG(dag *DAG, cfg CompactionConfig, summarize func(string) (string, 
 	tail := messages[len(messages)-keepN:]
 	parentID := summaryNodeID
 	for _, msg := range tail {
-		nodeID, err := dag.AddNode(parentID, msg.Role, msg.Content, "", "", estimateTokens([]Message{msg}))
+		nodeID, err := dag.AddNode(parentID, msg.Role, msg.Content, "", "", estimateTokens([]t.Message{msg}))
 		if err != nil {
 			return fmt.Errorf("compactDAG re-add tail node: %w", err)
 		}
@@ -317,10 +319,10 @@ func CompactDAG(dag *DAG, cfg CompactionConfig, summarize func(string) (string, 
 
 // nodesToMessages converts a slice of DAG nodes to the Message type used by
 // providers and compaction helpers.
-func nodesToMessages(nodes []Node) []Message {
-	msgs := make([]Message, len(nodes))
+func nodesToMessages(nodes []Node) []t.Message {
+	msgs := make([]t.Message, len(nodes))
 	for i, n := range nodes {
-		msgs[i] = Message{Role: Role(n.Role), Content: n.Content}
+		msgs[i] = t.Message{Role: t.Role(n.Role), Content: n.Content}
 	}
 	return msgs
 }
@@ -329,10 +331,10 @@ func nodesToMessages(nodes []Node) []Message {
 //   - Filters out empty text blocks (text: "")
 //   - Deduplicates identical text blocks within the same message
 //   - Merges consecutive messages with the same role
-func sanitizeMessages(messages []Message) []Message {
+func sanitizeMessages(messages []t.Message) []t.Message {
 	// Pass 1: clean blocks within each message
 	for i := range messages {
-		var cleaned []ContentBlock
+		var cleaned []t.ContentBlock
 		seen := map[string]bool{}
 		for _, b := range messages[i].Content {
 			// Skip empty text blocks
@@ -352,12 +354,12 @@ func sanitizeMessages(messages []Message) []Message {
 	}
 
 	// Pass 2: merge consecutive same-role messages (skip tool messages — they must stay separate)
-	var merged []Message
+	var merged []t.Message
 	for _, m := range messages {
 		if len(m.Content) == 0 {
 			continue
 		}
-		if len(merged) > 0 && merged[len(merged)-1].Role == m.Role && m.Role != RoleTool {
+		if len(merged) > 0 && merged[len(merged)-1].Role == m.Role && m.Role != t.RoleTool {
 			merged[len(merged)-1].Content = append(merged[len(merged)-1].Content, m.Content...)
 		} else {
 			merged = append(merged, m)
