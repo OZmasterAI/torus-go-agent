@@ -638,8 +638,6 @@ func DefaultProviderGroups() []ProviderGroup {
 var (
 	colorBrightAmber = lipgloss.Color("166")
 	colorOrange      = lipgloss.Color("130")
-	colorDarkOrange  = lipgloss.Color("94")
-	colorDimOrange   = lipgloss.Color("88")
 	colorMutedGold   = lipgloss.Color("130")
 	colorDarkBg      = lipgloss.Color("52")
 )
