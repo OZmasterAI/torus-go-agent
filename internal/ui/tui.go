@@ -1079,18 +1079,13 @@ func (m Model) renderToolCard(ev *toolEvent, maxWidth int) string {
 			sb.WriteString("  " + styleToolDim.Render(truncPath(ev.filePath, cardW-2)) + "\n")
 		}
 
-	case "glob":
+	case "glob", "grep":
 		pat, _ := ev.args["pattern"].(string)
 		matches := strings.Count(ev.result, "\n")
 		if ev.result != "" && !strings.Contains(ev.result, "no matches") {
 			matches++
 		}
 		sb.WriteString("  " + styleToolDim.Render(fmt.Sprintf("%s → %d matches", pat, matches)) + "\n")
-
-	case "grep":
-		pat, _ := ev.args["pattern"].(string)
-		matches := strings.Count(ev.result, "\n")
-		sb.WriteString("  " + styleToolDim.Render(fmt.Sprintf("/%s/ → %d matches", pat, matches)) + "\n")
 
 	default:
 		// MCP or custom tools
