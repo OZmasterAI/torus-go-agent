@@ -546,9 +546,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tickMsg:
 		if m.processing {
 			m.spinnerFrame++
-			barW := m.width - 22
-			if barW < 10 {
-				barW = 10
+			barW := 30
+			if m.width < 80 {
+				barW = 20
 			}
 			m.barPos += m.barDir * 2
 			if m.barPos >= barW-1 {
@@ -1622,9 +1622,9 @@ func wrapText(text string, maxWidth int) string {
 }
 
 func (m Model) renderProgressBar() string {
-	barW := m.width - 22
-	if barW < 10 {
-		barW = 10
+	barW := 30
+	if m.width < 80 {
+		barW = 20
 	}
 	var bar strings.Builder
 	for i := 0; i < barW; i++ {
