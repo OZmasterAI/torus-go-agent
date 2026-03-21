@@ -489,7 +489,6 @@ func main() {
 		AgentID: "main",
 	})
 	log.Printf("[telemetry] %s", telemetry.Summary())
-	_ = subMgr // keep reference alive
 }
 
 // makeProvider creates a Provider for the given provider name, API key, and model.
