@@ -1,8 +1,12 @@
 package ui
 
 import (
+	"encoding/json"
 	"fmt"
+	"io"
 	"math"
+	"net/http"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -10,6 +14,134 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
+
+// ── OpenRouter model fetching ─────────────────────────────────────────────────
+
+type openRouterModelResp struct {
+	Data []openRouterModel `json:"data"`
+}
+
+type openRouterModel struct {
+	ID            string `json:"id"`
+	Name          string `json:"name"`
+	Created       int64  `json:"created"`
+	ContextLength int    `json:"context_length"`
+	Pricing       struct {
+		Prompt     string `json:"prompt"`
+		Completion string `json:"completion"`
+	} `json:"pricing"`
+	TopProvider *struct {
+		MaxCompletionTokens int `json:"max_completion_tokens"`
+	} `json:"top_provider"`
+	Architecture struct {
+		OutputModalities []string `json:"output_modalities"`
+	} `json:"architecture"`
+}
+
+// fetchOpenRouterModels fetches all text models from the OpenRouter API and
+// returns them as categories: FREE MODELS first, then one category per author.
+// Returns nil on error (caller falls back to hardcoded defaults).
+func fetchOpenRouterModels() []ModelCategory {
+	client := &http.Client{Timeout: 8 * time.Second}
+	resp, err := client.Get("https://openrouter.ai/api/v1/models")
+	if err != nil {
+		return nil
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		return nil
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil
+	}
+
+	var data openRouterModelResp
+	if json.Unmarshal(body, &data) != nil {
+		return nil
+	}
+
+	// Filter text-output models only
+	var textModels []openRouterModel
+	for _, m := range data.Data {
+		for _, mod := range m.Architecture.OutputModalities {
+			if mod == "text" {
+				textModels = append(textModels, m)
+				break
+			}
+		}
+	}
+
+	// Sort all by newest first
+	sort.Slice(textModels, func(i, j int) bool {
+		return textModels[i].Created > textModels[j].Created
+	})
+
+	now := time.Now().Unix()
+	thirtyDays := int64(30 * 24 * 60 * 60)
+
+	toChoice := func(m openRouterModel) ModelChoice {
+		maxTokens := 0
+		if m.TopProvider != nil {
+			maxTokens = m.TopProvider.MaxCompletionTokens
+		}
+		tag := ""
+		if now-m.Created < thirtyDays {
+			tag = " [New]"
+		}
+		if m.Pricing.Prompt == "0" && m.Pricing.Completion == "0" {
+			if tag == "" {
+				tag = " [Free]"
+			} else {
+				tag += " [Free]"
+			}
+		}
+		return ModelChoice{
+			Name:          m.Name + tag,
+			ID:            m.ID,
+			ContextWindow: m.ContextLength,
+			MaxTokens:     maxTokens,
+		}
+	}
+
+	// Build FREE MODELS category
+	var freeChoices []ModelChoice
+	for _, m := range textModels {
+		if m.Pricing.Prompt == "0" && m.Pricing.Completion == "0" {
+			freeChoices = append(freeChoices, toChoice(m))
+		}
+	}
+	freeChoices = append(freeChoices, ModelChoice{Name: "Custom model ID", ID: ""})
+
+	// Build per-author categories
+	authorOrder := []string{}
+	authorModels := map[string][]ModelChoice{}
+	for _, m := range textModels {
+		author := m.ID
+		if idx := strings.IndexByte(author, '/'); idx > 0 {
+			author = author[:idx]
+		}
+		if _, seen := authorModels[author]; !seen {
+			authorOrder = append(authorOrder, author)
+		}
+		authorModels[author] = append(authorModels[author], toChoice(m))
+	}
+	sort.Strings(authorOrder)
+
+	// Assemble: FREE MODELS first, then alphabetical authors
+	categories := []ModelCategory{
+		{Name: "FREE MODELS", Models: freeChoices},
+	}
+	for _, author := range authorOrder {
+		models := authorModels[author]
+		models = append(models, ModelChoice{Name: "Custom model ID", ID: ""})
+		categories = append(categories, ModelCategory{Name: author, Models: models})
+	}
+
+	return categories
+}
 
 // SetupResult holds the configuration choices from the setup screen.
 type SetupResult struct {
@@ -173,29 +305,165 @@ func (o *AgentConfigOverrides) toggleBool(idx int) {
 // torusFrames provides spinner characters used by the main TUI (tui.go).
 var torusFrames = []string{"◐", "◓", "◑", "◒"}
 
-// ProviderChoice holds a provider option for the startup menu.
+// ProviderChoice holds a provider option for the startup menu (flat, for backward compat).
 type ProviderChoice struct {
 	Name          string
-	Provider      string // "openrouter", "nvidia", or "anthropic"
+	Provider      string // provider key: "openrouter", "nvidia", "anthropic", "openai", "grok", "azure", "gemini", "vertex"
 	Model         string
 	NeedsKey      string // env var name
 	ContextWindow int    // model's context window size
 	MaxTokens     int    // max output tokens
 }
 
-// DefaultProviderChoices returns the standard options.
-func DefaultProviderChoices() []ProviderChoice {
-	return []ProviderChoice{
-		{Name: "OpenRouter (hunter-alpha)", Provider: "openrouter", Model: "openrouter/hunter-alpha", NeedsKey: "OPENROUTER_API_KEY", ContextWindow: 128000, MaxTokens: 8192},
-		{Name: "OpenRouter (nemotron-3-super)", Provider: "openrouter", Model: "nvidia/nemotron-3-super-120b-a12b:free", NeedsKey: "OPENROUTER_API_KEY", ContextWindow: 131072, MaxTokens: 8192},
-		{Name: "OpenRouter (step-3.5-flash)", Provider: "openrouter", Model: "stepfun/step-3.5-flash:free", NeedsKey: "OPENROUTER_API_KEY", ContextWindow: 128000, MaxTokens: 8192},
-		{Name: "NVIDIA NIM (GLM-4.7)", Provider: "nvidia", Model: "z-ai/glm4.7", NeedsKey: "NVIDIA_API_KEY", ContextWindow: 32768, MaxTokens: 8192},
-		{Name: "NVIDIA NIM (Qwen3.5-122B)", Provider: "nvidia", Model: "qwen/qwen3.5-122b-a10b", NeedsKey: "NVIDIA_API_KEY", ContextWindow: 262144, MaxTokens: 16384},
-		{Name: "NVIDIA NIM (llama-3.3-70b)", Provider: "nvidia", Model: "meta/llama-3.3-70b-instruct", NeedsKey: "NVIDIA_API_KEY", ContextWindow: 128000, MaxTokens: 8192},
-		{Name: "Anthropic Claude (OAuth)", Provider: "anthropic", Model: "claude-sonnet-4-5-20250929", NeedsKey: "", ContextWindow: 200000, MaxTokens: 64000},
-		{Name: "Anthropic Claude (API key)", Provider: "anthropic", Model: "claude-sonnet-4-5-20250929", NeedsKey: "ANTHROPIC_API_KEY", ContextWindow: 200000, MaxTokens: 64000},
-		{Name: "Custom model", Provider: "", Model: "", NeedsKey: "", ContextWindow: 128000, MaxTokens: 8192},
+// AuthMethod represents an authentication option for a provider.
+type AuthMethod struct {
+	Name     string // display name, e.g. "OAuth", "API key"
+	NeedsKey string // env var name ("" for OAuth)
+}
+
+// ModelCategory groups models under a named category (e.g. "FREE MODELS").
+// Providers with categories get an extra selection step: provider → category → model.
+type ModelCategory struct {
+	Name   string
+	Models []ModelChoice
+}
+
+// ProviderGroup groups models and auth methods under a single provider.
+type ProviderGroup struct {
+	Name        string           // display name, e.g. "Anthropic Claude"
+	ProviderKey string           // "anthropic", "openrouter", etc. ("" = custom)
+	AuthMethods []AuthMethod     // if len > 1, user picks auth before model
+	Models      []ModelChoice    // direct models (used when Categories is empty)
+	Categories  []ModelCategory  // if set, user picks category before model
+}
+
+// ModelChoice is a single model within a provider group.
+type ModelChoice struct {
+	Name          string
+	ID            string // model ID sent to API
+	ContextWindow int
+	MaxTokens     int
+}
+
+// DefaultProviderGroups returns the grouped provider options.
+func DefaultProviderGroups() []ProviderGroup {
+	return []ProviderGroup{
+		{
+			Name: "OpenRouter", ProviderKey: "openrouter",
+			AuthMethods: []AuthMethod{{Name: "API key", NeedsKey: "OPENROUTER_API_KEY"}},
+			Categories: []ModelCategory{
+				{Name: "FREE MODELS", Models: []ModelChoice{
+					{Name: "hunter-alpha", ID: "openrouter/hunter-alpha", ContextWindow: 128000, MaxTokens: 8192},
+					{Name: "nemotron-3-super (free)", ID: "nvidia/nemotron-3-super-120b-a12b:free", ContextWindow: 131072, MaxTokens: 8192},
+					{Name: "step-3.5-flash (free)", ID: "stepfun/step-3.5-flash:free", ContextWindow: 128000, MaxTokens: 8192},
+					{Name: "Custom model ID", ID: ""},
+				}},
+			},
+		},
+		{
+			Name: "NVIDIA NIM", ProviderKey: "nvidia",
+			AuthMethods: []AuthMethod{{Name: "API key", NeedsKey: "NVIDIA_API_KEY"}},
+			Models: []ModelChoice{
+				{Name: "GLM-4.7", ID: "z-ai/glm4.7", ContextWindow: 32768, MaxTokens: 8192},
+				{Name: "Qwen3.5-122B", ID: "qwen/qwen3.5-122b-a10b", ContextWindow: 262144, MaxTokens: 16384},
+				{Name: "llama-3.3-70b", ID: "meta/llama-3.3-70b-instruct", ContextWindow: 128000, MaxTokens: 8192},
+				{Name: "Custom model ID", ID: ""},
+			},
+		},
+		{
+			Name: "Anthropic Claude", ProviderKey: "anthropic",
+			AuthMethods: []AuthMethod{
+				{Name: "OAuth (no key needed)", NeedsKey: ""},
+				{Name: "API key", NeedsKey: "ANTHROPIC_API_KEY"},
+			},
+			Models: []ModelChoice{
+				{Name: "Claude Opus 4.6", ID: "claude-opus-4-6", ContextWindow: 200000, MaxTokens: 32000},
+				{Name: "Claude Sonnet 4.6", ID: "claude-sonnet-4-6", ContextWindow: 200000, MaxTokens: 64000},
+				{Name: "Claude Sonnet 4.5", ID: "claude-sonnet-4-5-20250929", ContextWindow: 200000, MaxTokens: 64000},
+				{Name: "Claude Haiku 4.5", ID: "claude-haiku-4-5-20251001", ContextWindow: 200000, MaxTokens: 8192},
+				{Name: "Custom model ID", ID: ""},
+			},
+		},
+		{
+			Name: "OpenAI", ProviderKey: "openai",
+			AuthMethods: []AuthMethod{{Name: "API key", NeedsKey: "OPENAI_API_KEY"}},
+			Models: []ModelChoice{
+				{Name: "GPT-4o", ID: "gpt-4o", ContextWindow: 128000, MaxTokens: 16384},
+				{Name: "o3-mini", ID: "o3-mini", ContextWindow: 200000, MaxTokens: 100000},
+				{Name: "Custom model ID", ID: ""},
+			},
+		},
+		{
+			Name: "Grok (xAI)", ProviderKey: "grok",
+			AuthMethods: []AuthMethod{{Name: "API key", NeedsKey: "XAI_API_KEY"}},
+			Models: []ModelChoice{
+				{Name: "grok-3-mini", ID: "grok-3-mini", ContextWindow: 131072, MaxTokens: 8192},
+				{Name: "Custom model ID", ID: ""},
+			},
+		},
+		{
+			Name: "Google Gemini", ProviderKey: "gemini",
+			AuthMethods: []AuthMethod{{Name: "API key", NeedsKey: "GEMINI_API_KEY"}},
+			Models: []ModelChoice{
+				{Name: "Gemini 2.5 Flash", ID: "gemini-2.5-flash-preview-05-20", ContextWindow: 1048576, MaxTokens: 65536},
+				{Name: "Gemini 2.5 Pro", ID: "gemini-2.5-pro-preview-05-06", ContextWindow: 1048576, MaxTokens: 65536},
+				{Name: "Custom model ID", ID: ""},
+			},
+		},
+		{
+			Name: "Azure OpenAI", ProviderKey: "azure",
+			AuthMethods: []AuthMethod{{Name: "API key", NeedsKey: "AZURE_OPENAI_API_KEY"}},
+			Models: []ModelChoice{
+				{Name: "Use deployment name", ID: "", ContextWindow: 128000, MaxTokens: 16384},
+			},
+		},
+		{
+			Name: "Vertex AI", ProviderKey: "vertex",
+			AuthMethods: []AuthMethod{{Name: "Access token", NeedsKey: "VERTEX_ACCESS_TOKEN"}},
+			Models: []ModelChoice{
+				{Name: "Gemini 2.5 Flash", ID: "gemini-2.5-flash-preview-05-20", ContextWindow: 1048576, MaxTokens: 65536},
+				{Name: "Custom model ID", ID: ""},
+			},
+		},
+		{
+			Name: "Custom provider", ProviderKey: "",
+		},
 	}
+}
+
+// DefaultProviderChoices returns the flat provider list (kept for backward compat).
+func DefaultProviderChoices() []ProviderChoice {
+	var choices []ProviderChoice
+	for _, g := range DefaultProviderGroups() {
+		if g.ProviderKey == "" {
+			choices = append(choices, ProviderChoice{Name: "Custom model", Provider: "", Model: ""})
+			continue
+		}
+		needsKey := ""
+		if len(g.AuthMethods) > 0 {
+			needsKey = g.AuthMethods[0].NeedsKey
+		}
+		// Collect models from categories or direct models list
+		var models []ModelChoice
+		if len(g.Categories) > 0 {
+			for _, cat := range g.Categories {
+				models = append(models, cat.Models...)
+			}
+		} else {
+			models = g.Models
+		}
+		for _, m := range models {
+			if m.ID == "" {
+				continue
+			}
+			choices = append(choices, ProviderChoice{
+				Name: g.Name + " (" + m.Name + ")", Provider: g.ProviderKey,
+				Model: m.ID, NeedsKey: needsKey,
+				ContextWindow: m.ContextWindow, MaxTokens: m.MaxTokens,
+			})
+		}
+	}
+	return choices
 }
 
 // ── Color palette (amber/orange) ──────────────────────────────────────────────
@@ -259,7 +527,14 @@ var (
 
 	promptLabelStyle = lipgloss.NewStyle().
 				Foreground(colorMutedGold)
+
+	scrollIndicatorStyle = lipgloss.NewStyle().
+				Foreground(lipgloss.Color("242")).
+				Italic(true)
 )
+
+// Maximum number of menu items visible before scrolling kicks in.
+const visibleItems = 10
 
 // ── ASCII art title ───────────────────────────────────────────────────────────
 
@@ -269,21 +544,6 @@ const asciiTitle = ` ████████╗  ██████╗  ██�
     ██║    ██║   ██║ ██╔══██╗ ██║   ██║ ╚════██║
     ██║    ╚██████╔╝ ██║  ██║ ╚██████╔╝ ███████║
     ╚═╝     ╚═════╝  ╚═╝  ╚═╝  ╚═════╝  ╚══════╝`
-
-// ── Anthropic model choices ───────────────────────────────────────────────────
-
-type anthropicModel struct {
-	Name string
-	ID   string
-}
-
-var anthropicModels = []anthropicModel{
-	{Name: "Claude Opus 4.6", ID: "claude-opus-4-6"},
-	{Name: "Claude Sonnet 4.6", ID: "claude-sonnet-4-6"},
-	{Name: "Claude Sonnet 4.5", ID: "claude-sonnet-4-5-20250929"},
-	{Name: "Claude Haiku 4.5", ID: "claude-haiku-4-5-20251001"},
-	{Name: "Custom model ID", ID: ""},
-}
 
 // ── Tick command for startup animation ────────────────────────────────────────
 // tickMsg is declared in tui.go as `type tickMsg time.Time` (same package).
@@ -304,19 +564,28 @@ type setupModel struct {
 	torusA, torusB float64
 	torusFrame     string
 
-	// Menu
-	phase   int // 0=main, 1=provider, 2=anthropic, 3=config mode, 4=edit settings
-	cursor  int
-	choices []ProviderChoice
+	// Menu phases:
+	// 0=main, 1=pick provider, 2=pick auth, 3=pick category (if any), 4=pick model, 5=config mode, 6=edit settings
+	phase        int
+	cursor       int
+	scrollOffset int // first visible item index for scrollable menus
+
+	// Provider groups (phase 1)
+	groups []ProviderGroup
+
+	// Current selection state
+	selectedGroup    *ProviderGroup  // set after phase 1
+	selectedAuth     *AuthMethod     // set after phase 2 (or auto-set if single auth)
+	selectedCategory *ModelCategory  // set after phase 3 (or nil if no categories)
 
 	// Text input for custom provider/model
 	textInput string
 	inputMode bool // true when typing custom provider/model
 	inputStep int  // 0=provider name, 1=model id
 
-	// Config customization (phase 3 = choose config mode, phase 4 = edit settings)
+	// Config customization (phase 5 = choose config mode, phase 6 = edit settings)
 	configOverrides *AgentConfigOverrides
-	configCursor    int    // cursor for config editing in phase 4
+	configCursor    int    // cursor for config editing in phase 6
 	editingConfig   bool   // true when editing a numeric/string value
 	editBuffer      string // text buffer for numeric/string input
 
@@ -327,9 +596,19 @@ type setupModel struct {
 }
 
 func newSetupModel() setupModel {
-	m := setupModel{
-		choices: DefaultProviderChoices(),
+	groups := DefaultProviderGroups()
+
+	// Fetch live OpenRouter models; replace all categories on success
+	if cats := fetchOpenRouterModels(); len(cats) > 0 {
+		for i := range groups {
+			if groups[i].ProviderKey == "openrouter" {
+				groups[i].Categories = cats
+				break
+			}
+		}
 	}
+
+	m := setupModel{groups: groups}
 	m.torusFrame = renderTorus(m.torusA, m.torusB)
 	return m
 }
@@ -363,7 +642,7 @@ func (m setupModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m setupModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	// ── Config editing mode (phase 4 inline edit) ────────────────
+	// ── Config editing mode (phase 5 inline edit) ────────────────
 	if m.editingConfig {
 		return m.handleConfigEdit(msg)
 	}
@@ -383,38 +662,67 @@ func (m setupModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, tea.Quit
 
 	case "up", "k":
+		total := m.menuLen()
 		if m.cursor > 0 {
 			m.cursor--
+		} else {
+			// Wrap to bottom
+			m.cursor = total - 1
 		}
+		m.scrollOffset = clampScrollOffset(m.cursor, m.scrollOffset, total)
 
 	case "down", "j":
-		max := m.menuLen() - 1
-		if m.cursor < max {
+		total := m.menuLen()
+		if m.cursor < total-1 {
 			m.cursor++
+		} else {
+			// Wrap to top
+			m.cursor = 0
 		}
+		m.scrollOffset = clampScrollOffset(m.cursor, m.scrollOffset, total)
 
 	case "enter":
 		return m.selectItem()
 
 	case "esc":
 		switch m.phase {
-		case 4:
-			m.phase = 3
+		case 6: // settings → config mode
+			m.phase = 5
 			m.cursor = 0
-		case 3:
-			// Go back to where we came from (phase 1 or 0)
-			if m.provider != "" {
-				// We already picked a provider, go back to provider select
-				m.phase = 1
+			m.scrollOffset = 0
+		case 5: // config mode → model select
+			m.phase = 4
+			m.cursor = 0
+			m.scrollOffset = 0
+		case 4: // model → category (if any) or auth/provider
+			if m.selectedCategory != nil {
+				m.phase = 3
+			} else if m.selectedGroup != nil && len(m.selectedGroup.AuthMethods) > 1 {
+				m.phase = 2
 			} else {
-				m.phase = 0
+				m.phase = 1
 			}
 			m.cursor = 0
-		default:
-			if m.phase > 0 {
-				m.phase--
-				m.cursor = 0
+			m.scrollOffset = 0
+		case 3: // category → auth (if multi-auth) or provider
+			m.selectedCategory = nil
+			if m.selectedGroup != nil && len(m.selectedGroup.AuthMethods) > 1 {
+				m.phase = 2
+			} else {
+				m.phase = 1
 			}
+			m.cursor = 0
+			m.scrollOffset = 0
+		case 2: // auth → provider
+			m.phase = 1
+			m.cursor = 0
+			m.scrollOffset = 0
+			m.selectedAuth = nil
+		case 1: // provider → main
+			m.phase = 0
+			m.cursor = 0
+			m.scrollOffset = 0
+			m.selectedGroup = nil
 		}
 	}
 
@@ -465,7 +773,7 @@ func (m setupModel) handleTextInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if val == "" {
 			return m, nil
 		}
-		// Custom provider flow: step 0 = provider name, step 1 = model ID
+		// Custom provider flow (phase 1): step 0 = provider name, step 1 = model ID
 		if m.phase == 1 {
 			if m.inputStep == 0 {
 				m.provider = val
@@ -478,19 +786,21 @@ func (m setupModel) handleTextInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.inputMode = false
 			m.textInput = ""
 			m.inputStep = 0
-			m.phase = 3
+			m.phase = 5
 			m.cursor = 0
+			m.scrollOffset = 0
 			m.configOverrides = defaultOverrides()
 			return m, nil
 		}
-		// Custom anthropic model (phase 2) → go to config phase
-		if m.phase == 2 {
-			m.provider = "anthropic"
+		// Custom model ID within a provider (phase 4)
+		if m.phase == 4 {
+			m.provider = m.selectedGroup.ProviderKey
 			m.model = val
 			m.inputMode = false
 			m.textInput = ""
-			m.phase = 3
+			m.phase = 5
 			m.cursor = 0
+			m.scrollOffset = 0
 			m.configOverrides = defaultOverrides()
 			return m, nil
 		}
@@ -511,20 +821,174 @@ func (m setupModel) handleTextInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// currentModels returns the model list for the current selection context.
+// If a category is selected, returns that category's models; otherwise the group's direct models.
+func (m setupModel) currentModels() []ModelChoice {
+	if m.selectedCategory != nil {
+		return m.selectedCategory.Models
+	}
+	if m.selectedGroup != nil {
+		return m.selectedGroup.Models
+	}
+	return nil
+}
+
 func (m setupModel) menuLen() int {
 	switch m.phase {
 	case 0:
-		return 3 // Use defaults, Use existing config, Choose provider & model
+		return 3
 	case 1:
-		return len(m.choices)
+		return len(m.groups)
 	case 2:
-		return len(anthropicModels)
-	case 3:
-		return 3 // Use defaults, Use existing, Customize
-	case 4:
-		return len(configFields) + 1 // +1 for "Done" item
+		if m.selectedGroup != nil {
+			return len(m.selectedGroup.AuthMethods)
+		}
+		return 0
+	case 3: // categories
+		if m.selectedGroup != nil {
+			return len(m.selectedGroup.Categories)
+		}
+		return 0
+	case 4: // models
+		return len(m.currentModels())
+	case 5:
+		return 3
+	case 6:
+		return len(configFields) + 1
 	}
 	return 0
+}
+
+// clampScrollOffset returns an adjusted scrollOffset that keeps cursor within
+// the visible window.  For short lists (total <= visibleItems) it returns 0.
+func clampScrollOffset(cursor, scrollOffset, total int) int {
+	if total <= visibleItems {
+		return 0
+	}
+	// Cursor above the viewport — scroll up.
+	if cursor < scrollOffset {
+		return cursor
+	}
+	// Cursor below the viewport — scroll down.
+	if cursor >= scrollOffset+visibleItems {
+		return cursor - visibleItems + 1
+	}
+	return scrollOffset
+}
+
+// renderScrollableItems writes a windowed slice of items into the builder,
+// adding scroll indicators when there are hidden items above or below.
+// labelFn is called for each index in [0, total) and must return the display
+// string for that item (without the "> " / "  " prefix).
+func (m setupModel) renderScrollableItems(b *strings.Builder, total int, labelFn func(i int) string) {
+	if total == 0 {
+		return
+	}
+
+	start := m.scrollOffset
+	end := start + visibleItems
+	if end > total || total <= visibleItems {
+		end = total
+		start = end - visibleItems
+		if start < 0 {
+			start = 0
+		}
+	}
+
+	if start > 0 {
+		b.WriteString(scrollIndicatorStyle.Render(fmt.Sprintf("  ... %d more above", start)))
+		b.WriteByte('\n')
+	}
+
+	for i := start; i < end; i++ {
+		label := labelFn(i)
+		if i == m.cursor {
+			b.WriteString(menuSelectedStyle.Render("> " + label))
+		} else {
+			b.WriteString(menuItemStyle.Render("  " + label))
+		}
+		b.WriteByte('\n')
+	}
+
+	if end < total {
+		b.WriteString(scrollIndicatorStyle.Render(fmt.Sprintf("  ... %d more below", total-end)))
+		b.WriteByte('\n')
+	}
+}
+
+// renderScrollableSettings renders phase-6 config fields with scroll support.
+// It needs its own method because config items have custom rendering (bool toggles,
+// inline editing, and the trailing "Done" button).
+func (m setupModel) renderScrollableSettings(b *strings.Builder, total int) {
+	if total == 0 {
+		return
+	}
+
+	start := m.scrollOffset
+	end := start + visibleItems
+	if end > total || total <= visibleItems {
+		end = total
+		start = end - visibleItems
+		if start < 0 {
+			start = 0
+		}
+	}
+
+	if start > 0 {
+		b.WriteString(scrollIndicatorStyle.Render(fmt.Sprintf("  ... %d more above", start)))
+		b.WriteByte('\n')
+	}
+
+	doneIdx := len(configFields)
+	for i := start; i < end; i++ {
+		if i == doneIdx {
+			// "Done" button
+			if m.cursor == doneIdx {
+				b.WriteString(menuSelectedStyle.Render("> Done"))
+			} else {
+				b.WriteString(menuItemStyle.Render("  Done"))
+			}
+			b.WriteByte('\n')
+			continue
+		}
+		f := configFields[i]
+		val := m.configOverrides.getValue(i)
+		var line string
+		if f.kind == "bool" {
+			indicator := "○"
+			if val == "true" {
+				indicator = "●"
+			}
+			line = fmt.Sprintf("%s %s", indicator, f.name)
+		} else {
+			line = fmt.Sprintf("%s: %s", f.name, val)
+		}
+		if i == m.cursor {
+			if m.editingConfig {
+				line = fmt.Sprintf("%s: %s_", f.name, m.editBuffer)
+				b.WriteString(textInputStyle.Render("> " + line))
+			} else {
+				b.WriteString(menuSelectedStyle.Render("> " + line))
+			}
+		} else {
+			b.WriteString(menuItemStyle.Render("  " + line))
+		}
+		b.WriteByte('\n')
+	}
+
+	if end < total {
+		b.WriteString(scrollIndicatorStyle.Render(fmt.Sprintf("  ... %d more below", total-end)))
+		b.WriteByte('\n')
+	}
+}
+
+// nextModelPhase returns the phase to go to after auth selection.
+// If the provider has categories, go to category select (3); otherwise model select (4).
+func (m setupModel) nextModelPhase() int {
+	if m.selectedGroup != nil && len(m.selectedGroup.Categories) > 0 {
+		return 3
+	}
+	return 4
 }
 
 func (m setupModel) selectItem() (tea.Model, tea.Cmd) {
@@ -532,13 +996,14 @@ func (m setupModel) selectItem() (tea.Model, tea.Cmd) {
 
 	case 0: // Main menu
 		switch m.cursor {
-		case 0: // Use defaults → go to config phase
+		case 0: // Use defaults
 			m.provider = "openrouter"
 			m.model = "openrouter/hunter-alpha"
-			m.phase = 3
+			m.phase = 5
 			m.cursor = 0
+			m.scrollOffset = 0
 			m.configOverrides = defaultOverrides()
-		case 1: // Use existing config → done immediately
+		case 1: // Use existing config
 			m.provider = ""
 			m.model = ""
 			m.done = true
@@ -546,68 +1011,90 @@ func (m setupModel) selectItem() (tea.Model, tea.Cmd) {
 		case 2: // Choose provider & model
 			m.phase = 1
 			m.cursor = 0
+			m.scrollOffset = 0
 		}
 
-	case 1: // Provider select
-		choice := m.choices[m.cursor]
-		if choice.Provider == "" {
-			// Custom: start text input
+	case 1: // Pick provider group
+		group := m.groups[m.cursor]
+		if group.ProviderKey == "" {
 			m.inputMode = true
 			m.inputStep = 0
 			m.textInput = ""
 			return m, nil
 		}
-		if choice.Provider == "anthropic" {
+		m.selectedGroup = &group
+		if len(group.AuthMethods) > 1 {
 			m.phase = 2
 			m.cursor = 0
-			return m, nil
+			m.scrollOffset = 0
+		} else {
+			m.selectedAuth = &group.AuthMethods[0]
+			m.phase = m.nextModelPhase()
+			m.cursor = 0
+			m.scrollOffset = 0
 		}
-		// Direct selection → go to config phase
-		m.provider = choice.Provider
-		m.model = choice.Model
-		m.phase = 3
-		m.cursor = 0
-		m.configOverrides = defaultOverrides()
 		return m, nil
 
-	case 2: // Anthropic model
-		am := anthropicModels[m.cursor]
-		if am.ID == "" {
-			// Custom model ID input
+	case 2: // Pick auth method
+		auth := m.selectedGroup.AuthMethods[m.cursor]
+		m.selectedAuth = &auth
+		m.phase = m.nextModelPhase()
+		m.cursor = 0
+		m.scrollOffset = 0
+		return m, nil
+
+	case 3: // Pick category
+		cat := m.selectedGroup.Categories[m.cursor]
+		m.selectedCategory = &cat
+		m.phase = 4
+		m.cursor = 0
+		m.scrollOffset = 0
+		return m, nil
+
+	case 4: // Pick model
+		models := m.currentModels()
+		mc := models[m.cursor]
+		if mc.ID == "" {
 			m.inputMode = true
 			m.textInput = ""
 			return m, nil
 		}
-		// Direct selection → go to config phase
-		m.provider = "anthropic"
-		m.model = am.ID
-		m.phase = 3
+		m.provider = m.selectedGroup.ProviderKey
+		m.model = mc.ID
+		m.phase = 5
 		m.cursor = 0
+		m.scrollOffset = 0
 		m.configOverrides = defaultOverrides()
+		if mc.ContextWindow > 0 {
+			m.configOverrides.ContextWindow = mc.ContextWindow
+		}
+		if mc.MaxTokens > 0 {
+			m.configOverrides.MaxTokens = mc.MaxTokens
+		}
 		return m, nil
 
-	case 3: // Config mode
+	case 5: // Config mode
 		switch m.cursor {
-		case 0: // Use defaults
+		case 0:
 			m.configOverrides = defaultOverrides()
 			m.done = true
 			return m, tea.Quit
-		case 1: // Use existing
+		case 1:
 			m.configOverrides = nil
 			m.done = true
 			return m, tea.Quit
-		case 2: // Customize
+		case 2:
 			if m.configOverrides == nil {
 				m.configOverrides = defaultOverrides()
 			}
-			m.phase = 4
+			m.phase = 6
 			m.cursor = 0
+			m.scrollOffset = 0
 			m.configCursor = 0
 		}
 
-	case 4: // Edit config
+	case 6: // Edit config
 		if m.cursor >= len(configFields) {
-			// "Done" selected
 			m.done = true
 			return m, tea.Quit
 		}
@@ -674,11 +1161,13 @@ func (m setupModel) View() string {
 		hint = "enter: confirm  |  esc: cancel  |  ctrl+c: quit"
 	} else {
 		phaseHints := []string{
-			"j/k or arrows: navigate  |  enter: select  |  q: quit",
-			"j/k or arrows: navigate  |  enter: select  |  esc: back  |  q: quit",
-			"j/k or arrows: navigate  |  enter: select  |  esc: back  |  q: quit",
-			"j/k or arrows: navigate  |  enter: select  |  esc: back  |  q: quit",
-			"j/k: navigate  |  enter: toggle/edit  |  esc: back  |  q: quit",
+			"j/k or arrows: navigate  |  enter: select  |  q: quit",                // 0: main
+			"j/k or arrows: navigate  |  enter: select  |  esc: back  |  q: quit",  // 1: provider
+			"j/k or arrows: navigate  |  enter: select  |  esc: back  |  q: quit",  // 2: auth
+			"j/k or arrows: navigate  |  enter: select  |  esc: back  |  q: quit",  // 3: category
+			"j/k or arrows: navigate  |  enter: select  |  esc: back  |  q: quit",  // 4: model
+			"j/k or arrows: navigate  |  enter: select  |  esc: back  |  q: quit",  // 5: config
+			"j/k: navigate  |  enter: toggle/edit  |  esc: back  |  q: quit",       // 6: settings
 		}
 		if m.phase < len(phaseHints) {
 			hint = phaseHints[m.phase]
@@ -695,107 +1184,86 @@ func (m setupModel) renderMenu() string {
 	var b strings.Builder
 
 	switch m.phase {
-	case 0:
+	case 0: // Main menu
 		b.WriteString(menuHeaderStyle.Render("Setup"))
 		b.WriteByte('\n')
-
 		items := []string{
 			"Use defaults (OpenRouter / hunter-alpha)",
 			"Use existing config",
 			"Choose provider & model",
 		}
-		for i, item := range items {
-			if i == m.cursor {
-				b.WriteString(menuSelectedStyle.Render("> " + item))
-			} else {
-				b.WriteString(menuItemStyle.Render("  " + item))
-			}
-			b.WriteByte('\n')
-		}
+		m.renderScrollableItems(&b, len(items), func(i int) string {
+			return items[i]
+		})
 
-	case 1:
+	case 1: // Pick provider
 		b.WriteString(menuHeaderStyle.Render("Select Provider"))
 		b.WriteByte('\n')
+		m.renderScrollableItems(&b, len(m.groups), func(i int) string {
+			return m.groups[i].Name
+		})
 
-		for i, c := range m.choices {
-			label := c.Name
-			if i == m.cursor {
-				b.WriteString(menuSelectedStyle.Render("> " + label))
-			} else {
-				b.WriteString(menuItemStyle.Render("  " + label))
-			}
-			b.WriteByte('\n')
+	case 2: // Pick auth method
+		header := "Authentication"
+		if m.selectedGroup != nil {
+			header = m.selectedGroup.Name + " — Authentication"
 		}
-
-	case 2:
-		b.WriteString(menuHeaderStyle.Render("Anthropic Model"))
+		b.WriteString(menuHeaderStyle.Render(header))
 		b.WriteByte('\n')
-
-		for i, am := range anthropicModels {
-			if i == m.cursor {
-				b.WriteString(menuSelectedStyle.Render("> " + am.Name))
-			} else {
-				b.WriteString(menuItemStyle.Render("  " + am.Name))
-			}
-			b.WriteByte('\n')
+		if m.selectedGroup != nil {
+			auths := m.selectedGroup.AuthMethods
+			m.renderScrollableItems(&b, len(auths), func(i int) string {
+				return auths[i].Name
+			})
 		}
 
-	case 3:
+	case 3: // Pick category
+		header := "Select Category"
+		if m.selectedGroup != nil {
+			header = m.selectedGroup.Name + " — Select Category"
+		}
+		b.WriteString(menuHeaderStyle.Render(header))
+		b.WriteByte('\n')
+		if m.selectedGroup != nil {
+			cats := m.selectedGroup.Categories
+			m.renderScrollableItems(&b, len(cats), func(i int) string {
+				return fmt.Sprintf("%s (%d)", cats[i].Name, len(cats[i].Models))
+			})
+		}
+
+	case 4: // Pick model
+		header := "Select Model"
+		if m.selectedGroup != nil {
+			if m.selectedCategory != nil {
+				header = m.selectedGroup.Name + " — " + m.selectedCategory.Name
+			} else {
+				header = m.selectedGroup.Name + " — Select Model"
+			}
+		}
+		b.WriteString(menuHeaderStyle.Render(header))
+		b.WriteByte('\n')
+		models := m.currentModels()
+		m.renderScrollableItems(&b, len(models), func(i int) string {
+			return models[i].Name
+		})
+
+	case 5: // Config mode
 		b.WriteString(menuHeaderStyle.Render("Configuration"))
 		b.WriteByte('\n')
-
 		items := []string{
 			"Use defaults",
 			"Use existing config",
 			"Customize settings",
 		}
-		for i, item := range items {
-			if i == m.cursor {
-				b.WriteString(menuSelectedStyle.Render("> " + item))
-			} else {
-				b.WriteString(menuItemStyle.Render("  " + item))
-			}
-			b.WriteByte('\n')
-		}
+		m.renderScrollableItems(&b, len(items), func(i int) string {
+			return items[i]
+		})
 
-	case 4:
+	case 6: // Edit settings
 		b.WriteString(menuHeaderStyle.Render("Settings"))
 		b.WriteByte('\n')
-
-		for i, f := range configFields {
-			val := m.configOverrides.getValue(i)
-			var line string
-			if f.kind == "bool" {
-				indicator := "○"
-				if val == "true" {
-					indicator = "●"
-				}
-				line = fmt.Sprintf("%s %s", indicator, f.name)
-			} else {
-				line = fmt.Sprintf("%s: %s", f.name, val)
-			}
-
-			if i == m.cursor {
-				if m.editingConfig {
-					// Show edit mode
-					line = fmt.Sprintf("%s: %s_", f.name, m.editBuffer)
-					b.WriteString(textInputStyle.Render("> " + line))
-				} else {
-					b.WriteString(menuSelectedStyle.Render("> " + line))
-				}
-			} else {
-				b.WriteString(menuItemStyle.Render("  " + line))
-			}
-			b.WriteByte('\n')
-		}
-		// "Done" item
-		doneIdx := len(configFields)
-		if m.cursor == doneIdx {
-			b.WriteString(menuSelectedStyle.Render("> Done →"))
-		} else {
-			b.WriteString(menuItemStyle.Render("  Done →"))
-		}
-		b.WriteByte('\n')
+		total := len(configFields) + 1 // +1 for "Done →"
+		m.renderScrollableSettings(&b, total)
 	}
 
 	// ── Text input overlay ────────────────────────────────────────
@@ -804,10 +1272,10 @@ func (m setupModel) renderMenu() string {
 		var label string
 		switch {
 		case m.phase == 1 && m.inputStep == 0:
-			label = "Provider (openrouter/anthropic/nvidia): "
+			label = "Provider name: "
 		case m.phase == 1 && m.inputStep == 1:
 			label = fmt.Sprintf("Model ID for %s: ", m.provider)
-		case m.phase == 2:
+		case m.phase == 4:
 			label = "Model ID: "
 		}
 		b.WriteString(promptLabelStyle.Render(label))
