@@ -143,6 +143,181 @@ func fetchOpenRouterModels() []ModelCategory {
 	return categories
 }
 
+// ── NVIDIA NIM model fetching ────────────────────────────────────────────────
+
+type nvidiaNIMModelResp struct {
+	Data []nvidiaNIMModel `json:"data"`
+}
+
+type nvidiaNIMModel struct {
+	ID      string `json:"id"`
+	Object  string `json:"object"`
+	Created int64  `json:"created"`
+	OwnedBy string `json:"owned_by"`
+}
+
+// nvidiaNIMFreeModels lists model IDs confirmed free on build.nvidia.com.
+var nvidiaNIMFreeModels = map[string]bool{
+	"qwen/qwen3.5-122b-a10b":                       true,
+	"z-ai/glm4.7":                                   true,
+	"z-ai/glm5":                                     true,
+	"stepfun-ai/step-3.5-flash":                     true,
+	"minimaxai/minimax-m2.1":                        true,
+	"minimaxai/minimax-m2.5":                        true,
+	"deepseek-ai/deepseek-v3.2":                     true,
+	"deepseek-ai/deepseek-v3.1":                     true,
+	"deepseek-ai/deepseek-v3.1-terminus":            true,
+	"mistralai/devstral-2-123b-instruct-2512":       true,
+	"moonshotai/kimi-k2-thinking":                   true,
+	"moonshotai/kimi-k2-instruct":                   true,
+	"mistralai/mistral-large-3-675b-instruct-2512":  true,
+	"mistralai/magistral-small-2506":                true,
+	"mistralai/mamba-codestral-7b-v01":              true,
+	"mistralai/mistral-nemo-minitron-8b-8k-instruct": true,
+	"bytedance/seed-oss-36b-instruct":               true,
+	"qwen/qwen3-coder-480b-a35b-instruct":           true,
+	"openai/gpt-oss-20b":                            true,
+	"openai/gpt-oss-120b":                           true,
+	"google/gemma-3-27b-it":                         true,
+	"google/gemma-2-2b-it":                          true,
+	"google/gemma-3n-e4b-it":                        true,
+	"google/shieldgemma-9b":                         true,
+	"igenius/colosseum_355b_instruct_16k":            true,
+	"tiiuae/falcon3-7b-instruct":                    true,
+	"igenius/italia_10b_instruct_16k":                true,
+	"nvidia/cosmos-nemotron-34b":                    true,
+	"nvidia/cosmos-reason2-8b":                      true,
+	"qwen/qwen2.5-coder-7b-instruct":               true,
+	"qwen/qwen2-7b-instruct":                       true,
+	"abacusai/dracarys-llama-3.1-70b-instruct":     true,
+	"thudm/chatglm3-6b":                            true,
+	"baichuan-inc/baichuan2-13b-chat":               true,
+	"nvidia/nemotron-3-super-120b-a12b":             true,
+	"nvidia/nemotron-3-nano-30b-a3b":                true,
+	"nvidia/nvidia-nemotron-nano-9b-v2":             true,
+	"nvidia/llama-3.3-nemotron-super-49b-v1":        true,
+	"nvidia/llama-3.3-nemotron-super-49b-v1.5":      true,
+	"nvidia/nemotron-content-safety-reasoning-4b":   true,
+	"nvidia/llama-3.1-nemotron-safety-guard-8b-v3":  true,
+	"nvidia/llama-3.1-nemotron-70b-reward":          true,
+	"marin/marin-8b-instruct":                      true,
+	"nv-mistralai/mistral-nemo-12b-instruct":        true,
+}
+
+// nvidiaNIMExcludeSubstrings lists substrings that identify non-chat models.
+var nvidiaNIMExcludeSubstrings = []string{
+	"embed", "bge", "nv-embed", "rerankqa", "reward", "neva", "nvclip",
+	"streampetr", "deplot", "paligemma", "kosmos", "nemoretriever",
+	"starcoder", "fuyu", "parse", "grounding-dino", "esm2", "diffdock",
+	"molmim", "genomics", "riva", "voicechat", "studiovoice", "eyecontact",
+	"parakeet", "canary", "vila", "cosmos-transfer", "genmol", "alphafold",
+	"openfold", "msa-search", "sparsedrive", "bevformer", "usdsearch",
+	"usdvalidate", "usdcode", "megatron-1b-nmt", "proteinmpnn",
+	"ai-generated-image", "stable-diffusion", "flux", "trellis",
+	"magpie-tts", "world-2", "arctic-embed",
+}
+
+// fetchNvidiaNIMModels fetches chat models from the NVIDIA NIM API and returns
+// them as categories: FREE MODELS first, then one category per owner.
+// Returns nil on error (caller falls back to hardcoded defaults).
+func fetchNvidiaNIMModels() []ModelCategory {
+	client := &http.Client{Timeout: 8 * time.Second}
+	resp, err := client.Get("https://integrate.api.nvidia.com/v1/models")
+	if err != nil {
+		return nil
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		return nil
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil
+	}
+
+	var data nvidiaNIMModelResp
+	if json.Unmarshal(body, &data) != nil {
+		return nil
+	}
+
+	// Filter out non-chat models
+	var chatModels []nvidiaNIMModel
+	for _, m := range data.Data {
+		lower := strings.ToLower(m.ID)
+		excluded := false
+		for _, sub := range nvidiaNIMExcludeSubstrings {
+			if strings.Contains(lower, sub) {
+				excluded = true
+				break
+			}
+		}
+		if !excluded {
+			chatModels = append(chatModels, m)
+		}
+	}
+
+	// Sort by newest first
+	sort.Slice(chatModels, func(i, j int) bool {
+		return chatModels[i].Created > chatModels[j].Created
+	})
+
+	toChoice := func(m nvidiaNIMModel) ModelChoice {
+		tag := ""
+		if nvidiaNIMFreeModels[m.ID] {
+			tag = " [Free]"
+		}
+		return ModelChoice{
+			Name:          m.ID + tag,
+			ID:            m.ID,
+			ContextWindow: 0,
+			MaxTokens:     0,
+		}
+	}
+
+	// Build FREE MODELS category
+	var freeChoices []ModelChoice
+	for _, m := range chatModels {
+		if nvidiaNIMFreeModels[m.ID] {
+			freeChoices = append(freeChoices, toChoice(m))
+		}
+	}
+	freeChoices = append(freeChoices, ModelChoice{Name: "Custom model ID", ID: ""})
+
+	// Build per-owner categories
+	ownerOrder := []string{}
+	ownerModels := map[string][]ModelChoice{}
+	for _, m := range chatModels {
+		owner := m.OwnedBy
+		if owner == "" {
+			// Fall back to prefix of ID
+			if idx := strings.IndexByte(m.ID, '/'); idx > 0 {
+				owner = m.ID[:idx]
+			} else {
+				owner = "other"
+			}
+		}
+		if _, seen := ownerModels[owner]; !seen {
+			ownerOrder = append(ownerOrder, owner)
+		}
+		ownerModels[owner] = append(ownerModels[owner], toChoice(m))
+	}
+	sort.Strings(ownerOrder)
+
+	// Assemble: FREE MODELS first, then alphabetical owners
+	categories := []ModelCategory{
+		{Name: "FREE MODELS", Models: freeChoices},
+	}
+	for _, owner := range ownerOrder {
+		models := ownerModels[owner]
+		models = append(models, ModelChoice{Name: "Custom model ID", ID: ""})
+		categories = append(categories, ModelCategory{Name: owner, Models: models})
+	}
+
+	return categories
+}
+
 // SetupResult holds the configuration choices from the setup screen.
 type SetupResult struct {
 	Provider string
@@ -363,11 +538,13 @@ func DefaultProviderGroups() []ProviderGroup {
 		{
 			Name: "NVIDIA NIM", ProviderKey: "nvidia",
 			AuthMethods: []AuthMethod{{Name: "API key", NeedsKey: "NVIDIA_API_KEY"}},
-			Models: []ModelChoice{
-				{Name: "GLM-4.7", ID: "z-ai/glm4.7", ContextWindow: 32768, MaxTokens: 8192},
-				{Name: "Qwen3.5-122B", ID: "qwen/qwen3.5-122b-a10b", ContextWindow: 262144, MaxTokens: 16384},
-				{Name: "llama-3.3-70b", ID: "meta/llama-3.3-70b-instruct", ContextWindow: 128000, MaxTokens: 8192},
-				{Name: "Custom model ID", ID: ""},
+			Categories: []ModelCategory{
+				{Name: "FREE MODELS", Models: []ModelChoice{
+					{Name: "GLM-4.7", ID: "z-ai/glm4.7"},
+					{Name: "Qwen3.5-122B", ID: "qwen/qwen3.5-122b-a10b"},
+					{Name: "llama-3.3-70b-instruct", ID: "meta/llama-3.3-70b-instruct"},
+					{Name: "Custom model ID", ID: ""},
+				}},
 			},
 		},
 		{
@@ -602,6 +779,16 @@ func newSetupModel() setupModel {
 	if cats := fetchOpenRouterModels(); len(cats) > 0 {
 		for i := range groups {
 			if groups[i].ProviderKey == "openrouter" {
+				groups[i].Categories = cats
+				break
+			}
+		}
+	}
+
+	// Fetch live NVIDIA NIM models; replace all categories on success
+	if cats := fetchNvidiaNIMModels(); len(cats) > 0 {
+		for i := range groups {
+			if groups[i].ProviderKey == "nvidia" {
 				groups[i].Categories = cats
 				break
 			}
