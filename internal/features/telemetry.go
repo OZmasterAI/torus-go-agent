@@ -80,11 +80,6 @@ func (tc *TelemetryCollector) Summary() string {
 	)
 }
 
-// contextKey is unexported to avoid collisions.
-type contextKey string
-
-const spanStartKey contextKey = "telemetry_span_start"
-
 // RegisterHooks registers all telemetry hooks on the given registry.
 // This is the single entry point — call once during setup.
 func (tc *TelemetryCollector) RegisterHooks(hooks *core.HookRegistry) {
