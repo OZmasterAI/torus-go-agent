@@ -131,6 +131,8 @@ type toolEvent struct {
 
 type toolEventMsg struct{ event toolEvent }
 
+type statusHookMsg struct{ hook string }
+
 type tickMsg time.Time
 
 // ── Overlay mode ──────────────────────────────────────────────────────────────
@@ -204,6 +206,7 @@ type Model struct {
 	// Streaming channels
 	deltaCh chan string
 	toolCh  chan toolEvent
+	statusCh chan string
 	steeringCh chan core.Message
 
 	// Status
@@ -454,17 +457,20 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 			deltaCh := make(chan string, 64)
 			toolCh := make(chan toolEvent, 32)
+			statusCh := make(chan string, 16)
 			m.deltaCh = deltaCh
 			m.toolCh = toolCh
+			m.statusCh = statusCh
 			if m.agent.Steering == nil {
 				m.agent.Steering = make(chan core.Message, 16)
 			}
 			m.resizeViewport()
 			m.rebuildContent()
 			return m, tea.Batch(
-				runAgentStream(m.agent, input, deltaCh, toolCh),
+				runAgentStream(m.agent, input, deltaCh, toolCh, statusCh),
 				waitForDelta(deltaCh),
 				waitForToolEvent(toolCh),
+				waitForStatus(statusCh),
 				tick(),
 			)
 
@@ -545,6 +551,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		m.rebuildContent()
 		return m, waitForToolEvent(m.toolCh)
+
+	// ── Status hook event ────────────────────────────────────────────────
+	case statusHookMsg:
+		if phrase, ok := hookPhrases[msg.hook]; ok {
+			m.statusPhrase = phrase
+		}
+		return m, waitForStatus(m.statusCh)
 
 	// ── Tick ─────────────────────────────────────────────────────────────
 	case tickMsg:
@@ -1686,9 +1699,19 @@ func torusPhrase(toolName string, isError bool) string {
 	}
 }
 
+var hookPhrases = map[string]string{
+	"on_user_input":        "parsing the meridian...",
+	"before_context_build": "Toroidal mapping...",
+	"before_llm_call":     "Toroidal meditation running...",
+	"after_llm_call":      "completing the circuit...",
+	"pre_compact":         "compressing the manifold...",
+	"post_compact":        "Toroidal folding...",
+	"on_error":            "\u26a0 \u2620 Error \u2620 \u26a0",
+}
+
 // ── Commands ──────────────────────────────────────────────────────────────────
 
-func runAgentStream(agent *core.Agent, input string, deltaCh chan<- string, toolCh chan<- toolEvent) tea.Cmd {
+func runAgentStream(agent *core.Agent, input string, deltaCh chan<- string, toolCh chan<- toolEvent, statusCh chan<- string) tea.Cmd {
 	return func() tea.Msg {
 		start := time.Now()
 		agent.OnStreamDelta = func(delta string) {
@@ -1704,11 +1727,16 @@ func runAgentStream(agent *core.Agent, input string, deltaCh chan<- string, tool
 				filePath: fp,
 			}
 		}
+		agent.OnStatusUpdate = func(hookName string) {
+			statusCh <- hookName
+		}
 		text, err := agent.Run(context.Background(), input)
 		agent.OnStreamDelta = nil
 		agent.OnToolUse = nil
+		agent.OnStatusUpdate = nil
 		close(deltaCh)
 		close(toolCh)
+		close(statusCh)
 		elapsed := time.Since(start)
 		if err != nil {
 			return agentErrorMsg{err: err}
@@ -1743,6 +1771,19 @@ func waitForToolEvent(ch <-chan toolEvent) tea.Cmd {
 			return nil
 		}
 		return toolEventMsg{event: ev}
+	}
+}
+
+func waitForStatus(ch <-chan string) tea.Cmd {
+	if ch == nil {
+		return nil
+	}
+	return func() tea.Msg {
+		hook, ok := <-ch
+		if !ok {
+			return nil
+		}
+		return statusHookMsg{hook: hook}
 	}
 }
 

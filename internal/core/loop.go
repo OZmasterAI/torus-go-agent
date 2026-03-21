@@ -17,6 +17,7 @@ type Agent struct {
 	Summarize     func(string) (string, error)
 	OnStreamDelta func(delta string)
 	OnToolUse     func(name string, args map[string]any, result *ToolResult)
+	OnStatusUpdate func(hookName string)
 	Steering      chan Message
 	RouteProvider func(userMessage string) Provider
 }
@@ -57,6 +58,10 @@ func (a *Agent) Run(ctx context.Context, userMessage string) (string, error) {
 			}
 		case EventAgentDone:
 			finalText = ev.Text
+		case EventStatusUpdate:
+			if a.OnStatusUpdate != nil {
+				a.OnStatusUpdate(ev.StatusHook)
+			}
 		case EventAgentError:
 			finalErr = ev.Error
 		}
@@ -84,6 +89,7 @@ func (a *Agent) runLoop(ctx context.Context, userMessage string, ch chan<- Agent
 
 	inputData := &HookData{AgentID: "main", Meta: map[string]any{"input": userMessage}}
 	a.hooks.Fire(ctx, HookOnUserInput, inputData)
+	emit(AgentEvent{Type: EventStatusUpdate, StatusHook: "on_user_input"})
 	if inputData.Block {
 		emit(AgentEvent{Type: EventAgentDone, Text: inputData.BlockReason})
 		return
@@ -123,6 +129,7 @@ func (a *Agent) runLoop(ctx context.Context, userMessage string, ch chan<- Agent
 				AgentID: "main", Messages: messages,
 				Meta: map[string]any{"mode": string(a.compaction.Mode), "message_count": preCount},
 			})
+			emit(AgentEvent{Type: EventStatusUpdate, StatusHook: "pre_compact"})
 			if err := CompactDAG(a.dag, a.compaction, a.Summarize); err != nil {
 				log.Printf("[loop] DAG compaction failed: %v, falling back to in-memory", err)
 				switch a.compaction.Mode {
@@ -150,10 +157,12 @@ func (a *Agent) runLoop(ctx context.Context, userMessage string, ch chan<- Agent
 				AgentID: "main",
 				Meta: map[string]any{"mode": string(a.compaction.Mode), "messages_before": preCount, "messages_after": len(messages), "persistent": true},
 			})
+		emit(AgentEvent{Type: EventStatusUpdate, StatusHook: "post_compact"})
 		}
 
 		ctxData := &HookData{AgentID: "main", Messages: messages}
 		a.hooks.Fire(ctx, HookBeforeContextBuild, ctxData)
+	emit(AgentEvent{Type: EventStatusUpdate, StatusHook: "before_context_build"})
 		messages = ctxData.Messages
 		afterCtx := &HookData{AgentID: "main", Messages: messages}
 		a.hooks.Fire(ctx, HookAfterContextBuild, afterCtx)
@@ -164,6 +173,7 @@ func (a *Agent) runLoop(ctx context.Context, userMessage string, ch chan<- Agent
 
 		llmData := &HookData{AgentID: "main", Messages: messages, Meta: map[string]any{}}
 		a.hooks.Fire(ctx, HookBeforeLLMCall, llmData)
+		emit(AgentEvent{Type: EventStatusUpdate, StatusHook: "before_llm_call"})
 		if llmData.Block {
 			log.Printf("[loop] LLM call blocked: %s", llmData.BlockReason)
 			break
@@ -190,6 +200,7 @@ func (a *Agent) runLoop(ctx context.Context, userMessage string, ch chan<- Agent
 		}
 		if llmErr != nil {
 			a.hooks.Fire(ctx, HookOnError, &HookData{AgentID: "main", Meta: map[string]any{"error": llmErr.Error()}})
+			emit(AgentEvent{Type: EventStatusUpdate, StatusHook: "on_error"})
 			if turn == 0 {
 				a.dag.RemoveNode(userNodeID)
 			}
@@ -199,6 +210,7 @@ func (a *Agent) runLoop(ctx context.Context, userMessage string, ch chan<- Agent
 
 		afterLLM := &HookData{AgentID: "main", Response: resp, TokensIn: resp.Usage.InputTokens, TokensOut: resp.Usage.OutputTokens}
 		a.hooks.Fire(ctx, HookAfterLLMCall, afterLLM)
+		emit(AgentEvent{Type: EventStatusUpdate, StatusHook: "after_llm_call"})
 		if afterLLM.Response != nil {
 			resp = afterLLM.Response
 		}

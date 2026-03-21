@@ -15,6 +15,7 @@ const (
 	EventAgentTurnEnd   AgentEventType = "turn_end"     // loop turn finished
 	EventAgentDone      AgentEventType = "done"         // final text ready
 	EventAgentError     AgentEventType = "error"        // fatal error
+	EventStatusUpdate   AgentEventType = "status"       // hook-triggered status update
 )
 
 // AgentEvent is a single event emitted by RunStream.
@@ -26,6 +27,7 @@ type AgentEvent struct {
 	ToolArgs   map[string]any  // tool_start: arguments
 	ToolResult *ToolResult     // tool_end: result
 	Error      error           // error: the error
+	StatusHook string          // status: hook name that triggered this update
 }
 
 // HasToolUse checks if an assistant message wants to use tools.
