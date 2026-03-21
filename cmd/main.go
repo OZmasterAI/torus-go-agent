@@ -496,7 +496,7 @@ func main() {
 }
 
 // makeProvider creates a Provider for the given provider name, API key, and model.
-func makeProvider(providerName, apiKey, model string, agentCfg *config.AgentConfig) providers.Provider {
+func makeProvider(providerName, apiKey, model string, agentCfg *config.AgentConfig) types.Provider {
 	switch strings.ToLower(providerName) {
 	case "anthropic":
 		return providers.NewAnthropicProvider(apiKey, model)

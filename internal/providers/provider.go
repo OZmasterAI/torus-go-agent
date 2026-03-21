@@ -8,14 +8,6 @@ import (
 	t "torus_go_agent/internal/types"
 )
 
-// Provider is the interface all LLM providers implement.
-type Provider interface {
-	Complete(ctx context.Context, systemPrompt string, messages []t.Message, tools []t.Tool, maxTokens int) (*t.AssistantMessage, error)
-	StreamComplete(ctx context.Context, systemPrompt string, messages []t.Message, tools []t.Tool, maxTokens int) (<-chan t.StreamEvent, error)
-	Name() string
-	ModelID() string
-}
-
 // RoutingEntry pairs a provider key with a weight for weighted routing.
 type RoutingEntry struct {
 	Key    string // "provider:model"
@@ -26,17 +18,17 @@ type RoutingEntry struct {
 // weighted routing, and fallback chains.
 type Router struct {
 	mu            sync.RWMutex
-	providers     map[string]Provider
-	active        Provider
+	providers     map[string]t.Provider
+	active        t.Provider
 	weights       []RoutingEntry // if set, weighted mode is active
 	totalWeight   int
 	fallbackOrder []string // provider keys in fallback order
 }
 
 // NewRouter creates a provider router with an initial active provider.
-func NewRouter(initial Provider) *Router {
+func NewRouter(initial t.Provider) *Router {
 	r := &Router{
-		providers: make(map[string]Provider),
+		providers: make(map[string]t.Provider),
 		active:    initial,
 	}
 	r.providers[initial.Name()+":"+initial.ModelID()] = initial
@@ -44,7 +36,7 @@ func NewRouter(initial Provider) *Router {
 }
 
 // AddProvider registers an additional provider.
-func (r *Router) AddProvider(p Provider) {
+func (r *Router) AddProvider(p t.Provider) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.providers[p.Name()+":"+p.ModelID()] = p
@@ -83,7 +75,7 @@ func (r *Router) SetFallbackOrder(keys []string) {
 }
 
 // Active returns the current provider.
-func (r *Router) Active() Provider {
+func (r *Router) Active() t.Provider {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return r.active
@@ -97,7 +89,7 @@ func (r *Router) IsWeighted() bool {
 }
 
 // pick selects a provider by weighted random, or returns the active provider.
-func (r *Router) pick() Provider {
+func (r *Router) pick() t.Provider {
 	if len(r.weights) == 0 || r.totalWeight == 0 {
 		return r.active
 	}
@@ -115,8 +107,8 @@ func (r *Router) pick() Provider {
 }
 
 // fallback returns the ordered list of providers to try after a failure.
-func (r *Router) fallback(exclude string) []Provider {
-	var result []Provider
+func (r *Router) fallback(exclude string) []t.Provider {
+	var result []t.Provider
 	for _, key := range r.fallbackOrder {
 		if key == exclude {
 			continue
