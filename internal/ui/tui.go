@@ -208,6 +208,7 @@ type Model struct {
 
 	// Status
 	statusLine   string
+	statusPhrase string
 	processing   bool
 	streaming    bool
 	spinnerFrame int
@@ -447,6 +448,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.input = ""
 			m.processing = true
 			m.streaming = true
+			m.statusPhrase = "Toroidal meditation running..."
 			m.startTime = time.Now()
 			m.statusLine = m.buildStatus(0, 0, 0, 0)
 
@@ -511,6 +513,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if last.role == "assistant" {
 				last.text += msg.delta
 				last.rendered = ""
+				m.statusPhrase = "Torus relaying..."
 			}
 		}
 		m.rebuildContent()
@@ -520,6 +523,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case toolEventMsg:
 		ev := msg.event
 		m.toolEvents = append(m.toolEvents, ev)
+		m.statusPhrase = torusPhrase(ev.name, ev.isError)
 
 		// Track modified files
 		if ev.filePath != "" && (ev.name == "write" || ev.name == "edit") {
@@ -1646,13 +1650,40 @@ func (m Model) renderProgressBar() string {
 		}
 	}
 	elapsed := time.Since(m.startTime)
-	status := ""
-	if m.streaming && len(m.messages) > 0 && m.messages[len(m.messages)-1].text != "" {
-		status = fmt.Sprintf(" streaming %.1fs", elapsed.Seconds())
-	} else {
-		status = fmt.Sprintf(" thinking %.1fs", elapsed.Seconds())
+	phrase := m.statusPhrase
+	if phrase == "" {
+		phrase = "Toroidal meditation running..."
 	}
+	status := fmt.Sprintf(" %s %.1fs", phrase, elapsed.Seconds())
 	return bar.String() + styleDim.Render(status)
+}
+
+// ── Torus Status Phrases ──────────────────────────────────────────────────────
+
+func torusPhrase(toolName string, isError bool) string {
+	if isError {
+		return "\u26a0 \u2620 Error \u2620 \u26a0"
+	}
+	switch toolName {
+	case "bash":
+		return "executing on the surface..."
+	case "read":
+		return "reading through the ring..."
+	case "edit":
+		return "Inscribing the Torus..."
+	case "write":
+		return "Expanding the Torus..."
+	case "glob", "grep":
+		return "Toroidal scan..."
+	case "spawn":
+		return "spawning a loop..."
+	case "delegate":
+		return "delegating to inner ring..."
+	case "recall_branch":
+		return "exploring the Torus..."
+	default:
+		return "orbiting the Torus..."
+	}
 }
 
 // ── Commands ──────────────────────────────────────────────────────────────────
