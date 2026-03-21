@@ -477,16 +477,6 @@ func (o *AgentConfigOverrides) toggleBool(idx int) {
 	}
 }
 
-// ProviderChoice holds a provider option for the startup menu (flat, for backward compat).
-type ProviderChoice struct {
-	Name          string
-	Provider      string // provider key: "openrouter", "nvidia", "anthropic", "openai", "grok", "azure", "gemini", "vertex"
-	Model         string
-	NeedsKey      string // env var name
-	ContextWindow int    // model's context window size
-	MaxTokens     int    // max output tokens
-}
-
 // AuthMethod represents an authentication option for a provider.
 type AuthMethod struct {
 	Name     string // display name, e.g. "OAuth", "API key"
@@ -641,41 +631,6 @@ func DefaultProviderGroups() []ProviderGroup {
 			Name: "Custom provider", ProviderKey: "",
 		},
 	}
-}
-
-// DefaultProviderChoices returns the flat provider list (kept for backward compat).
-func DefaultProviderChoices() []ProviderChoice {
-	var choices []ProviderChoice
-	for _, g := range DefaultProviderGroups() {
-		if g.ProviderKey == "" {
-			choices = append(choices, ProviderChoice{Name: "Custom model", Provider: "", Model: ""})
-			continue
-		}
-		needsKey := ""
-		if len(g.AuthMethods) > 0 {
-			needsKey = g.AuthMethods[0].NeedsKey
-		}
-		// Collect models from categories or direct models list
-		var models []ModelChoice
-		if len(g.Categories) > 0 {
-			for _, cat := range g.Categories {
-				models = append(models, cat.Models...)
-			}
-		} else {
-			models = g.Models
-		}
-		for _, m := range models {
-			if m.ID == "" {
-				continue
-			}
-			choices = append(choices, ProviderChoice{
-				Name: g.Name + " (" + m.Name + ")", Provider: g.ProviderKey,
-				Model: m.ID, NeedsKey: needsKey,
-				ContextWindow: m.ContextWindow, MaxTokens: m.MaxTokens,
-			})
-		}
-	}
-	return choices
 }
 
 // ── Color palette (amber/orange) ──────────────────────────────────────────────
