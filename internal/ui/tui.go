@@ -657,6 +657,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return m, nil
 				}
 				char := string(msg.Runes)
+				// Filter out leaked mouse escape sequences (SGR mouse: [<N;N;NM/m)
+				if strings.HasPrefix(char, "[<") || strings.HasPrefix(char, "<") {
+					return m, nil
+				}
 				if char == "/" && m.input == "" && !m.processing {
 					m.openPalette()
 					return m, nil
