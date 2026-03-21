@@ -58,23 +58,9 @@ func defaultCompactionConfig(cfg CompactionConfig) CompactionConfig {
 	return cfg
 }
 
-// estimateTokens returns a rough token count for a slice of messages.
-// Uses the same len/3.5 heuristic as the rest of the codebase — good enough
-// for a threshold check without a round-trip to a tokenizer.
-func estimateTokens(messages []Message) int {
-	b, err := json.Marshal(messages)
-	if err != nil {
-		// Fallback: sum character lengths
-		var n int
-		for _, m := range messages {
-			for _, c := range m.Content {
-				n += len(c.Text) + len(c.Content)
-			}
-		}
-		return int(float64(n) / 3.5)
-	}
-	return int(float64(len(b)) / 3.5)
-}
+// estimateTokens is an alias for EstimateTokens (tokenizer.go).
+// Kept as a package-private shorthand used by context.go and compression.go.
+var estimateTokens = EstimateTokens
 
 // NeedsCompaction returns true when compaction should trigger based on the
 // configured trigger mode: "tokens" (default), "messages", or "both".

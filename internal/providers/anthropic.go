@@ -611,34 +611,3 @@ func (p *AnthropicProvider) parseAnthropicSSE(ctx context.Context, resp *http.Re
 	}
 }
 
-// HasToolUse checks if the response wants to use tools.
-func HasToolUse(msg *t.AssistantMessage) bool {
-	for _, block := range msg.Content {
-		if block.Type == "tool_use" {
-			return true
-		}
-	}
-	return false
-}
-
-// ExtractToolCalls returns all tool_use blocks from a response.
-func ExtractToolCalls(msg *t.AssistantMessage) []t.ContentBlock {
-	var calls []t.ContentBlock
-	for _, block := range msg.Content {
-		if block.Type == "tool_use" {
-			calls = append(calls, block)
-		}
-	}
-	return calls
-}
-
-// ExtractText returns concatenated text from a response.
-func ExtractText(msg *t.AssistantMessage) string {
-	var parts []string
-	for _, block := range msg.Content {
-		if block.Type == "text" && block.Text != "" {
-			parts = append(parts, block.Text)
-		}
-	}
-	return strings.Join(parts, "")
-}
