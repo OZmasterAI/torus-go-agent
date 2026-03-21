@@ -961,12 +961,16 @@ func (m Model) sidebarFlagsStartLine() int {
 // ── Slash command handlers ────────────────────────────────────────────────────
 
 func (m *Model) handleNewBranch() (tea.Model, tea.Cmd) {
-	commands.New(m.agent.DAG(), m.agent.Hooks())
-	m.messages = m.messages[:0]
-	m.messages = append(m.messages, displayMsg{role: "assistant", text: "New conversation started (previous preserved on old branch)."})
-	m.totalTokensIn, m.totalTokensOut, m.totalCost = 0, 0, 0
-	m.toolEvents = nil
-	m.modifiedFiles = make(map[string]int)
+	_, err := commands.New(m.agent.DAG(), m.agent.Hooks())
+	if err != nil {
+		m.messages = append(m.messages, displayMsg{role: "error", text: fmt.Sprintf("new branch: %v", err), isError: true})
+	} else {
+		m.messages = m.messages[:0]
+		m.messages = append(m.messages, displayMsg{role: "assistant", text: "New conversation started (previous preserved on old branch)."})
+		m.totalTokensIn, m.totalTokensOut, m.totalCost = 0, 0, 0
+		m.toolEvents = nil
+		m.modifiedFiles = make(map[string]int)
+	}
 	m.input = ""
 	m.cursorPos = 0
 	m.rebuildContent()
@@ -974,10 +978,13 @@ func (m *Model) handleNewBranch() (tea.Model, tea.Cmd) {
 }
 
 func (m *Model) handleClear() (tea.Model, tea.Cmd) {
-	commands.Clear(m.agent.DAG(), m.agent.Hooks())
-	m.messages = m.messages[:0]
-	m.messages = append(m.messages, displayMsg{role: "assistant", text: "Context cleared on current branch."})
-	m.totalTokensIn, m.totalTokensOut, m.totalCost = 0, 0, 0
+	if err := commands.Clear(m.agent.DAG(), m.agent.Hooks()); err != nil {
+		m.messages = append(m.messages, displayMsg{role: "error", text: fmt.Sprintf("clear: %v", err), isError: true})
+	} else {
+		m.messages = m.messages[:0]
+		m.messages = append(m.messages, displayMsg{role: "assistant", text: "Context cleared on current branch."})
+		m.totalTokensIn, m.totalTokensOut, m.totalCost = 0, 0, 0
+	}
 	m.input = ""
 	m.cursorPos = 0
 	m.rebuildContent()

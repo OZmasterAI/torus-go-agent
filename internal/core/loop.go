@@ -299,7 +299,6 @@ func (a *Agent) runLoop(ctx context.Context, userMessage string, ch chan<- Agent
 
 		emit(AgentEvent{Type: EventAgentTurnEnd, Turn: turn, Usage: &resp.Usage})
 		a.hooks.Fire(ctx, HookOnTurnEnd, &HookData{AgentID: "main", Response: resp})
-		_ = userNodeID
 	}
 
 	if finalText == "" {
