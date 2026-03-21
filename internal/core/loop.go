@@ -159,12 +159,12 @@ func (a *Agent) runLoop(ctx context.Context, userMessage string, ch chan<- Agent
 				AgentID: "main",
 				Meta: map[string]any{"mode": string(a.compaction.Mode), "messages_before": preCount, "messages_after": len(messages), "persistent": true},
 			})
-		emit(AgentEvent{Type: EventStatusUpdate, StatusHook: "post_compact"})
+			emit(AgentEvent{Type: EventStatusUpdate, StatusHook: "post_compact"})
 		}
 
 		ctxData := &HookData{AgentID: "main", Messages: messages}
 		a.hooks.Fire(ctx, HookBeforeContextBuild, ctxData)
-	emit(AgentEvent{Type: EventStatusUpdate, StatusHook: "before_context_build"})
+		emit(AgentEvent{Type: EventStatusUpdate, StatusHook: "before_context_build"})
 		messages = ctxData.Messages
 		afterCtx := &HookData{AgentID: "main", Messages: messages}
 		a.hooks.Fire(ctx, HookAfterContextBuild, afterCtx)
