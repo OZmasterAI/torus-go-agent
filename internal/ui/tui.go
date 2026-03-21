@@ -1679,6 +1679,15 @@ func (m Model) renderHelp() string {
 	commands := []struct{ cmd, desc string }{
 		{"/new", "Start new conversation branch"},
 		{"/clear", "Clear context on current branch"},
+		{"/compact", "Compact conversation context"},
+		{"/fork", "Fork branch (head, -back N, node ID, branch)"},
+		{"/switch", "Switch branch (list, index, ID)"},
+		{"/branches", "List all branches"},
+		{"/messages", "Show message history"},
+		{"/steering", "Set steering mode"},
+		{"/stats", "Show session stats"},
+		{"/agents", "List running agents"},
+		{"/mcp-tools", "List MCP tools"},
 		{"/skills", "List available skills"},
 		{"/exit", "Exit the TUI"},
 	}
