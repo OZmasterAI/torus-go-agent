@@ -224,9 +224,8 @@ type Model struct {
 
 	// Streaming channels
 	deltaCh chan string
-	toolCh  chan toolEvent
+	toolCh   chan toolEvent
 	statusCh chan string
-	steeringCh chan core.Message
 
 	// Status
 	statusLine   string

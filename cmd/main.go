@@ -130,8 +130,7 @@ func main() {
 	}
 
 	// Create provider
-	agentCfg = &cfg.Agent
-	prov := makeProvider(cfg.Agent.Provider, key, cfg.Agent.Model)
+	prov := makeProvider(cfg.Agent.Provider, key, cfg.Agent.Model, &cfg.Agent)
 
 	// Wire weighted routing + fallback if configured
 	router := providers.NewRouter(prov)
@@ -139,7 +138,7 @@ func main() {
 		var entries []providers.RoutingEntry
 		for _, r := range cfg.Agent.Routing {
 			rKey := config.APIKeyFor(r.Provider)
-			rProv := makeProvider(r.Provider, rKey, r.Model)
+			rProv := makeProvider(r.Provider, rKey, r.Model, &cfg.Agent)
 			router.AddProvider(rProv)
 			entries = append(entries, providers.RoutingEntry{
 				Key:    r.Provider + ":" + r.Model,
@@ -313,7 +312,7 @@ func main() {
 
 	// Wire smart routing if configured
 	if cfg.Agent.SmartRouting && cfg.Agent.SmartRoutingModel != "" {
-		smartProv := makeProvider(cfg.Agent.Provider, key, cfg.Agent.SmartRoutingModel)
+		smartProv := makeProvider(cfg.Agent.Provider, key, cfg.Agent.SmartRoutingModel, &cfg.Agent)
 		agent.RouteProvider = func(userMessage string) core.Provider {
 			if features.IsSimpleMessage(userMessage) {
 				return smartProv
@@ -380,7 +379,7 @@ func main() {
 	// Set up compaction summarize callback — use compactionModel if set, otherwise session's model
 	compactProv := prov
 	if cfg.Agent.CompactionModel != "" {
-		compactProv = makeProvider(cfg.Agent.Provider, key, cfg.Agent.CompactionModel)
+		compactProv = makeProvider(cfg.Agent.Provider, key, cfg.Agent.CompactionModel, &cfg.Agent)
 		log.Printf("[main] compaction model: %s", cfg.Agent.CompactionModel)
 	}
 	agent.Summarize = func(keyContent string) (string, error) {
@@ -493,11 +492,8 @@ func main() {
 	_ = subMgr // keep reference alive
 }
 
-// agentCfg is set from main() so makeProvider can access Azure/Vertex fields.
-var agentCfg *config.AgentConfig
-
 // makeProvider creates a Provider for the given provider name, API key, and model.
-func makeProvider(providerName, apiKey, model string) providers.Provider {
+func makeProvider(providerName, apiKey, model string, agentCfg *config.AgentConfig) providers.Provider {
 	switch strings.ToLower(providerName) {
 	case "anthropic":
 		return providers.NewAnthropicProvider(apiKey, model)
