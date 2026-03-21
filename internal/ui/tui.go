@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"math"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
@@ -14,6 +15,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/rivo/uniseg"
 
 	"go_sdk_agent/internal/commands"
 	"go_sdk_agent/internal/config"
@@ -128,6 +130,7 @@ type toolEvent struct {
 	result   string
 	isError  bool
 	filePath string
+	duration time.Duration
 }
 
 type toolEventMsg struct{ event toolEvent }
@@ -193,8 +196,9 @@ type Model struct {
 	skills    *features.SkillRegistry
 
 	// Input
-	input  string
-	cursor bool
+	input     string
+	cursor    bool
+	cursorPos int // rune position within input
 
 	// Chat
 	messages []displayMsg
@@ -372,7 +376,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					// Replace @query with selected file
 					atPos := strings.LastIndex(m.input, "@")
 					if atPos >= 0 {
-						m.input = m.input[:atPos] + m.acList[m.acIdx] + " "
+						replacement := m.acList[m.acIdx] + " "
+						m.input = m.input[:atPos] + replacement
+						m.cursorPos = len([]rune(m.input))
 					}
 				}
 				m.acMode = false
@@ -381,24 +387,28 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.acMode = false
 				return m, nil
 			case tea.KeyBackspace:
-				if len(m.input) > 0 {
-					runes := []rune(m.input)
-					runes = runes[:len(runes)-1]
-					m.input = string(runes)
+				runes := []rune(m.input)
+				pos := m.cursorPos
+				if pos > len(runes) {
+					pos = len(runes)
+				}
+				if pos > 0 {
+					m.input = string(runes[:pos-1]) + string(runes[pos:])
+					m.cursorPos = pos - 1
 					m.updateAutocomplete()
 				}
 				return m, nil
 			default:
 				if msg.Type == tea.KeyRunes {
 					char := string(msg.Runes)
-					m.input += char
+					m.insertAtCursor(char)
 					if char == " " || char == "\t" {
 						m.acMode = false
 					} else {
 						m.updateAutocomplete()
 					}
 				} else if msg.Type == tea.KeySpace {
-					m.input += " "
+					m.insertAtCursor(" ")
 					m.acMode = false
 				}
 				return m, nil
@@ -427,6 +437,107 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.openSessions()
 			return m, nil
 
+		case tea.KeyCtrlW:
+			// Delete word backward from cursor
+			runes := []rune(m.input)
+			pos := m.cursorPos
+			if pos > len(runes) {
+				pos = len(runes)
+			}
+			if pos > 0 {
+				newPos := pos
+				// Skip trailing spaces
+				for newPos > 0 && runes[newPos-1] == ' ' {
+					newPos--
+				}
+				// Skip word characters
+				for newPos > 0 && runes[newPos-1] != ' ' && runes[newPos-1] != '\n' {
+					newPos--
+				}
+				m.input = string(runes[:newPos]) + string(runes[pos:])
+				m.cursorPos = newPos
+			}
+			return m, nil
+
+		case tea.KeyCtrlU:
+			// Kill to start of current line
+			runes := []rune(m.input)
+			pos := m.cursorPos
+			if pos > len(runes) {
+				pos = len(runes)
+			}
+			lineStart := pos
+			for lineStart > 0 && runes[lineStart-1] != '\n' {
+				lineStart--
+			}
+			m.input = string(runes[:lineStart]) + string(runes[pos:])
+			m.cursorPos = lineStart
+			return m, nil
+
+		case tea.KeyCtrlA:
+			// Move cursor to start of current line
+			runes := []rune(m.input)
+			pos := m.cursorPos
+			if pos > len(runes) {
+				pos = len(runes)
+			}
+			for pos > 0 && runes[pos-1] != '\n' {
+				pos--
+			}
+			m.cursorPos = pos
+			return m, nil
+
+		case tea.KeyCtrlE:
+			// Move cursor to end of current line
+			runes := []rune(m.input)
+			pos := m.cursorPos
+			if pos > len(runes) {
+				pos = len(runes)
+			}
+			for pos < len(runes) && runes[pos] != '\n' {
+				pos++
+			}
+			m.cursorPos = pos
+			return m, nil
+
+		case tea.KeyCtrlLeft:
+			// Move cursor to previous word boundary
+			runes := []rune(m.input)
+			pos := m.cursorPos
+			if pos > len(runes) {
+				pos = len(runes)
+			}
+			if pos > 0 {
+				pos--
+				for pos > 0 && runes[pos] == ' ' {
+					pos--
+				}
+				for pos > 0 && runes[pos-1] != ' ' && runes[pos-1] != '\n' {
+					pos--
+				}
+			}
+			m.cursorPos = pos
+			return m, nil
+
+		case tea.KeyCtrlRight:
+			// Move cursor to next word boundary
+			runes := []rune(m.input)
+			pos := m.cursorPos
+			if pos > len(runes) {
+				pos = len(runes)
+			}
+			if pos < len(runes) {
+				pos++
+				for pos < len(runes) && runes[pos] != ' ' && runes[pos] != '\n' {
+					pos++
+				}
+				for pos < len(runes) && runes[pos] == ' ' {
+					pos++
+				}
+			}
+			m.cursorPos = pos
+			return m, nil
+
 		case tea.KeyPgUp, tea.KeyPgDown:
 			var cmd tea.Cmd
 			m.viewport, cmd = m.viewport.Update(msg)
@@ -442,6 +553,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.agent.Steering <- core.Message{Role: "user", Content: []core.ContentBlock{{Type: "text", Text: input}}}
 					m.messages = append(m.messages, displayMsg{role: "user", text: "\u21aa " + input})
 					m.input = ""
+					m.cursorPos = 0
 					m.rebuildContent()
 				}
 				return m, nil
@@ -481,6 +593,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.messages = append(m.messages, displayMsg{role: "user", text: input})
 			m.messages = append(m.messages, displayMsg{role: "assistant", text: ""})
 			m.input = ""
+			m.cursorPos = 0
 			m.processing = true
 			m.streaming = true
 			m.statusPhrase = "Toroidal meditation running..."
@@ -507,11 +620,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			)
 
 		case tea.KeyBackspace, tea.KeyDelete:
-			if len(m.input) > 0 {
-				runes := []rune(m.input)
-				deleted := runes[len(runes)-1]
-				runes = runes[:len(runes)-1]
-				m.input = string(runes)
+			runes := []rune(m.input)
+			pos := m.cursorPos
+			if pos > len(runes) {
+				pos = len(runes)
+			}
+			if pos > 0 {
+				deleted := runes[pos-1]
+				m.input = string(runes[:pos-1]) + string(runes[pos:])
+				m.cursorPos = pos - 1
 				// If we deleted the @, exit autocomplete
 				if deleted == '@' {
 					m.acMode = false
@@ -519,8 +636,26 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 
+		case tea.KeyLeft:
+			if m.cursorPos > 0 {
+				m.cursorPos--
+			}
+			return m, nil
+
+		case tea.KeyRight:
+			runes := []rune(m.input)
+			if m.cursorPos < len(runes) {
+				m.cursorPos++
+			}
+			return m, nil
+
 		default:
 			if msg.Type == tea.KeyRunes {
+				// Handle bracketed paste: insert text without triggering shortcuts
+				if msg.Paste {
+					m.insertAtCursor(string(msg.Runes))
+					return m, nil
+				}
 				char := string(msg.Runes)
 				if char == "/" && m.input == "" && !m.processing {
 					m.openPalette()
@@ -530,7 +665,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.openHelp()
 					return m, nil
 				}
-				m.input += char
+				m.insertAtCursor(char)
 				if char == "@" && !m.processing {
 					m.acMode = true
 					m.acQuery = ""
@@ -539,7 +674,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.acList = m.acFiles
 				}
 			} else if msg.Type == tea.KeySpace {
-				m.input += " "
+				m.insertAtCursor(" ")
 			}
 			return m, nil
 		}
@@ -756,6 +891,7 @@ func (m *Model) handleNewBranch() (tea.Model, tea.Cmd) {
 	m.toolEvents = nil
 	m.modifiedFiles = make(map[string]int)
 	m.input = ""
+	m.cursorPos = 0
 	m.rebuildContent()
 	return m, nil
 }
@@ -766,6 +902,7 @@ func (m *Model) handleClear() (tea.Model, tea.Cmd) {
 	m.messages = append(m.messages, displayMsg{role: "assistant", text: "Context cleared on current branch."})
 	m.totalTokensIn, m.totalTokensOut, m.totalCost = 0, 0, 0
 	m.input = ""
+	m.cursorPos = 0
 	m.rebuildContent()
 	return m, nil
 }
@@ -783,6 +920,7 @@ func (m *Model) handleSkills() (tea.Model, tea.Cmd) {
 		m.messages = append(m.messages, displayMsg{role: "assistant", text: sb.String()})
 	}
 	m.input = ""
+	m.cursorPos = 0
 	m.rebuildContent()
 	return m, nil
 }
@@ -1008,11 +1146,9 @@ func (m Model) View() string {
 		if m.processing {
 			sb.WriteString(m.renderProgressBar())
 			sb.WriteByte('\n')
-			inputLine := stylePrompt.Render("❯ ") + m.input + styleCursor.Render(" ")
-			sb.WriteString(inputLine)
+			sb.WriteString(m.renderInputLine())
 		} else {
-			inputLine := stylePrompt.Render("❯ ") + m.input + styleCursor.Render(" ")
-			sb.WriteString(inputLine)
+			sb.WriteString(m.renderInputLine())
 		}
 	}
 
@@ -1080,8 +1216,12 @@ func (m Model) renderToolCard(ev *toolEvent, maxWidth int) string {
 		cardW = 20
 	}
 
-	// Header line
-	header := styleToolHeader.Render(fmt.Sprintf("─── %s ", ev.name))
+	// Header line with optional duration
+	headerText := fmt.Sprintf("─── %s ", ev.name)
+	if ev.duration > 0 {
+		headerText = fmt.Sprintf("─── %s (%s) ", ev.name, fmtDuration(ev.duration))
+	}
+	header := styleToolHeader.Render(headerText)
 	headerPad := ""
 	hLen := lipgloss.Width(header)
 	if cardW > hLen {
@@ -1419,6 +1559,12 @@ func (m Model) renderHelp() string {
 		{"?", "Show this help (empty input)"},
 		{"@", "File autocomplete"},
 		{"PgUp/PgDn", "Scroll chat history"},
+		{"Ctrl+A", "Move to start of line"},
+		{"Ctrl+E", "Move to end of line"},
+		{"Ctrl+W", "Delete word backward"},
+		{"Ctrl+U", "Kill to start of line"},
+		{"Ctrl+L/R", "Word-level cursor movement"},
+		{"Left/Right", "Move cursor"},
 		{"Ctrl+C", "Cancel (or quit if idle)"},
 		{"Ctrl+D", "Force quit"},
 	}
@@ -1640,36 +1786,157 @@ func truncPath(path string, maxLen int) string {
 	return "…/" + dir[len(dir)-remain:] + "/" + base
 }
 
+// ansiEscRe matches ANSI escape sequences (CSI and OSC).
+var ansiEscRe = regexp.MustCompile("\x1b\\[[0-9;]*[A-Za-z]|\x1b\\].*?\x1b\\\\")
+
+// wrapText word-wraps text to maxWidth columns, preserving ANSI escape sequences.
+// It splits on paragraph boundaries (\n), tokenises each paragraph into ANSI
+// sequences and plain-text word/space runs, and re-emits active SGR sequences
+// at the start of each wrapped line so colours are preserved.
 func wrapText(text string, maxWidth int) string {
 	if maxWidth <= 0 {
 		return text
 	}
-	var out strings.Builder
-	for _, paragraph := range strings.Split(text, "\n") {
-		words := strings.Fields(paragraph)
-		if len(words) == 0 {
-			out.WriteByte('\n')
-			continue
-		}
-		col := 0
-		for i, w := range words {
-			wlen := len([]rune(w))
-			if i == 0 {
-				out.WriteString(w)
-				col = wlen
-			} else if col+1+wlen > maxWidth {
-				out.WriteByte('\n')
-				out.WriteString(w)
-				col = wlen
-			} else {
-				out.WriteByte(' ')
-				out.WriteString(w)
-				col += 1 + wlen
+
+	type token struct {
+		text   string
+		isAnsi bool
+		width  int // visible width (0 for ANSI tokens)
+	}
+
+	tokenise := func(input string) []token {
+		var tokens []token
+		for len(input) > 0 {
+			loc := ansiEscRe.FindStringIndex(input)
+			if loc != nil && loc[0] == 0 {
+				tokens = append(tokens, token{text: input[:loc[1]], isAnsi: true})
+				input = input[loc[1]:]
+				continue
+			}
+			end := len(input)
+			if loc != nil {
+				end = loc[0]
+			}
+			plain := input[:end]
+			input = input[end:]
+			i := 0
+			for i < len(plain) {
+				if plain[i] == ' ' {
+					j := i
+					for j < len(plain) && plain[j] == ' ' {
+						j++
+					}
+					tokens = append(tokens, token{text: plain[i:j], width: j - i})
+					i = j
+				} else {
+					j := i
+					for j < len(plain) && plain[j] != ' ' {
+						j++
+					}
+					word := plain[i:j]
+					tokens = append(tokens, token{text: word, width: uniseg.StringWidth(word)})
+					i = j
+				}
 			}
 		}
-		out.WriteByte('\n')
+		return tokens
 	}
-	result := out.String()
+
+	isSGR := func(t token) bool {
+		if !t.isAnsi {
+			return false
+		}
+		return len(t.text) > 2 &&
+			t.text[0] == 0x1b &&
+			t.text[1] == '[' &&
+			t.text[len(t.text)-1] == 'm'
+	}
+
+	isReset := func(t token) bool {
+		return t.text == "\033[0m" || t.text == "\033[m"
+	}
+
+	var allLines []string
+	for _, paragraph := range strings.Split(text, "\n") {
+		tokens := tokenise(paragraph)
+		if len(tokens) == 0 {
+			allLines = append(allLines, "")
+			continue
+		}
+		var lineBuf strings.Builder
+		col := 0
+		var activeSeqs []string
+
+		flushLine := func() {
+			allLines = append(allLines, lineBuf.String())
+			lineBuf.Reset()
+			col = 0
+			for _, seq := range activeSeqs {
+				lineBuf.WriteString(seq)
+			}
+		}
+
+		for _, tok := range tokens {
+			if tok.isAnsi {
+				lineBuf.WriteString(tok.text)
+				if isSGR(tok) {
+					if isReset(tok) {
+						activeSeqs = activeSeqs[:0]
+					} else {
+						activeSeqs = append(activeSeqs, tok.text)
+					}
+				}
+				continue
+			}
+			// Space token
+			if len(tok.text) > 0 && tok.text[0] == ' ' {
+				if col == 0 {
+					continue
+				}
+				if col+tok.width > maxWidth {
+					flushLine()
+					continue
+				}
+				lineBuf.WriteString(tok.text)
+				col += tok.width
+				continue
+			}
+			// Word token
+			if tok.width == 0 {
+				lineBuf.WriteString(tok.text)
+				continue
+			}
+			if col+tok.width <= maxWidth {
+				lineBuf.WriteString(tok.text)
+				col += tok.width
+				continue
+			}
+			if col > 0 {
+				flushLine()
+			}
+			// Word wider than a full line: break by grapheme cluster
+			if tok.width > maxWidth {
+				remaining := tok.text
+				for len(remaining) > 0 {
+					cluster, rest, cw, _ := uniseg.FirstGraphemeClusterInString(remaining, -1)
+					if col+cw > maxWidth {
+						flushLine()
+					}
+					lineBuf.WriteString(cluster)
+					col += cw
+					remaining = rest
+				}
+				continue
+			}
+			lineBuf.WriteString(tok.text)
+			col += tok.width
+		}
+		if lineBuf.Len() > 0 {
+			allLines = append(allLines, lineBuf.String())
+		}
+	}
+
+	result := strings.Join(allLines, "\n")
 	return strings.TrimRight(result, "\n")
 }
 
@@ -1776,35 +2043,47 @@ var hookPhrases = map[string]string{
 func runAgentStream(agent *core.Agent, input string, deltaCh chan<- string, toolCh chan<- toolEvent, statusCh chan<- string) tea.Cmd {
 	return func() tea.Msg {
 		start := time.Now()
-		agent.OnStreamDelta = func(delta string) {
-			deltaCh <- delta
-		}
-		agent.OnToolUse = func(name string, args map[string]any, result *core.ToolResult) {
-			fp, _ := args["file_path"].(string)
-			toolCh <- toolEvent{
-				name:     name,
-				args:     args,
-				result:   result.Content,
-				isError:  result.IsError,
-				filePath: fp,
+		var finalText string
+		var finalErr error
+		var toolStartTime time.Time
+		for ev := range agent.RunStream(context.Background(), input) {
+			switch ev.Type {
+			case core.EventAgentTextDelta:
+				deltaCh <- ev.Text
+			case core.EventAgentToolStart:
+				toolStartTime = time.Now()
+			case core.EventAgentToolEnd:
+				dur := time.Duration(0)
+				if !toolStartTime.IsZero() {
+					dur = time.Since(toolStartTime)
+				}
+				fp, _ := ev.ToolArgs["file_path"].(string)
+				toolCh <- toolEvent{
+					name:     ev.ToolName,
+					args:     ev.ToolArgs,
+					result:   ev.ToolResult.Content,
+					isError:  ev.ToolResult.IsError,
+					filePath: fp,
+					duration: dur,
+				}
+				toolStartTime = time.Time{}
+			case core.EventAgentDone:
+				finalText = ev.Text
+			case core.EventStatusUpdate:
+				statusCh <- ev.StatusHook
+			case core.EventAgentError:
+				finalErr = ev.Error
 			}
 		}
-		agent.OnStatusUpdate = func(hookName string) {
-			statusCh <- hookName
-		}
-		text, err := agent.Run(context.Background(), input)
-		agent.OnStreamDelta = nil
-		agent.OnToolUse = nil
-		agent.OnStatusUpdate = nil
 		close(deltaCh)
 		close(toolCh)
 		close(statusCh)
 		elapsed := time.Since(start)
-		if err != nil {
-			return agentErrorMsg{err: err}
+		if finalErr != nil {
+			return agentErrorMsg{err: finalErr}
 		}
 		return agentResponseMsg{
-			text:    text,
+			text:    finalText,
 			elapsed: elapsed,
 		}
 	}
@@ -1853,6 +2132,58 @@ func tick() tea.Cmd {
 	return tea.Tick(60*time.Millisecond, func(t time.Time) tea.Msg {
 		return tickMsg(t)
 	})
+}
+
+// ── Cursor-aware input helpers ────────────────────────────────────────────────
+
+// insertAtCursor inserts text at the current cursor position and advances the cursor.
+func (m *Model) insertAtCursor(text string) {
+	runes := []rune(m.input)
+	pos := m.cursorPos
+	if pos > len(runes) {
+		pos = len(runes)
+	}
+	inserted := []rune(text)
+	newRunes := make([]rune, 0, len(runes)+len(inserted))
+	newRunes = append(newRunes, runes[:pos]...)
+	newRunes = append(newRunes, inserted...)
+	newRunes = append(newRunes, runes[pos:]...)
+	m.input = string(newRunes)
+	m.cursorPos = pos + len(inserted)
+}
+
+// renderInputLine renders the input prompt with cursor at the correct position.
+func (m Model) renderInputLine() string {
+	prompt := stylePrompt.Render("❯ ")
+	runes := []rune(m.input)
+	pos := m.cursorPos
+	if pos > len(runes) {
+		pos = len(runes)
+	}
+	before := string(runes[:pos])
+	if pos < len(runes) {
+		atCursor := string(runes[pos : pos+1])
+		after := string(runes[pos+1:])
+		return prompt + before + styleCursor.Render(atCursor) + after
+	}
+	return prompt + before + styleCursor.Render(" ")
+}
+
+// fmtDuration formats a duration for compact display in tool cards.
+func fmtDuration(d time.Duration) string {
+	if d < 500*time.Millisecond {
+		return "<0.5s"
+	}
+	if d < time.Second {
+		ms := d.Milliseconds()
+		return fmt.Sprintf("%dms", ms)
+	}
+	if d < time.Minute {
+		return fmt.Sprintf("%.1fs", d.Seconds())
+	}
+	mins := int(d.Minutes())
+	secs := int(d.Seconds()) % 60
+	return fmt.Sprintf("%dm%02ds", mins, secs)
 }
 
 // ── Entry point ───────────────────────────────────────────────────────────────
