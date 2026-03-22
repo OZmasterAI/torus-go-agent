@@ -2477,6 +2477,9 @@ func (m *Model) insertAtCursor(text string) {
 // renderInputLine renders the input prompt with a thin beam cursor.
 func (m Model) renderInputLine() string {
 	prompt := stylePrompt.Render("❯ ")
+	if m.input == "" && !m.processing {
+		return prompt + styleDim.Render("Type a message...") + styleCursor.Render("│")
+	}
 	runes := []rune(m.input)
 	pos := m.cursorPos
 	if pos > len(runes) {
