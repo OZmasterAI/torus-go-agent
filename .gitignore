@@ -8,3 +8,9 @@ crash.log
 tui/node_modules/
 .torus/
 trigger_compact.py
+.agent/
+.agents/
+.claude/
+.pi/
+skills/
+skills-lock.json
