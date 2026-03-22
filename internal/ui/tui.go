@@ -338,7 +338,8 @@ func newModel(agent *core.Agent, modelName string, cfg config.AgentConfig, skill
 			if role == "tool" {
 				continue // skip tool results in history view
 			}
-			m.messages = append(m.messages, displayMsg{role: role, text: text})
+			nodeTime := time.UnixMilli(node.Timestamp)
+			m.messages = append(m.messages, displayMsg{role: role, text: text, ts: nodeTime})
 		}
 	}
 
@@ -1337,7 +1338,7 @@ func (m *Model) rebuildContent() {
 
 	wasAtBottom := m.viewport.AtBottom()
 	m.viewport.SetContent(sb.String())
-	if wasAtBottom {
+	if wasAtBottom || m.streaming {
 		m.viewport.GotoBottom()
 	}
 }
