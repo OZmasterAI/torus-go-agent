@@ -6,6 +6,7 @@ data/
 .env
 *.db
 crash.log
+*.test
 .claude-state.json
 tui/node_modules/
 .torus/
