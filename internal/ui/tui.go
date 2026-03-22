@@ -38,8 +38,16 @@ var (
 )
 
 var (
-	styleUser    = lipgloss.NewStyle().Foreground(lipgloss.Color("166")).Bold(true)
-	styleError   = lipgloss.NewStyle().Foreground(lipgloss.Color("9")).Bold(true)
+	styleUser = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#00e5ff")).
+			Background(lipgloss.Color("#0a2a2f")).
+			Bold(true)
+	styleAssistantPrefix = lipgloss.NewStyle().
+				Foreground(lipgloss.Color("#ff6600")).
+				Bold(true)
+	styleTimestamp = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("242"))
+	styleError = lipgloss.NewStyle().Foreground(lipgloss.Color("9")).Bold(true)
 	styleCursor  = lipgloss.NewStyle().Reverse(true)
 	stylePrompt  = lipgloss.NewStyle().Foreground(lipgloss.Color("166")).Bold(true)
 	styleDim     = lipgloss.NewStyle().Foreground(lipgloss.Color("242"))
@@ -195,8 +203,9 @@ type displayMsg struct {
 	role     string // "user", "assistant", "error", "tool"
 	text     string
 	isError  bool
-	rendered string   // cached glamour output
+	rendered string     // cached glamour output
 	tool     *toolEvent // set when role == "tool"
+	ts       time.Time  // when this message was created
 }
 
 // ── Model ─────────────────────────────────────────────────────────────────────
@@ -588,7 +597,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.processing {
 				if m.agent.Steering != nil {
 					m.agent.Steering <- types.Message{Role: "user", Content: []types.ContentBlock{{Type: "text", Text: input}}}
-					m.messages = append(m.messages, displayMsg{role: "user", text: "\u21aa " + input})
+					m.messages = append(m.messages, newDisplayMsg("user", "\u21aa "+input))
 					m.input = ""
 					m.cursorPos = 0
 					m.rebuildContent()
@@ -657,8 +666,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			}
 			// Send message
-			m.messages = append(m.messages, displayMsg{role: "user", text: input})
-			m.messages = append(m.messages, displayMsg{role: "assistant", text: ""})
+			m.messages = append(m.messages, newDisplayMsg("user", input))
+			m.messages = append(m.messages, newDisplayMsg("assistant", ""))
 			m.input = ""
 			m.cursorPos = 0
 			m.processing = true
@@ -791,9 +800,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		// Add tool card
-		m.messages = append(m.messages, displayMsg{role: "tool", tool: &ev})
+		m.messages = append(m.messages, displayMsg{role: "tool", tool: &ev, ts: time.Now()})
 		// Add new streaming placeholder for next turn
-		m.messages = append(m.messages, displayMsg{role: "assistant", text: ""})
+		m.messages = append(m.messages, newDisplayMsg("assistant", ""))
 
 		m.rebuildContent()
 		return m, waitForToolEvent(m.toolCh)
@@ -1287,8 +1296,9 @@ func (m *Model) rebuildContent() {
 		dm := &m.messages[i]
 		switch dm.role {
 		case "user":
-			sb.WriteString(styleUser.Render("you ❯ "))
-			sb.WriteString(wrapText(dm.text, chatW-6))
+			ts := fmtTimestamp(dm.ts)
+			sb.WriteString(styleTimestamp.Render(ts) + " " + styleUser.Render(" ◉ you❯ ") + " ")
+			sb.WriteString(wrapText(dm.text, chatW-len(ts)-12))
 			sb.WriteString("\n\n")
 
 		case "assistant":
@@ -1299,21 +1309,28 @@ func (m *Model) rebuildContent() {
 					sb.WriteByte('\n')
 				}
 			} else {
+				if !dm.ts.IsZero() {
+					ts := fmtTimestamp(dm.ts)
+					sb.WriteString(styleTimestamp.Render(ts) + " " + styleAssistantPrefix.Render("◉ torus❯") + "\n")
+				}
 				if dm.rendered == "" {
 					dm.rendered = m.glamourRender(dm.text)
 				}
 				sb.WriteString(dm.rendered)
-				sb.WriteByte('\n')
+				sb.WriteString("\n\n")
 			}
 
 		case "tool":
 			if dm.tool != nil {
-				sb.WriteString(m.renderToolCard(dm.tool, chatW))
+				ts := fmtTimestamp(dm.ts)
+				sb.WriteString(styleTimestamp.Render(ts) + " ")
+				sb.WriteString(m.renderToolCard(dm.tool, chatW-10))
 				sb.WriteByte('\n')
 			}
 
 		case "error":
-			sb.WriteString(styleError.Render("error ❯ " + dm.text))
+			ts := fmtTimestamp(dm.ts)
+			sb.WriteString(styleTimestamp.Render(ts) + " " + styleError.Render("✗ error ❯ " + dm.text))
 			sb.WriteString("\n\n")
 		}
 	}
@@ -1814,6 +1831,7 @@ func (m Model) glamourRender(text string) string {
 		return text
 	}
 	rendered = strings.TrimRight(rendered, "\n")
+	rendered = strings.TrimLeft(rendered, "\n")
 	// Convert markdown links to clickable OSC 8 hyperlinks
 	rendered = osc8LinkRe.ReplaceAllString(rendered, "\033]8;;$2\033\\$1\033]8;;\033\\")
 	return rendered
@@ -2298,6 +2316,17 @@ func (m Model) renderInputLine() string {
 }
 
 // fmtDuration formats a duration for compact display in tool cards.
+func newDisplayMsg(role, text string) displayMsg {
+	return displayMsg{role: role, text: text, ts: time.Now()}
+}
+
+func fmtTimestamp(t time.Time) string {
+	if t.IsZero() {
+		return "        "
+	}
+	return t.Format("15:04:05")
+}
+
 func fmtDuration(d time.Duration) string {
 	if d < 500*time.Millisecond {
 		return "<0.5s"
