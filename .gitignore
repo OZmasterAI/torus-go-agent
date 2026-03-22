@@ -1,7 +1,4 @@
 torus_go_agent
-torus
-torus-agent
-torus_test
 data/
 .env
 *.db
