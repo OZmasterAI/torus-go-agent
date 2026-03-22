@@ -1319,7 +1319,7 @@ func (m Model) View() string {
 			checkStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#00cc66"))
 			elapsed := fmtDuration(m.lastElapsed)
 			sb.WriteString("\n\n")
-			sb.WriteString(checkStyle.Render("  ✔") + completionStyle.Render(fmt.Sprintf(" Worked for %s", elapsed)))
+			sb.WriteString(checkStyle.Render("  ✔") + completionStyle.Render(fmt.Sprintf(" Toroidal cycle complete | duration: %s", elapsed)))
 			sb.WriteString("\n\n")
 		}
 
@@ -2300,7 +2300,7 @@ func (m Model) renderProgressBar() string {
 	}
 	timeStr := styleDim.Render(fmt.Sprintf(" %.1fs", elapsed.Seconds()))
 	amberStyle := amberCycle(elapsed).Italic(true)
-	return bar.String() + amberStyle.Render(" "+phrase) + timeStr
+	return amberStyle.Render("  "+phrase) + timeStr + "\n" + bar.String()
 }
 
 // amberCycle returns a lipgloss style that smoothly cycles through amber/orange shades
