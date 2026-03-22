@@ -2298,9 +2298,12 @@ func (m Model) renderProgressBar() string {
 	if phrase == "" {
 		phrase = "Toroidal meditation running..."
 	}
+	spinFrames := []string{"\u280b", "\u2819", "\u2839", "\u2838", "\u283c", "\u2834", "\u2826", "\u2827", "\u2807"}
+	spinIdx := int(elapsed.Milliseconds()/100) % len(spinFrames)
+	spinChar := amberCycle(elapsed).Render(spinFrames[spinIdx])
 	timeStr := styleDim.Render(fmt.Sprintf(" %.1fs", elapsed.Seconds()))
 	amberStyle := amberCycle(elapsed).Italic(true)
-	return amberStyle.Render("  "+phrase) + timeStr + "\n" + bar.String()
+	return "  " + spinChar + amberStyle.Render(" "+phrase) + timeStr + "\n" + bar.String()
 }
 
 // amberCycle returns a lipgloss style that smoothly cycles through amber/orange shades
