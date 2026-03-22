@@ -1298,27 +1298,27 @@ func (m *Model) rebuildContent() {
 		switch dm.role {
 		case "user":
 			ts := fmtTimestamp(dm.ts)
-			sb.WriteString(styleTimestamp.Render(ts) + " " + styleUser.Render(" ◉ you❯ ") + " ")
-			sb.WriteString(wrapText(dm.text, chatW-len(ts)-12))
+			sb.WriteString(styleTimestamp.Render(ts) + " " + styleUser.Render("◉ <you>") + "\n")
+			sb.WriteString("            " + wrapText(dm.text, chatW-12))
 			sb.WriteString("\n\n")
 
 		case "assistant":
 			isStreaming := m.streaming && i == len(m.messages)-1
 			if isStreaming || dm.text == "" {
-				sb.WriteString(wrapText(dm.text, chatW-2))
+				sb.WriteString(indentBlock(wrapText(dm.text, chatW-12), "          "))
 				if dm.text != "" {
 					sb.WriteByte('\n')
 				}
 			} else {
 				if !dm.ts.IsZero() {
 					ts := fmtTimestamp(dm.ts)
-					sb.WriteString(styleTimestamp.Render(ts) + " " + styleAssistantPrefix.Render("◉ torus❯") + "\n")
+					sb.WriteString(styleTimestamp.Render(ts) + " " + styleAssistantPrefix.Render("◉ <torus>") + "\n")
 				}
 				if dm.rendered == "" {
 					dm.rendered = m.glamourRender(dm.text)
 				}
-				sb.WriteString(dm.rendered)
-				sb.WriteString("\n\n")
+				sb.WriteString(indentBlock(dm.rendered, "          "))
+				sb.WriteString("\n\n\n")
 			}
 
 		case "tool":
@@ -2319,6 +2319,17 @@ func (m Model) renderInputLine() string {
 // fmtDuration formats a duration for compact display in tool cards.
 func newDisplayMsg(role, text string) displayMsg {
 	return displayMsg{role: role, text: text, ts: time.Now()}
+}
+
+func indentBlock(text, prefix string) string {
+	lines := strings.Split(text, "\n")
+	for i, line := range lines {
+		trimmed := strings.TrimLeft(line, " ")
+		if trimmed != "" {
+			lines[i] = prefix + trimmed
+		}
+	}
+	return strings.Join(lines, "\n")
 }
 
 func fmtTimestamp(t time.Time) string {
