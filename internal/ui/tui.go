@@ -384,6 +384,20 @@ func (m *Model) resizeViewport() {
 		return
 	}
 	extraLines := inputLines // border + input + border + status
+	// Account for wrapped input lines beyond the first
+	if m.width > 0 && len(m.input) > 0 {
+		promptW := 2
+		contentLen := len([]rune(m.input)) + 1 // +1 for cursor
+		firstW := m.width - promptW
+		if firstW > 0 && contentLen > firstW {
+			rem := contentLen - firstW
+			wrapW := m.width - promptW
+			if wrapW <= 0 {
+				wrapW = m.width
+			}
+			extraLines += (rem + wrapW - 1) / wrapW
+		}
+	}
 	if m.processing {
 		extraLines += 2 // blank line + progress bar
 	}
@@ -531,6 +545,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.input = string(runes[:newPos]) + string(runes[pos:])
 				m.cursorPos = newPos
 			}
+			m.resizeViewport()
 			return m, nil
 
 		case tea.KeyCtrlU:
@@ -546,6 +561,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			m.input = string(runes[:lineStart]) + string(runes[pos:])
 			m.cursorPos = lineStart
+			m.resizeViewport()
 			return m, nil
 
 		case tea.KeyCtrlA:
@@ -741,6 +757,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.acMode = false
 				}
 			}
+			m.resizeViewport()
 			return m, nil
 
 		case tea.KeyDelete:
@@ -749,6 +766,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if pos < len(runes) {
 				m.input = string(runes[:pos]) + string(runes[pos+1:])
 			}
+			m.resizeViewport()
 			return m, nil
 
 		case tea.KeyLeft:
@@ -2472,11 +2490,13 @@ func (m *Model) insertAtCursor(text string) {
 	newRunes = append(newRunes, runes[pos:]...)
 	m.input = string(newRunes)
 	m.cursorPos = pos + len(inserted)
+	m.resizeViewport()
 }
 
-// renderInputLine renders the input prompt with a thin beam cursor.
+// renderInputLine renders the input prompt with a thin beam cursor and visual wrapping.
 func (m Model) renderInputLine() string {
 	prompt := stylePrompt.Render("❯ ")
+	promptWidth := 2 // "❯ " is 2 visible chars
 	if m.input == "" && !m.processing {
 		return prompt + styleDim.Render("Type a message...") + styleCursor.Render("│")
 	}
@@ -2486,9 +2506,56 @@ func (m Model) renderInputLine() string {
 		pos = len(runes)
 	}
 	before := string(runes[:pos])
-	after := string(runes[pos:])
 	cursor := styleCursor.Render("│")
-	return prompt + before + cursor + after
+	after := string(runes[pos:])
+	raw := before + cursor + after
+
+	// Wrap the raw text at terminal width, accounting for prompt on first line
+	lineW := m.width
+	if lineW <= 0 {
+		return prompt + raw
+	}
+	firstW := lineW - promptWidth
+	if firstW <= 0 {
+		firstW = lineW
+	}
+
+	var lines []string
+	remaining := []rune(raw)
+	// First line: narrower (prompt takes space)
+	if len(remaining) <= firstW {
+		lines = append(lines, string(remaining))
+		remaining = nil
+	} else {
+		lines = append(lines, string(remaining[:firstW]))
+		remaining = remaining[firstW:]
+	}
+	// Subsequent lines: full width, indented to align with first line
+	for len(remaining) > 0 {
+		w := lineW - promptWidth
+		if w <= 0 {
+			w = lineW
+		}
+		if len(remaining) <= w {
+			lines = append(lines, string(remaining))
+			remaining = nil
+		} else {
+			lines = append(lines, string(remaining[:w]))
+			remaining = remaining[w:]
+		}
+	}
+
+	indent := strings.Repeat(" ", promptWidth)
+	var sb strings.Builder
+	for i, line := range lines {
+		if i == 0 {
+			sb.WriteString(prompt + line)
+		} else {
+			sb.WriteByte('\n')
+			sb.WriteString(indent + line)
+		}
+	}
+	return sb.String()
 }
 
 // fmtDuration formats a duration for compact display in tool cards.

@@ -4,6 +4,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/charmbracelet/bubbles/viewport"
 )
 
 // TestFmtTok tests the token count formatter.
@@ -502,6 +504,65 @@ func TestEdgeCasesAndIntegration(t *testing.T) {
 		}
 		if lines[1] != "" || lines[2] != "" {
 			t.Errorf("indentBlock should preserve empty lines, got %v", lines)
+		}
+	})
+}
+
+// TestResizeViewportWithWrappedInput tests viewport shrinks when input wraps.
+func TestResizeViewportWithWrappedInput(t *testing.T) {
+	m := Model{width: 20, height: 30, ready: true}
+	m.viewport = viewport.Model{}
+
+	// Short input — baseline
+	m.input = "hi"
+	m.resizeViewport()
+	baseHeight := m.viewport.Height
+
+	// Long input that wraps — viewport should be shorter
+	m.input = strings.Repeat("a", 40) // wraps to ~3 lines at width 20
+	m.resizeViewport()
+	wrappedHeight := m.viewport.Height
+
+	if wrappedHeight >= baseHeight {
+		t.Errorf("viewport should shrink with wrapped input: base=%d, wrapped=%d", baseHeight, wrappedHeight)
+	}
+}
+
+// TestRenderInputLineWrapping tests that long input visually wraps.
+func TestRenderInputLineWrapping(t *testing.T) {
+	m := Model{width: 20}
+	promptWidth := 2 // "❯ "
+
+	t.Run("short input no wrap", func(t *testing.T) {
+		m.input = "hello"
+		m.cursorPos = 5
+		result := m.renderInputLine()
+		if strings.Contains(result, "\n") {
+			t.Errorf("short input should not wrap, got: %q", result)
+		}
+	})
+
+	t.Run("long input wraps", func(t *testing.T) {
+		// First line fits 18 chars (20 - 2 for prompt), then wraps
+		m.input = strings.Repeat("a", 30)
+		m.cursorPos = 30
+		result := m.renderInputLine()
+		lines := strings.Split(result, "\n")
+		if len(lines) < 2 {
+			t.Errorf("expected wrapped lines, got %d line(s): %q", len(lines), result)
+		}
+		// Second line should be indented by promptWidth
+		if len(lines) > 1 && !strings.HasPrefix(lines[1], strings.Repeat(" ", promptWidth)) {
+			t.Errorf("wrapped line should be indented, got: %q", lines[1])
+		}
+	})
+
+	t.Run("empty input shows placeholder", func(t *testing.T) {
+		m.input = ""
+		m.cursorPos = 0
+		result := m.renderInputLine()
+		if !strings.Contains(result, "Type a message...") {
+			t.Errorf("empty input should show placeholder, got: %q", result)
 		}
 	})
 }
