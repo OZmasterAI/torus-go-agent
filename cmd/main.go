@@ -456,6 +456,163 @@ func main() {
 		},
 	})
 
+	// Add run_sequential tool — pipeline of agents where each gets the previous output
+	agent.AddTool(types.Tool{
+		Name:        "run_sequential",
+		Description: "Run multiple sub-agents in sequence. Each agent receives the previous agent's output as context. Returns the final agent's output.",
+		InputSchema: map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"agents": map[string]any{
+					"type":        "array",
+					"description": "List of agents to run in order",
+					"items": map[string]any{
+						"type": "object",
+						"properties": map[string]any{
+							"task":       map[string]any{"type": "string", "description": "Task for the agent"},
+							"agent_type": map[string]any{"type": "string", "description": "builder, researcher, or tester"},
+						},
+						"required": []string{"task"},
+					},
+				},
+			},
+			"required": []string{"agents"},
+		},
+		Execute: func(args map[string]any) (*types.ToolResult, error) {
+			rawAgents, _ := args["agents"].([]any)
+			if len(rawAgents) == 0 {
+				return &types.ToolResult{Content: "Error: agents array is empty", IsError: true}, nil
+			}
+			configs := make([]features.SubAgentConfig, 0, len(rawAgents))
+			for _, raw := range rawAgents {
+				m, ok := raw.(map[string]any)
+				if !ok {
+					continue
+				}
+				task, _ := m["task"].(string)
+				agentType, _ := m["agent_type"].(string)
+				if agentType == "" {
+					agentType = "builder"
+				}
+				configs = append(configs, features.SubAgentConfig{
+					Task:      task,
+					AgentType: agentType,
+					Tools:     features.DefaultToolsForType(agentType),
+					MaxTurns:  20,
+				})
+			}
+			result, err := features.RunSequential(context.Background(), dag, prov, soul, configs, subMgr, agent)
+			if err != nil {
+				return &types.ToolResult{Content: "Sequential run failed: " + err.Error(), IsError: true}, nil
+			}
+			return &types.ToolResult{Content: result}, nil
+		},
+	})
+
+	// Add run_parallel tool — fan-out agents concurrently and collect all results
+	agent.AddTool(types.Tool{
+		Name:        "run_parallel",
+		Description: "Run multiple sub-agents concurrently. All agents run at the same time. Returns all results.",
+		InputSchema: map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"agents": map[string]any{
+					"type":        "array",
+					"description": "List of agents to run concurrently",
+					"items": map[string]any{
+						"type": "object",
+						"properties": map[string]any{
+							"task":       map[string]any{"type": "string", "description": "Task for the agent"},
+							"agent_type": map[string]any{"type": "string", "description": "builder, researcher, or tester"},
+						},
+						"required": []string{"task"},
+					},
+				},
+			},
+			"required": []string{"agents"},
+		},
+		Execute: func(args map[string]any) (*types.ToolResult, error) {
+			rawAgents, _ := args["agents"].([]any)
+			if len(rawAgents) == 0 {
+				return &types.ToolResult{Content: "Error: agents array is empty", IsError: true}, nil
+			}
+			configs := make([]features.SubAgentConfig, 0, len(rawAgents))
+			for _, raw := range rawAgents {
+				m, ok := raw.(map[string]any)
+				if !ok {
+					continue
+				}
+				task, _ := m["task"].(string)
+				agentType, _ := m["agent_type"].(string)
+				if agentType == "" {
+					agentType = "builder"
+				}
+				configs = append(configs, features.SubAgentConfig{
+					Task:      task,
+					AgentType: agentType,
+					Tools:     features.DefaultToolsForType(agentType),
+					MaxTurns:  20,
+				})
+			}
+			results, err := features.RunParallel(context.Background(), dag, prov, soul, configs, subMgr, agent)
+			if err != nil {
+				return &types.ToolResult{Content: "Parallel run failed: " + err.Error(), IsError: true}, nil
+			}
+			var out strings.Builder
+			for i, r := range results {
+				fmt.Fprintf(&out, "=== Agent %d ===\n", i+1)
+				if r.Error != nil {
+					fmt.Fprintf(&out, "Error: %s\n", r.Error.Error())
+				} else {
+					fmt.Fprintf(&out, "%s\n", r.Text)
+				}
+			}
+			return &types.ToolResult{Content: out.String()}, nil
+		},
+	})
+
+	// Add run_loop tool — repeat one agent until a condition is met
+	agent.AddTool(types.Tool{
+		Name:        "run_loop",
+		Description: "Run a single sub-agent repeatedly. Each iteration receives the previous output. Stops when max_iterations is reached or the agent's output contains the stop_phrase.",
+		InputSchema: map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"task":           map[string]any{"type": "string", "description": "Task for the agent"},
+				"agent_type":     map[string]any{"type": "string", "description": "builder, researcher, or tester"},
+				"max_iterations": map[string]any{"type": "number", "description": "Maximum iterations (default 5)"},
+				"stop_phrase":    map[string]any{"type": "string", "description": "Stop when output contains this phrase (e.g. 'DONE', 'ALL TESTS PASS')"},
+			},
+			"required": []string{"task"},
+		},
+		Execute: func(args map[string]any) (*types.ToolResult, error) {
+			task, _ := args["task"].(string)
+			agentType, _ := args["agent_type"].(string)
+			if agentType == "" {
+				agentType = "builder"
+			}
+			maxIter := int(tools.GF(args, "max_iterations", 5))
+			stopPhrase, _ := args["stop_phrase"].(string)
+
+			cfg := features.SubAgentConfig{
+				Task:      task,
+				AgentType: agentType,
+				Tools:     features.DefaultToolsForType(agentType),
+				MaxTurns:  20,
+			}
+
+			shouldStop := func(result string, iteration int) bool {
+				return stopPhrase != "" && strings.Contains(result, stopPhrase)
+			}
+
+			result, err := features.RunLoop(context.Background(), dag, prov, soul, cfg, subMgr, agent, shouldStop, maxIter)
+			if err != nil {
+				return &types.ToolResult{Content: "Loop run failed: " + err.Error(), IsError: true}, nil
+			}
+			return &types.ToolResult{Content: result}, nil
+		},
+	})
+
 	// Connect DAG to hooks for mutation events
 	dag.SetHooks(hooks)
 

@@ -337,6 +337,7 @@ data: [DONE]
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
 	ch, err := p.StreamComplete(ctx, "system", nil, nil, 100)
 	if err != nil {

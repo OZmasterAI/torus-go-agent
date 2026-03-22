@@ -318,7 +318,7 @@ func (p *OpenRouterProvider) Complete(ctx context.Context, systemPrompt string, 
 	}
 
 	if resp.StatusCode != 200 {
-		return nil, fmt.Errorf("openrouter API error %d: %s", resp.StatusCode, string(respBody))
+		return nil, fmt.Errorf("%s API error %d: %s", p.providerName, resp.StatusCode, string(respBody))
 	}
 
 	var apiResp openaiResponse
@@ -477,7 +477,7 @@ func (p *OpenRouterProvider) StreamComplete(ctx context.Context, systemPrompt st
 	if resp.StatusCode != 200 {
 		defer resp.Body.Close()
 		respBody, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("openrouter API error %d: %s", resp.StatusCode, string(respBody))
+		return nil, fmt.Errorf("%s API error %d: %s", p.providerName, resp.StatusCode, string(respBody))
 	}
 
 	ch := make(chan t.StreamEvent, 32)
@@ -491,7 +491,7 @@ func (p *OpenRouterProvider) parseOpenAISSE(ctx context.Context, resp *http.Resp
 	defer resp.Body.Close()
 	defer func() {
 		if r := recover(); r != nil {
-			ch <- t.StreamEvent{Type: t.EventError, Error: fmt.Errorf("openrouter stream panic: %v", r)}
+			ch <- t.StreamEvent{Type: t.EventError, Error: fmt.Errorf("%s stream panic: %v", p.providerName, r)}
 		}
 	}()
 
