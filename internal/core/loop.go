@@ -338,6 +338,8 @@ func (a *Agent) findTool(name string) *t.Tool {
 
 func (a *Agent) DAG() *DAG                { return a.dag }
 func (a *Agent) Hooks() *HookRegistry     { return a.hooks }
+func (a *Agent) Provider() t.Provider     { return a.provider }
+func (a *Agent) SystemPrompt() string     { return a.config.SystemPrompt }
 func (a *Agent) AddTool(tool t.Tool)        { a.config.Tools = append(a.config.Tools, tool) }
 func (a *Agent) SetSteeringMode(mode string) { a.steeringMode = mode }
 func (a *Agent) GetSteeringMode() string {

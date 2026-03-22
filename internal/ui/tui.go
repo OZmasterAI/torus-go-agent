@@ -156,11 +156,34 @@ type tickMsg time.Time
 type overlayMode int
 
 const (
-	overlayNone    overlayMode = iota
-	overlayPalette             // command palette (Ctrl+K or /)
-	overlaySessions            // session/branch switcher (Ctrl+B)
-	overlayHelp                // keybindings help (?)
+	overlayNone     overlayMode = iota
+	overlayPalette              // command palette (Ctrl+K or /)
+	overlaySessions             // session/branch switcher (Ctrl+B)
+	overlayHelp                 // keybindings help (?)
+	overlayWorkflow             // workflow builder (/sequential, /parallel, /loop)
 )
+
+// workflowAgent is one agent entry in the workflow builder.
+type workflowAgent struct {
+	Task      string
+	AgentType string // "builder", "researcher", "tester"
+}
+
+// workflowState tracks the interactive workflow overlay.
+type workflowState struct {
+	mode      string // "sequential", "parallel", "loop"
+	agents    []workflowAgent
+	editIdx   int    // focused field: 0=task, 1=type, 2=actions
+	taskInput string // current task being typed
+	typeIdx   int    // 0=builder, 1=researcher, 2=tester
+	actionIdx int    // which action button is highlighted
+
+	// loop-only
+	maxIterations string // stored as string for editing
+	stopPhrase    string
+}
+
+var workflowTypes = []string{"builder", "researcher", "tester"}
 
 // paletteCommand is an entry in the command palette.
 type paletteCommand struct {
@@ -184,6 +207,9 @@ func defaultPaletteCommands(skills *features.SkillRegistry) []paletteCommand {
 		{name: "MCP tools", key: "", command: "/mcp-tools"},
 		{name: "Show keybindings", key: "?", command: "::help"},
 		{name: "List skills", key: "", command: "/skills"},
+		{name: "Workflow: sequential", key: "", command: "/sequential"},
+		{name: "Workflow: parallel", key: "", command: "/parallel"},
+		{name: "Workflow: loop", key: "", command: "/loop"},
 		{name: "Exit", key: "Ctrl+D", command: "/exit"},
 	}
 	if skills != nil {
@@ -268,12 +294,13 @@ type Model struct {
 	acFiles   []string // cached file list
 	acLoaded  bool
 
-	// Overlay (command palette / session switcher / help)
+	// Overlay (command palette / session switcher / help / workflow)
 	overlay      overlayMode
 	overlayQuery string
 	overlayIdx   int
 	overlayItems []paletteCommand  // filtered palette commands
 	branches     []core.BranchInfo // cached for session switcher
+	workflow     workflowState     // workflow builder state
 
 	// Terminal
 	width  int
@@ -620,6 +647,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if input == "/compact" {
 				return m.handleCompact()
 			}
+			if input == "/sequential" || input == "/parallel" || input == "/loop" {
+				return m.openWorkflowOverlay(strings.TrimPrefix(input, "/"))
+			}
 			if strings.HasPrefix(input, "/fork") {
 				return m.handleFork(strings.TrimPrefix(input, "/fork"))
 			}
@@ -888,6 +918,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.rebuildContent()
 		return m, nil
 
+	case workflowDoneMsg:
+		if msg.err != nil {
+			m.messages = append(m.messages, displayMsg{
+				role: "error", text: fmt.Sprintf("Workflow error: %v", msg.err), isError: true,
+			})
+		} else {
+			m.messages = append(m.messages, displayMsg{
+				role: "assistant", text: msg.text,
+			})
+		}
+		m.rebuildContent()
+		return m, nil
+
 	case tea.MouseMsg:
 		return m.handleMouse(msg)
 	}
@@ -1126,8 +1169,22 @@ func (m *Model) handleOverlayKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 		}
+	case overlayWorkflow:
+		return m.handleWorkflowKey(msg)
 	}
 
+	return m, nil
+}
+
+func (m *Model) openWorkflowOverlay(mode string) (tea.Model, tea.Cmd) {
+	m.overlay = overlayWorkflow
+	m.workflow = workflowState{
+		mode:          mode,
+		typeIdx:       0,
+		maxIterations: "5",
+	}
+	m.input = ""
+	m.cursorPos = 0
 	return m, nil
 }
 
@@ -1177,6 +1234,8 @@ func (m *Model) executePaletteCommand(cmd string) (tea.Model, tea.Cmd) {
 		return m.handleMCPTools()
 	case "/skills":
 		return m.handleSkills()
+	case "/sequential", "/parallel", "/loop":
+		return m.openWorkflowOverlay(strings.TrimPrefix(cmd, "/"))
 	case "/exit":
 		return m, tea.Quit
 	case "::sessions":
@@ -1612,8 +1671,121 @@ func (m Model) renderOverlay() string {
 		return m.renderSessionSwitcher()
 	case overlayHelp:
 		return m.renderHelp()
+	case overlayWorkflow:
+		return m.renderWorkflow()
 	}
 	return ""
+}
+
+func (m Model) renderWorkflow() string {
+	var sb strings.Builder
+	title := strings.ToUpper(m.workflow.mode)
+	sb.WriteString(styleOverlayTitle.Render("Workflow: " + title))
+	sb.WriteString("  " + styleOverlayHint.Render("Tab cycle  ↑↓ select  Enter confirm  Esc cancel"))
+	sb.WriteByte('\n')
+	sb.WriteByte('\n')
+
+	// Show added agents
+	for i, a := range m.workflow.agents {
+		sb.WriteString(fmt.Sprintf("  %d. %s ", i+1, a.Task))
+		sb.WriteString(styleDim.Render("["+a.AgentType+"]"))
+		sb.WriteByte('\n')
+	}
+	if len(m.workflow.agents) > 0 {
+		sb.WriteByte('\n')
+	}
+
+	// Field styles
+	focusStyle := func(idx int) lipgloss.Style {
+		if m.workflow.editIdx == idx {
+			return styleACSelected
+		}
+		return styleDim
+	}
+
+	// Task input
+	cursor := ""
+	if m.workflow.editIdx == 0 {
+		cursor = "█"
+	}
+	if m.workflow.mode == "loop" && len(m.workflow.agents) > 0 {
+		sb.WriteString(styleDim.Render(fmt.Sprintf("  Task: %s", m.workflow.agents[0].Task)))
+	} else {
+		sb.WriteString(focusStyle(0).Render(fmt.Sprintf("  Task: %s%s", m.workflow.taskInput, cursor)))
+	}
+	sb.WriteByte('\n')
+
+	// Type selector
+	sb.WriteString("  Type: ")
+	for i, t := range workflowTypes {
+		s := styleDim
+		if i == m.workflow.typeIdx && m.workflow.editIdx == 1 {
+			s = styleACSelected
+		} else if i == m.workflow.typeIdx {
+			s = lipgloss.NewStyle().Foreground(lipgloss.Color("208"))
+		}
+		sb.WriteString(s.Render(t))
+		if i < len(workflowTypes)-1 {
+			sb.WriteString("  ")
+		}
+	}
+	sb.WriteByte('\n')
+
+	// Loop-specific fields
+	if m.workflow.mode == "loop" {
+		iterCursor := ""
+		if m.workflow.editIdx == 2 {
+			iterCursor = "█"
+		}
+		sb.WriteString(focusStyle(2).Render(fmt.Sprintf("  Max iterations: %s%s", m.workflow.maxIterations, iterCursor)))
+		sb.WriteByte('\n')
+
+		stopCursor := ""
+		if m.workflow.editIdx == 3 {
+			stopCursor = "█"
+		}
+		sb.WriteString(focusStyle(3).Render(fmt.Sprintf("  Stop phrase: %s%s", m.workflow.stopPhrase, stopCursor)))
+		sb.WriteByte('\n')
+	}
+
+	// Actions
+	sb.WriteByte('\n')
+	actionsField := m.workflowFieldCount() - 1
+	onActions := m.workflow.editIdx == actionsField
+
+	if m.workflow.mode == "loop" {
+		if len(m.workflow.agents) == 0 {
+			s := styleDim
+			if onActions {
+				s = styleACSelected
+			}
+			sb.WriteString("  " + s.Render("[ Set agent (Enter) ]"))
+		} else {
+			actions := []string{"Run", "Remove"}
+			for i, a := range actions {
+				s := styleDim
+				if onActions && m.workflow.actionIdx == i {
+					s = styleACSelected
+				}
+				sb.WriteString("  " + s.Render("[ "+a+" ]"))
+			}
+		}
+	} else {
+		actions := []string{"Add agent"}
+		if len(m.workflow.agents) > 0 {
+			actions = append(actions, "Run", "Remove last")
+		}
+		for i, a := range actions {
+			s := styleDim
+			if onActions && m.workflow.actionIdx == i {
+				s = styleACSelected
+			}
+			sb.WriteString("  " + s.Render("[ "+a+" ]"))
+		}
+	}
+	sb.WriteByte('\n')
+
+	return sb.String()
 }
 
 func (m Model) renderPalette() string {
