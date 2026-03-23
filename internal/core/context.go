@@ -277,6 +277,30 @@ func CompactDAG(dag *DAG, cfg CompactionConfig, summarize func(string) (string, 
 	middle := messages[1 : len(messages)-keepN]
 	keyContent := extractKeyContent(middle)
 
+	// --- 3b. Group dropped operations and generate working memory one-liners ---
+	droppedOps := GroupOperations(append([]t.Message{messages[0]}, middle...))
+	var workingMemory string
+	if len(droppedOps) > 0 {
+		var wmLines []string
+		for _, op := range droppedOps {
+			wmLines = append(wmLines, RenderWorkingMemoryOneLiner(op))
+		}
+		workingMemory = strings.Join(wmLines, "\n")
+	}
+
+	// --- 3c. Preserve existing working memory from messages[0] (set by compression) ---
+	if sysText := extractText(messages[0]); strings.Contains(sysText, "## Working Memory") {
+		idx := strings.Index(sysText, "## Working Memory")
+		existingWM := strings.TrimSpace(sysText[idx+len("## Working Memory"):])
+		if existingWM != "" {
+			if workingMemory != "" {
+				workingMemory = existingWM + "\n" + workingMemory
+			} else {
+				workingMemory = existingWM
+			}
+		}
+	}
+
 	// --- 4. Summarise ---
 	var summary string
 	if summarize != nil {
@@ -297,10 +321,14 @@ func CompactDAG(dag *DAG, cfg CompactionConfig, summarize func(string) (string, 
 		return fmt.Errorf("compactDAG create branch: %w", err)
 	}
 
-	// --- 6. Add summary node ---
+	// --- 6. Add summary node (with working memory one-liners) ---
+	summaryText := fmt.Sprintf("[Context Summary]\n\n%s", summary)
+	if workingMemory != "" {
+		summaryText += "\n\n## Working Memory\n" + workingMemory
+	}
 	summaryContent := []t.ContentBlock{{
 		Type: "text",
-		Text: fmt.Sprintf("[Context Summary]\n\n%s", summary),
+		Text: summaryText,
 	}}
 	summaryNodeID, err := dag.AddNode(rootNode.ID, t.RoleAssistant, summaryContent, "", "", estimateTokens([]t.Message{{Role: t.RoleAssistant, Content: summaryContent}}))
 	if err != nil {
