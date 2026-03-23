@@ -13,6 +13,6 @@
   },
   "z-ai/glm5": {
     "contextWindow": 202752,
-    "maxTokens": 202752
+    "maxTokens": 199000
   }
 }

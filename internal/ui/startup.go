@@ -378,90 +378,91 @@ func (m *setupModel) resolveModelSpecs() {
 }
 
 type configField struct {
-	name string
-	kind string // "bool", "int", "string"
+	name    string
+	kind    string   // "bool", "int", "string", "cycle"
+	options []string // for "cycle" kind only
 }
 
 var configFields = []configField{
-	{"MaxTokens", "int"},           // 0
-	{"ContextWindow", "int"},       // 1
-	{"Compaction", "string"},       // 2
-	{"CompactionTrigger", "string"},// 3
-	{"CompactionThreshold", "int"}, // 4
-	{"CompactionMaxMessages", "int"},// 5
-	{"CompactionKeepLastN", "int"}, // 6
-	{"CompactionModel", "string"},  // 7
-	{"ContinuousCompression", "bool"},// 8
-	{"CompressionKeepLast", "int"}, // 9
-	{"CompressionMinMessages", "int"},// 10
-	{"ZoneBudgeting", "bool"},      // 11
-	{"ZoneArchivePercent", "int"},  // 12
-	{"SmartRouting", "bool"},       // 13
-	{"SmartRoutingModel", "string"},// 14
-	{"SteeringMode", "string"},     // 15
-	{"PersistThinking", "bool"},    // 16
+	{"Compaction", "cycle", []string{"llm", "sliding", "off"}},            // 0
+	{"CompactionTrigger", "cycle", []string{"both", "tokens", "messages"}},// 1
+	{"CompactionThreshold", "int", nil},    // 2
+	{"CompactionMaxMessages", "int", nil},  // 3
+	{"CompactionKeepLastN", "int", nil},    // 4
+	{"CompactionModel", "string", nil},     // 5
+	{"ContinuousCompression", "bool", nil}, // 6
+	{"CompressionKeepLast", "int", nil},    // 7
+	{"CompressionMinMessages", "int", nil}, // 8
+	{"ZoneBudgeting", "bool", nil},         // 9
+	{"ZoneArchivePercent", "int", nil},     // 10
+	{"SmartRouting", "bool", nil},          // 11
+	{"SmartRoutingModel", "string", nil},   // 12
+	{"SteeringMode", "cycle", []string{"mild", "aggressive"}}, // 13
+	{"PersistThinking", "bool", nil},       // 14
+	{"MaxTokens", "int", nil},              // 15
+	{"ContextWindow", "int", nil},          // 16
 }
 
 func (o *AgentConfigOverrides) getValue(idx int) string {
 	switch idx {
 	case 0:
-		if o.MaxTokens == 0 {
-			return "default"
-		}
-		return fmt.Sprintf("%d", o.MaxTokens)
-	case 1:
-		if o.ContextWindow == 0 {
-			return "default"
-		}
-		return fmt.Sprintf("%d", o.ContextWindow)
-	case 2:
 		return o.Compaction
-	case 3:
+	case 1:
 		return o.CompactionTrigger
-	case 4:
+	case 2:
 		return fmt.Sprintf("%d", o.CompactionThreshold)
-	case 5:
+	case 3:
 		return fmt.Sprintf("%d", o.CompactionMaxMessages)
-	case 6:
+	case 4:
 		return fmt.Sprintf("%d", o.CompactionKeepLastN)
-	case 7:
+	case 5:
 		if o.CompactionModel == "" {
 			return "(main model)"
 		}
 		return o.CompactionModel
-	case 8:
+	case 6:
 		if o.ContinuousCompression {
 			return "true"
 		}
 		return "false"
-	case 9:
+	case 7:
 		return fmt.Sprintf("%d", o.CompressionKeepLast)
-	case 10:
+	case 8:
 		return fmt.Sprintf("%d", o.CompressionMinMessages)
-	case 11:
+	case 9:
 		if o.ZoneBudgeting {
 			return "true"
 		}
 		return "false"
-	case 12:
+	case 10:
 		return fmt.Sprintf("%d", o.ZoneArchivePercent)
-	case 13:
+	case 11:
 		if o.SmartRouting {
 			return "true"
 		}
 		return "false"
-	case 14:
+	case 12:
 		if o.SmartRoutingModel == "" {
 			return "(none)"
 		}
 		return o.SmartRoutingModel
-	case 15:
+	case 13:
 		return o.SteeringMode
-	case 16:
+	case 14:
 		if o.PersistThinking {
 			return "true"
 		}
 		return "false"
+	case 15:
+		if o.MaxTokens == 0 {
+			return "default"
+		}
+		return fmt.Sprintf("%d", o.MaxTokens)
+	case 16:
+		if o.ContextWindow == 0 {
+			return "default"
+		}
+		return fmt.Sprintf("%d", o.ContextWindow)
 	}
 	return ""
 }
@@ -470,53 +471,72 @@ func (o *AgentConfigOverrides) setValue(idx int, val string) {
 	n, _ := strconv.Atoi(val)
 	switch idx {
 	case 0:
-		o.MaxTokens = n
-	case 1:
-		o.ContextWindow = n
-	case 2:
 		o.Compaction = val
-	case 3:
+	case 1:
 		o.CompactionTrigger = val
-	case 4:
+	case 2:
 		o.CompactionThreshold = n
-	case 5:
+	case 3:
 		o.CompactionMaxMessages = n
-	case 6:
+	case 4:
 		o.CompactionKeepLastN = n
-	case 7:
+	case 5:
 		o.CompactionModel = val
-	case 8:
+	case 6:
 		o.ContinuousCompression = val == "true"
-	case 9:
+	case 7:
 		o.CompressionKeepLast = n
-	case 10:
+	case 8:
 		o.CompressionMinMessages = n
-	case 11:
+	case 9:
 		o.ZoneBudgeting = val == "true"
-	case 12:
+	case 10:
 		o.ZoneArchivePercent = n
-	case 13:
+	case 11:
 		o.SmartRouting = val == "true"
-	case 14:
+	case 12:
 		o.SmartRoutingModel = val
-	case 15:
+	case 13:
 		o.SteeringMode = val
-	case 16:
+	case 14:
 		o.PersistThinking = val == "true"
+	case 15:
+		o.MaxTokens = n
+	case 16:
+		o.ContextWindow = n
 	}
 }
 
 func (o *AgentConfigOverrides) toggleBool(idx int) {
 	switch idx {
-	case 8:
+	case 6:
 		o.ContinuousCompression = !o.ContinuousCompression
-	case 11:
+	case 9:
 		o.ZoneBudgeting = !o.ZoneBudgeting
-	case 13:
+	case 11:
 		o.SmartRouting = !o.SmartRouting
-	case 16:
+	case 14:
 		o.PersistThinking = !o.PersistThinking
 	}
+}
+
+// cycleOption cycles through the options for a cycle field.
+// dir: +1 = right/forward, -1 = left/backward
+func (o *AgentConfigOverrides) cycleOption(idx, dir int) {
+	f := configFields[idx]
+	if f.kind != "cycle" || len(f.options) == 0 {
+		return
+	}
+	current := o.getValue(idx)
+	pos := 0
+	for i, opt := range f.options {
+		if opt == current {
+			pos = i
+			break
+		}
+	}
+	pos = (pos + dir + len(f.options)) % len(f.options)
+	o.setValue(idx, f.options[pos])
 }
 
 // AuthMethod represents an authentication option for a provider.
@@ -957,8 +977,28 @@ func (m setupModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		m.scrollOffset = clampScrollOffset(m.cursor, m.scrollOffset, total)
 
-	case "enter":
+	case "enter", " ":
 		return m.selectItem()
+
+	case "left", "h":
+		if m.phase == 6 && m.cursor < len(configFields) {
+			f := configFields[m.cursor]
+			if f.kind == "cycle" {
+				m.configOverrides.cycleOption(m.cursor, -1)
+			} else if f.kind == "bool" {
+				m.configOverrides.toggleBool(m.cursor)
+			}
+		}
+
+	case "right", "l":
+		if m.phase == 6 && m.cursor < len(configFields) {
+			f := configFields[m.cursor]
+			if f.kind == "cycle" {
+				m.configOverrides.cycleOption(m.cursor, 1)
+			} else if f.kind == "bool" {
+				m.configOverrides.toggleBool(m.cursor)
+			}
+		}
 
 	case "esc":
 		switch m.phase {
@@ -1369,9 +1409,12 @@ func (m setupModel) selectItem() (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 		}
 		f := configFields[m.cursor]
-		if f.kind == "bool" {
+		switch f.kind {
+		case "bool":
 			m.configOverrides.toggleBool(m.cursor)
-		} else {
+		case "cycle":
+			m.configOverrides.cycleOption(m.cursor, 1)
+		default:
 			m.editingConfig = true
 			m.editBuffer = m.configOverrides.getValue(m.cursor)
 		}
