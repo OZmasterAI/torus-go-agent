@@ -139,6 +139,9 @@ func main() {
 		} else {
 			key = oauthKey
 		}
+		// Make OAuth key available for cross-provider Anthropic model selection
+		// (e.g. compactionModel or smartRoutingModel using an Anthropic model)
+		os.Setenv("ANTHROPIC_API_KEY", key)
 	}
 	if key == "" {
 		fmt.Fprintln(os.Stderr, "No API key. Set OPENROUTER_API_KEY or ANTHROPIC_API_KEY.")
