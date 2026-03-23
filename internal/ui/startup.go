@@ -362,6 +362,21 @@ func defaultOverrides() *AgentConfigOverrides {
 	}
 }
 
+// resolveModelSpecs looks up the selected model's specs from OpenRouter
+// and updates configOverrides with the real values.
+func (m *setupModel) resolveModelSpecs() {
+	if m.configOverrides == nil || m.model == "" {
+		return
+	}
+	info := config.ResolveModelInfo(m.model, m.provider, nil, "")
+	if info.ContextWindow > 0 {
+		m.configOverrides.ContextWindow = info.ContextWindow
+	}
+	if info.MaxTokens > 0 {
+		m.configOverrides.MaxTokens = info.MaxTokens
+	}
+}
+
 type configField struct {
 	name string
 	kind string // "bool", "int", "string"
@@ -540,14 +555,14 @@ func DefaultProviderGroups() []ProviderGroup {
 				{Name: "API key", NeedsKey: "ANTHROPIC_API_KEY"},
 			},
 			Models: []ModelChoice{
-				{Name: "Claude Opus 4.6", ID: "claude-opus-4-6", ContextWindow: 1000000, MaxTokens: 128000},
-				{Name: "Claude Sonnet 4.6", ID: "claude-sonnet-4-6", ContextWindow: 1000000, MaxTokens: 64000},
-				{Name: "Claude Haiku 4.5", ID: "claude-haiku-4-5-20251001", ContextWindow: 200000, MaxTokens: 64000},
-				{Name: "Claude Sonnet 4.5", ID: "claude-sonnet-4-5-20250929", ContextWindow: 1000000, MaxTokens: 64000},
-				{Name: "Claude Opus 4.5", ID: "claude-opus-4-5-20251101", ContextWindow: 200000, MaxTokens: 64000},
-				{Name: "Claude Opus 4.1", ID: "claude-opus-4-1-20250805", ContextWindow: 200000, MaxTokens: 32000},
-				{Name: "Claude Sonnet 4", ID: "claude-sonnet-4-20250514", ContextWindow: 1000000, MaxTokens: 64000},
-				{Name: "Claude Opus 4", ID: "claude-opus-4-20250514", ContextWindow: 200000, MaxTokens: 32000},
+				{Name: "Claude Opus 4.6", ID: "claude-opus-4-6"},
+				{Name: "Claude Sonnet 4.6", ID: "claude-sonnet-4-6"},
+				{Name: "Claude Haiku 4.5", ID: "claude-haiku-4-5-20251001"},
+				{Name: "Claude Sonnet 4.5", ID: "claude-sonnet-4-5-20250929"},
+				{Name: "Claude Opus 4.5", ID: "claude-opus-4-5-20251101"},
+				{Name: "Claude Opus 4.1", ID: "claude-opus-4-1-20250805"},
+				{Name: "Claude Sonnet 4", ID: "claude-sonnet-4-20250514"},
+				{Name: "Claude Opus 4", ID: "claude-opus-4-20250514"},
 				{Name: "Custom model ID", ID: ""},
 			},
 		},
@@ -555,20 +570,20 @@ func DefaultProviderGroups() []ProviderGroup {
 			Name: "OpenAI", ProviderKey: "openai",
 			AuthMethods: []AuthMethod{{Name: "API key", NeedsKey: "OPENAI_API_KEY"}},
 			Models: []ModelChoice{
-				{Name: "GPT-5.4", ID: "gpt-5.4", ContextWindow: 1000000, MaxTokens: 128000},
-				{Name: "GPT-5.4 Mini", ID: "gpt-5.4-mini", ContextWindow: 400000, MaxTokens: 128000},
-				{Name: "GPT-5.4 Nano", ID: "gpt-5.4-nano", ContextWindow: 400000, MaxTokens: 128000},
-				{Name: "GPT-4.1", ID: "gpt-4.1", ContextWindow: 1047576, MaxTokens: 32768},
-				{Name: "GPT-4.1 Mini", ID: "gpt-4.1-mini", ContextWindow: 1047576, MaxTokens: 32768},
-				{Name: "GPT-4.1 Nano", ID: "gpt-4.1-nano", ContextWindow: 1047576, MaxTokens: 32768},
-				{Name: "GPT-4o", ID: "gpt-4o", ContextWindow: 128000, MaxTokens: 16384},
-				{Name: "GPT-4o Mini", ID: "gpt-4o-mini", ContextWindow: 128000, MaxTokens: 16384},
-				{Name: "o4-mini", ID: "o4-mini", ContextWindow: 200000, MaxTokens: 100000},
-				{Name: "o3", ID: "o3", ContextWindow: 200000, MaxTokens: 100000},
-				{Name: "o3 Mini", ID: "o3-mini", ContextWindow: 200000, MaxTokens: 100000},
-				{Name: "o3 Pro", ID: "o3-pro", ContextWindow: 200000, MaxTokens: 100000},
-				{Name: "o1", ID: "o1", ContextWindow: 200000, MaxTokens: 100000},
-				{Name: "o1 Mini", ID: "o1-mini", ContextWindow: 128000, MaxTokens: 65536},
+				{Name: "GPT-5.4", ID: "gpt-5.4"},
+				{Name: "GPT-5.4 Mini", ID: "gpt-5.4-mini"},
+				{Name: "GPT-5.4 Nano", ID: "gpt-5.4-nano"},
+				{Name: "GPT-4.1", ID: "gpt-4.1"},
+				{Name: "GPT-4.1 Mini", ID: "gpt-4.1-mini"},
+				{Name: "GPT-4.1 Nano", ID: "gpt-4.1-nano"},
+				{Name: "GPT-4o", ID: "gpt-4o"},
+				{Name: "GPT-4o Mini", ID: "gpt-4o-mini"},
+				{Name: "o4-mini", ID: "o4-mini"},
+				{Name: "o3", ID: "o3"},
+				{Name: "o3 Mini", ID: "o3-mini"},
+				{Name: "o3 Pro", ID: "o3-pro"},
+				{Name: "o1", ID: "o1"},
+				{Name: "o1 Mini", ID: "o1-mini"},
 				{Name: "Custom model ID", ID: ""},
 			},
 		},
@@ -580,7 +595,7 @@ func DefaultProviderGroups() []ProviderGroup {
 				{Name: "Grok 4.20 (non-reasoning)", ID: "grok-4.20-0309-non-reasoning", ContextWindow: 2000000, MaxTokens: 131072},
 				{Name: "Grok 4.1 Fast (reasoning)", ID: "grok-4-1-fast-reasoning", ContextWindow: 2000000, MaxTokens: 131072},
 				{Name: "Grok 4.1 Fast (non-reasoning)", ID: "grok-4-1-fast-non-reasoning", ContextWindow: 2000000, MaxTokens: 131072},
-				{Name: "grok-3-mini", ID: "grok-3-mini", ContextWindow: 131072, MaxTokens: 8192},
+				{Name: "grok-3-mini", ID: "grok-3-mini", ContextWindow: 131072, MaxTokens: 131072},
 				{Name: "Custom model ID", ID: ""},
 			},
 		},
@@ -588,14 +603,14 @@ func DefaultProviderGroups() []ProviderGroup {
 			Name: "Google Gemini", ProviderKey: "gemini",
 			AuthMethods: []AuthMethod{{Name: "API key", NeedsKey: "GEMINI_API_KEY"}},
 			Models: []ModelChoice{
-				{Name: "Gemini 3.1 Pro (preview)", ID: "gemini-3.1-pro-preview", ContextWindow: 1048576, MaxTokens: 65536},
-				{Name: "Gemini 3.1 Flash Lite (preview) [Free]", ID: "gemini-3.1-flash-lite-preview", ContextWindow: 1048576, MaxTokens: 65536},
-				{Name: "Gemini 3 Flash (preview) [Free]", ID: "gemini-3-flash-preview", ContextWindow: 1048576, MaxTokens: 65536},
-				{Name: "Gemini 2.5 Pro", ID: "gemini-2.5-pro", ContextWindow: 1048576, MaxTokens: 65535},
-				{Name: "Gemini 2.5 Flash [Free]", ID: "gemini-2.5-flash", ContextWindow: 1048576, MaxTokens: 65535},
-				{Name: "Gemini 2.5 Flash Lite [Free]", ID: "gemini-2.5-flash-lite", ContextWindow: 1048576, MaxTokens: 65535},
-				{Name: "Gemini 2.0 Flash [Free]", ID: "gemini-2.0-flash", ContextWindow: 1000000, MaxTokens: 65536},
-				{Name: "Gemini 2.0 Flash Lite [Free]", ID: "gemini-2.0-flash-lite", ContextWindow: 1000000, MaxTokens: 65536},
+				{Name: "Gemini 3.1 Pro (preview)", ID: "gemini-3.1-pro-preview"},
+				{Name: "Gemini 3.1 Flash Lite (preview) [Free]", ID: "gemini-3.1-flash-lite-preview"},
+				{Name: "Gemini 3 Flash (preview) [Free]", ID: "gemini-3-flash-preview"},
+				{Name: "Gemini 2.5 Pro", ID: "gemini-2.5-pro"},
+				{Name: "Gemini 2.5 Flash [Free]", ID: "gemini-2.5-flash"},
+				{Name: "Gemini 2.5 Flash Lite [Free]", ID: "gemini-2.5-flash-lite"},
+				{Name: "Gemini 2.0 Flash [Free]", ID: "gemini-2.0-flash"},
+				{Name: "Gemini 2.0 Flash Lite [Free]", ID: "gemini-2.0-flash-lite"},
 				{Name: "Custom model ID", ID: ""},
 			},
 		},
@@ -603,14 +618,14 @@ func DefaultProviderGroups() []ProviderGroup {
 			Name: "Azure OpenAI", ProviderKey: "azure",
 			AuthMethods: []AuthMethod{{Name: "API key", NeedsKey: "AZURE_OPENAI_API_KEY"}},
 			Models: []ModelChoice{
-				{Name: "GPT-5.4", ID: "gpt-5.4", ContextWindow: 1000000, MaxTokens: 128000},
-				{Name: "GPT-5.4 Mini", ID: "gpt-5.4-mini", ContextWindow: 400000, MaxTokens: 128000},
-				{Name: "GPT-4.1", ID: "gpt-4.1", ContextWindow: 1047576, MaxTokens: 32768},
-				{Name: "GPT-4.1 Mini", ID: "gpt-4.1-mini", ContextWindow: 1047576, MaxTokens: 32768},
-				{Name: "GPT-4o", ID: "gpt-4o", ContextWindow: 128000, MaxTokens: 16384},
-				{Name: "o4-mini", ID: "o4-mini", ContextWindow: 200000, MaxTokens: 100000},
-				{Name: "o3", ID: "o3", ContextWindow: 200000, MaxTokens: 100000},
-				{Name: "o3 Mini", ID: "o3-mini", ContextWindow: 200000, MaxTokens: 100000},
+				{Name: "GPT-5.4", ID: "gpt-5.4"},
+				{Name: "GPT-5.4 Mini", ID: "gpt-5.4-mini"},
+				{Name: "GPT-4.1", ID: "gpt-4.1"},
+				{Name: "GPT-4.1 Mini", ID: "gpt-4.1-mini"},
+				{Name: "GPT-4o", ID: "gpt-4o"},
+				{Name: "o4-mini", ID: "o4-mini"},
+				{Name: "o3", ID: "o3"},
+				{Name: "o3 Mini", ID: "o3-mini"},
 				{Name: "Custom deployment", ID: ""},
 			},
 		},
@@ -618,12 +633,12 @@ func DefaultProviderGroups() []ProviderGroup {
 			Name: "Vertex AI", ProviderKey: "vertex",
 			AuthMethods: []AuthMethod{{Name: "Access token", NeedsKey: "VERTEX_ACCESS_TOKEN"}},
 			Models: []ModelChoice{
-				{Name: "Gemini 3.1 Pro (preview)", ID: "gemini-3.1-pro-preview", ContextWindow: 1048576, MaxTokens: 65536},
-				{Name: "Gemini 3 Flash (preview)", ID: "gemini-3-flash-preview", ContextWindow: 1048576, MaxTokens: 65536},
-				{Name: "Gemini 2.5 Pro", ID: "gemini-2.5-pro", ContextWindow: 1048576, MaxTokens: 65535},
-				{Name: "Gemini 2.5 Flash", ID: "gemini-2.5-flash", ContextWindow: 1048576, MaxTokens: 65535},
-				{Name: "Gemini 2.5 Flash Lite", ID: "gemini-2.5-flash-lite", ContextWindow: 1048576, MaxTokens: 65535},
-				{Name: "Gemini 2.0 Flash", ID: "gemini-2.0-flash", ContextWindow: 1000000, MaxTokens: 65536},
+				{Name: "Gemini 3.1 Pro (preview)", ID: "gemini-3.1-pro-preview"},
+				{Name: "Gemini 3 Flash (preview)", ID: "gemini-3-flash-preview"},
+				{Name: "Gemini 2.5 Pro", ID: "gemini-2.5-pro"},
+				{Name: "Gemini 2.5 Flash", ID: "gemini-2.5-flash"},
+				{Name: "Gemini 2.5 Flash Lite", ID: "gemini-2.5-flash-lite"},
+				{Name: "Gemini 2.0 Flash", ID: "gemini-2.0-flash"},
 				{Name: "Custom model ID", ID: ""},
 			},
 		},
@@ -1024,6 +1039,7 @@ func (m setupModel) handleTextInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.cursor = 0
 			m.scrollOffset = 0
 			m.configOverrides = defaultOverrides()
+			m.resolveModelSpecs()
 			return m, nil
 		}
 		// Custom model ID within a provider (phase 4)
@@ -1036,6 +1052,7 @@ func (m setupModel) handleTextInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.cursor = 0
 			m.scrollOffset = 0
 			m.configOverrides = defaultOverrides()
+			m.resolveModelSpecs()
 			return m, nil
 		}
 		return m, nil
@@ -1294,9 +1311,9 @@ func (m setupModel) selectItem() (tea.Model, tea.Cmd) {
 		m.configOverrides = defaultOverrides()
 		if mc.ContextWindow > 0 {
 			m.configOverrides.ContextWindow = mc.ContextWindow
-		}
-		if mc.MaxTokens > 0 {
 			m.configOverrides.MaxTokens = mc.MaxTokens
+		} else {
+			m.resolveModelSpecs()
 		}
 		return m, nil
 

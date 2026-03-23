@@ -178,8 +178,14 @@ func saveModelsCache(configDir string, models map[string]ModelInfo) {
 	_ = os.WriteFile(filepath.Join(configDir, "models.json"), append(data, '\n'), 0644)
 }
 
+// normalizeID strips hyphens and dots for fuzzy model ID comparison.
+func normalizeID(id string) string {
+	r := strings.NewReplacer("-", "", ".", "")
+	return strings.ToLower(r.Replace(id))
+}
+
 // fetchOpenRouterModelInfo queries OpenRouter's /api/v1/models.
-// It tries the exact modelID first, then prefixed with the provider (e.g. "anthropic/claude-sonnet-4-6").
+// Tries exact match, then provider-prefixed, then normalized (hyphens/dots stripped).
 func fetchOpenRouterModelInfo(modelID, provider string) (ModelInfo, bool) {
 	resp, err := http.Get("https://openrouter.ai/api/v1/models")
 	if err != nil {
@@ -200,26 +206,48 @@ func fetchOpenRouterModelInfo(modelID, provider string) (ModelInfo, bool) {
 		return ModelInfo{}, false
 	}
 
+	extractInfo := func(m struct {
+		ID            string `json:"id"`
+		ContextLength int    `json:"context_length"`
+		TopProvider   struct {
+			MaxCompletionTokens *int `json:"max_completion_tokens"`
+		} `json:"top_provider"`
+	}) ModelInfo {
+		info := ModelInfo{ContextWindow: m.ContextLength}
+		if m.TopProvider.MaxCompletionTokens != nil {
+			info.MaxTokens = *m.TopProvider.MaxCompletionTokens
+		}
+		if info.MaxTokens == 0 {
+			info.MaxTokens = 8192
+		}
+		return info
+	}
+
 	// Build candidate IDs: exact match first, then provider-prefixed
 	candidates := []string{modelID}
 	if prefix, ok := openRouterPrefix[strings.ToLower(provider)]; ok {
 		candidates = append(candidates, prefix+"/"+modelID)
 	}
 
+	// 1. Exact match
 	for _, candidate := range candidates {
 		for _, m := range result.Data {
 			if m.ID == candidate {
-				info := ModelInfo{ContextWindow: m.ContextLength}
-				if m.TopProvider.MaxCompletionTokens != nil {
-					info.MaxTokens = *m.TopProvider.MaxCompletionTokens
-				}
-				if info.MaxTokens == 0 {
-					info.MaxTokens = 8192
-				}
-				return info, true
+				return extractInfo(m), true
 			}
 		}
 	}
+
+	// 2. Normalized match (strip hyphens/dots)
+	for _, candidate := range candidates {
+		norm := normalizeID(candidate)
+		for _, m := range result.Data {
+			if normalizeID(m.ID) == norm {
+				return extractInfo(m), true
+			}
+		}
+	}
+
 	return ModelInfo{}, false
 }
 
