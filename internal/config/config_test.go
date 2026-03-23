@@ -392,7 +392,7 @@ func TestResolveModelInfo_LocalLookup(t *testing.T) {
 		"claude-3-sonnet-20250219": {ContextWindow: 200000, MaxTokens: 4096},
 	}
 
-	info := ResolveModelInfo("claude-3-sonnet-20250219", "anthropic", models)
+	info := ResolveModelInfo("claude-3-sonnet-20250219", "anthropic", models, "")
 	if info.ContextWindow != 200000 {
 		t.Errorf("Context window: got %d, want 200000", info.ContextWindow)
 	}
@@ -407,7 +407,7 @@ func TestResolveModelInfo_NotFound(t *testing.T) {
 		"claude-3-sonnet-20250219": {ContextWindow: 200000, MaxTokens: 4096},
 	}
 
-	info := ResolveModelInfo("unknown-model", "anthropic", models)
+	info := ResolveModelInfo("unknown-model", "anthropic", models, "")
 	if info.ContextWindow != 0 || info.MaxTokens != 0 {
 		t.Errorf("NotFound should return zero ModelInfo, got %+v", info)
 	}
@@ -415,7 +415,7 @@ func TestResolveModelInfo_NotFound(t *testing.T) {
 
 // TestResolveModelInfo_NilModels tests handling when models map is nil.
 func TestResolveModelInfo_NilModels(t *testing.T) {
-	info := ResolveModelInfo("some-model", "anthropic", nil)
+	info := ResolveModelInfo("some-model", "anthropic", nil, "")
 	if info.ContextWindow != 0 || info.MaxTokens != 0 {
 		t.Errorf("Nil models should return zero ModelInfo, got %+v", info)
 	}

@@ -786,7 +786,7 @@ func TestConfigEdge_LoadSchemaSuccess(t *testing.T) {
 
 // TestConfigEdge_ResolveModelInfoNil tests ResolveModelInfo with nil models map.
 func TestConfigEdge_ResolveModelInfoNil(t *testing.T) {
-	info := ResolveModelInfo("claude-3-sonnet-20250219", "anthropic", nil)
+	info := ResolveModelInfo("claude-3-sonnet-20250219", "anthropic", nil, "")
 	if info.ContextWindow != 0 || info.MaxTokens != 0 {
 		t.Errorf("ResolveModelInfo with nil maps should return empty: got %+v", info)
 	}
@@ -795,7 +795,7 @@ func TestConfigEdge_ResolveModelInfoNil(t *testing.T) {
 // TestConfigEdge_ResolveModelInfoEmpty tests ResolveModelInfo with empty models map.
 func TestConfigEdge_ResolveModelInfoEmpty(t *testing.T) {
 	models := make(map[string]ModelInfo)
-	info := ResolveModelInfo("unknown-model", "anthropic", models)
+	info := ResolveModelInfo("unknown-model", "anthropic", models, "")
 	if info.ContextWindow != 0 || info.MaxTokens != 0 {
 		t.Errorf("ResolveModelInfo with empty map should return empty: got %+v", info)
 	}

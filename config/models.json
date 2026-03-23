@@ -1,11 +1,1 @@
-{
-  "z-ai/glm4.7": {"contextWindow": 32768, "maxTokens": 8192},
-  "qwen/qwen3.5-122b-a10b": {"contextWindow": 262144, "maxTokens": 16384},
-  "meta/llama-3.3-70b-instruct": {"contextWindow": 128000, "maxTokens": 8192},
-  "claude-opus-4-6": {"contextWindow": 1000000, "maxTokens": 64000},
-  "claude-sonnet-4-6": {"contextWindow": 1000000, "maxTokens": 64000},
-  "claude-sonnet-4-5-20250929": {"contextWindow": 200000, "maxTokens": 64000},
-  "claude-haiku-4-5-20251001": {"contextWindow": 200000, "maxTokens": 64000},
-  "nvidia/nemotron-3-super-120b-a12b:free": {"contextWindow": 262144, "maxTokens": 8192},
-  "stepfun/step-3.5-flash:free": {"contextWindow": 128000, "maxTokens": 8192}
-}
+{}

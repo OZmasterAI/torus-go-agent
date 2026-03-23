@@ -98,7 +98,7 @@ func main() {
 
 	// Auto-detect model specs: models.json → OpenRouter API → config.json defaults
 	models := config.LoadModels(cfgDir)
-	if info := config.ResolveModelInfo(cfg.Agent.Model, cfg.Agent.Provider, models); info.ContextWindow > 0 {
+	if info := config.ResolveModelInfo(cfg.Agent.Model, cfg.Agent.Provider, models, cfgDir); info.ContextWindow > 0 {
 		cfg.Agent.ContextWindow = info.ContextWindow
 		if info.MaxTokens > 0 {
 			cfg.Agent.MaxTokens = info.MaxTokens

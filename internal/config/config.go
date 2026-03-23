@@ -126,29 +126,56 @@ func LoadModels(configDir string) map[string]ModelInfo {
 }
 
 // ResolveModelInfo looks up model specs in this order:
-// 1. models.json lookup table
-// 2. OpenRouter API (if provider is "openrouter")
-// 3. Returns zeros if not found (caller uses config.json defaults)
-func ResolveModelInfo(modelID, provider string, models map[string]ModelInfo) ModelInfo {
-	// 1. Local lookup
+// 1. models.json cache
+// 2. OpenRouter API (any provider — universal model registry)
+// 3. Returns zeros if not found (caller uses code defaults)
+//
+// When the API returns a result, it is cached to models.json for future startups.
+func ResolveModelInfo(modelID, provider string, models map[string]ModelInfo, configDir string) ModelInfo {
+	// 1. Local cache
 	if models != nil {
 		if info, ok := models[modelID]; ok {
 			return info
 		}
 	}
 
-	// 2. OpenRouter API auto-detect
-	if provider == "openrouter" {
-		if info, ok := fetchOpenRouterModelInfo(modelID); ok {
-			return info
+	// 2. OpenRouter API (universal registry)
+	if info, ok := fetchOpenRouterModelInfo(modelID, provider); ok {
+		if configDir != "" {
+			if models == nil {
+				models = make(map[string]ModelInfo)
+			}
+			models[modelID] = info
+			saveModelsCache(configDir, models)
 		}
+		return info
 	}
 
 	return ModelInfo{}
 }
 
-// fetchOpenRouterModelInfo queries OpenRouter's /api/v1/models for a specific model.
-func fetchOpenRouterModelInfo(modelID string) (ModelInfo, bool) {
+// openRouterPrefix maps our provider keys to OpenRouter ID prefixes.
+var openRouterPrefix = map[string]string{
+	"anthropic": "anthropic",
+	"openai":    "openai",
+	"grok":      "x-ai",
+	"gemini":    "google",
+	"vertex":    "google",
+	"azure":     "openai",
+}
+
+// saveModelsCache writes the models map to models.json.
+func saveModelsCache(configDir string, models map[string]ModelInfo) {
+	data, err := json.MarshalIndent(models, "", "  ")
+	if err != nil {
+		return
+	}
+	_ = os.WriteFile(filepath.Join(configDir, "models.json"), append(data, '\n'), 0644)
+}
+
+// fetchOpenRouterModelInfo queries OpenRouter's /api/v1/models.
+// It tries the exact modelID first, then prefixed with the provider (e.g. "anthropic/claude-sonnet-4-6").
+func fetchOpenRouterModelInfo(modelID, provider string) (ModelInfo, bool) {
 	resp, err := http.Get("https://openrouter.ai/api/v1/models")
 	if err != nil {
 		return ModelInfo{}, false
@@ -168,16 +195,24 @@ func fetchOpenRouterModelInfo(modelID string) (ModelInfo, bool) {
 		return ModelInfo{}, false
 	}
 
-	for _, m := range result.Data {
-		if m.ID == modelID {
-			info := ModelInfo{ContextWindow: m.ContextLength}
-			if m.TopProvider.MaxCompletionTokens != nil {
-				info.MaxTokens = *m.TopProvider.MaxCompletionTokens
+	// Build candidate IDs: exact match first, then provider-prefixed
+	candidates := []string{modelID}
+	if prefix, ok := openRouterPrefix[strings.ToLower(provider)]; ok {
+		candidates = append(candidates, prefix+"/"+modelID)
+	}
+
+	for _, candidate := range candidates {
+		for _, m := range result.Data {
+			if m.ID == candidate {
+				info := ModelInfo{ContextWindow: m.ContextLength}
+				if m.TopProvider.MaxCompletionTokens != nil {
+					info.MaxTokens = *m.TopProvider.MaxCompletionTokens
+				}
+				if info.MaxTokens == 0 {
+					info.MaxTokens = 8192
+				}
+				return info, true
 			}
-			if info.MaxTokens == 0 {
-				info.MaxTokens = 8192
-			}
-			return info, true
 		}
 	}
 	return ModelInfo{}, false
