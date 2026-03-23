@@ -1,4 +1,7 @@
 {
-  "agent": {},
+  "agent": {
+    "routing": [],
+    "fallbackOrder": []
+  },
   "data": { "dir": "../data" }
 }
