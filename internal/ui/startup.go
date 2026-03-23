@@ -954,36 +954,76 @@ func (m setupModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	// ── Normal menu navigation ───────────────────────────────────
 	switch msg.String() {
 
-	case "ctrl+c", "q":
+	case "ctrl+c":
 		m.provider = ""
 		m.model = ""
 		m.done = true
 		return m, tea.Quit
 
-	case "up", "k":
+	case "q":
+		if m.filterablePhase() {
+			m.filterText += "q"
+			m.cursor = 0
+			m.scrollOffset = 0
+		} else {
+			m.provider = ""
+			m.model = ""
+			m.done = true
+			return m, tea.Quit
+		}
+
+	case "up":
 		total := m.menuLen()
 		if m.cursor > 0 {
 			m.cursor--
 		} else {
-			// Wrap to bottom
 			m.cursor = total - 1
 		}
 		m.scrollOffset = clampScrollOffset(m.cursor, m.scrollOffset, total)
 
-	case "down", "j":
+	case "k":
+		if !m.filterablePhase() {
+			total := m.menuLen()
+			if m.cursor > 0 {
+				m.cursor--
+			} else {
+				m.cursor = total - 1
+			}
+			m.scrollOffset = clampScrollOffset(m.cursor, m.scrollOffset, total)
+		} else {
+			m.filterText += "k"
+			m.cursor = 0
+			m.scrollOffset = 0
+		}
+
+	case "down":
 		total := m.menuLen()
 		if m.cursor < total-1 {
 			m.cursor++
 		} else {
-			// Wrap to top
 			m.cursor = 0
 		}
 		m.scrollOffset = clampScrollOffset(m.cursor, m.scrollOffset, total)
 
+	case "j":
+		if !m.filterablePhase() {
+			total := m.menuLen()
+			if m.cursor < total-1 {
+				m.cursor++
+			} else {
+				m.cursor = 0
+			}
+			m.scrollOffset = clampScrollOffset(m.cursor, m.scrollOffset, total)
+		} else {
+			m.filterText += "j"
+			m.cursor = 0
+			m.scrollOffset = 0
+		}
+
 	case "enter", " ":
 		return m.selectItem()
 
-	case "left", "h":
+	case "left":
 		if m.phase == 6 && m.cursor < len(configFields) {
 			f := configFields[m.cursor]
 			if f.kind == "cycle" {
@@ -993,7 +1033,23 @@ func (m setupModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 		}
 
-	case "right", "l":
+	case "h":
+		if !m.filterablePhase() {
+			if m.phase == 6 && m.cursor < len(configFields) {
+				f := configFields[m.cursor]
+				if f.kind == "cycle" {
+					m.configOverrides.cycleOption(m.cursor, -1)
+				} else if f.kind == "bool" {
+					m.configOverrides.toggleBool(m.cursor)
+				}
+			}
+		} else {
+			m.filterText += "h"
+			m.cursor = 0
+			m.scrollOffset = 0
+		}
+
+	case "right":
 		if m.phase == 6 && m.cursor < len(configFields) {
 			f := configFields[m.cursor]
 			if f.kind == "cycle" {
@@ -1001,6 +1057,22 @@ func (m setupModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			} else if f.kind == "bool" {
 				m.configOverrides.toggleBool(m.cursor)
 			}
+		}
+
+	case "l":
+		if !m.filterablePhase() {
+			if m.phase == 6 && m.cursor < len(configFields) {
+				f := configFields[m.cursor]
+				if f.kind == "cycle" {
+					m.configOverrides.cycleOption(m.cursor, 1)
+				} else if f.kind == "bool" {
+					m.configOverrides.toggleBool(m.cursor)
+				}
+			}
+		} else {
+			m.filterText += "l"
+			m.cursor = 0
+			m.scrollOffset = 0
 		}
 
 	case "backspace":
