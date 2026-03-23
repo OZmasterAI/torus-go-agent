@@ -4,5 +4,7 @@
     "routing": [],
     "fallbackOrder": []
   },
-  "data": { "dir": "../data" }
+  "data": { "dir": "../data" },
+  "mcpServers": {},
+  "skillsDir": ""
 }
