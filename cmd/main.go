@@ -100,15 +100,16 @@ func main() {
 		cfg.Agent.CompactionThreshold = setup.Config.CompactionThreshold
 		cfg.Agent.CompactionMaxMessages = setup.Config.CompactionMaxMessages
 		cfg.Agent.CompactionKeepLastN = setup.Config.CompactionKeepLastN
+		cfg.Agent.CompactionModel = setup.Config.CompactionModel
 		cfg.Agent.ContinuousCompression = setup.Config.ContinuousCompression
 		cfg.Agent.CompressionKeepLast = setup.Config.CompressionKeepLast
 		cfg.Agent.CompressionMinMessages = setup.Config.CompressionMinMessages
 		cfg.Agent.ZoneBudgeting = setup.Config.ZoneBudgeting
 		cfg.Agent.ZoneArchivePercent = setup.Config.ZoneArchivePercent
 		cfg.Agent.SmartRouting = setup.Config.SmartRouting
-		if setup.Config.SteeringAggressive {
-			cfg.Agent.SteeringMode = "aggressive"
-		}
+		cfg.Agent.SmartRoutingModel = setup.Config.SmartRoutingModel
+		cfg.Agent.SteeringMode = setup.Config.SteeringMode
+		cfg.Agent.PersistThinking = setup.Config.PersistThinking
 	}
 
 	soul := config.LoadTorus(cfgDir)

@@ -335,13 +335,16 @@ type AgentConfigOverrides struct {
 	CompactionThreshold    int
 	CompactionMaxMessages  int
 	CompactionKeepLastN    int
+	CompactionModel        string
 	ContinuousCompression  bool
 	CompressionKeepLast    int
 	CompressionMinMessages int
 	ZoneBudgeting          bool
 	ZoneArchivePercent     int
 	SmartRouting           bool
-	SteeringAggressive     bool
+	SmartRoutingModel      string
+	SteeringMode           string
+	PersistThinking        bool
 }
 
 func defaultOverrides() *AgentConfigOverrides {
@@ -354,11 +357,16 @@ func defaultOverrides() *AgentConfigOverrides {
 		CompactionThreshold:    d.CompactionThreshold,
 		CompactionMaxMessages:  d.CompactionMaxMessages,
 		CompactionKeepLastN:    d.CompactionKeepLastN,
+		CompactionModel:        "",
 		ContinuousCompression:  d.ContinuousCompression,
 		CompressionKeepLast:    d.CompressionKeepLast,
 		CompressionMinMessages: d.CompressionMinMessages,
 		ZoneBudgeting:          d.ZoneBudgeting,
 		ZoneArchivePercent:     d.ZoneArchivePercent,
+		SmartRouting:           false,
+		SmartRoutingModel:      "",
+		SteeringMode:           "mild",
+		PersistThinking:        false,
 	}
 }
 
@@ -375,20 +383,23 @@ type configField struct {
 }
 
 var configFields = []configField{
-	{"MaxTokens", "int"},
-	{"ContextWindow", "int"},
-	{"Compaction", "string"},
-	{"CompactionTrigger", "string"},
-	{"CompactionThreshold", "int"},
-	{"CompactionMaxMessages", "int"},
-	{"CompactionKeepLastN", "int"},
-	{"ContinuousCompression", "bool"},
-	{"CompressionKeepLast", "int"},
-	{"CompressionMinMessages", "int"},
-	{"ZoneBudgeting", "bool"},
-	{"ZoneArchivePercent", "int"},
-	{"SmartRouting", "bool"},
-	{"SteeringAggressive", "bool"},
+	{"MaxTokens", "int"},           // 0
+	{"ContextWindow", "int"},       // 1
+	{"Compaction", "string"},       // 2
+	{"CompactionTrigger", "string"},// 3
+	{"CompactionThreshold", "int"}, // 4
+	{"CompactionMaxMessages", "int"},// 5
+	{"CompactionKeepLastN", "int"}, // 6
+	{"CompactionModel", "string"},  // 7
+	{"ContinuousCompression", "bool"},// 8
+	{"CompressionKeepLast", "int"}, // 9
+	{"CompressionMinMessages", "int"},// 10
+	{"ZoneBudgeting", "bool"},      // 11
+	{"ZoneArchivePercent", "int"},  // 12
+	{"SmartRouting", "bool"},       // 13
+	{"SmartRoutingModel", "string"},// 14
+	{"SteeringMode", "string"},     // 15
+	{"PersistThinking", "bool"},    // 16
 }
 
 func (o *AgentConfigOverrides) getValue(idx int) string {
@@ -414,28 +425,40 @@ func (o *AgentConfigOverrides) getValue(idx int) string {
 	case 6:
 		return fmt.Sprintf("%d", o.CompactionKeepLastN)
 	case 7:
+		if o.CompactionModel == "" {
+			return "(main model)"
+		}
+		return o.CompactionModel
+	case 8:
 		if o.ContinuousCompression {
 			return "true"
 		}
 		return "false"
-	case 8:
-		return fmt.Sprintf("%d", o.CompressionKeepLast)
 	case 9:
-		return fmt.Sprintf("%d", o.CompressionMinMessages)
+		return fmt.Sprintf("%d", o.CompressionKeepLast)
 	case 10:
+		return fmt.Sprintf("%d", o.CompressionMinMessages)
+	case 11:
 		if o.ZoneBudgeting {
 			return "true"
 		}
 		return "false"
-	case 11:
-		return fmt.Sprintf("%d", o.ZoneArchivePercent)
 	case 12:
+		return fmt.Sprintf("%d", o.ZoneArchivePercent)
+	case 13:
 		if o.SmartRouting {
 			return "true"
 		}
 		return "false"
-	case 13:
-		if o.SteeringAggressive {
+	case 14:
+		if o.SmartRoutingModel == "" {
+			return "(none)"
+		}
+		return o.SmartRoutingModel
+	case 15:
+		return o.SteeringMode
+	case 16:
+		if o.PersistThinking {
 			return "true"
 		}
 		return "false"
@@ -461,32 +484,38 @@ func (o *AgentConfigOverrides) setValue(idx int, val string) {
 	case 6:
 		o.CompactionKeepLastN = n
 	case 7:
-		o.ContinuousCompression = val == "true"
+		o.CompactionModel = val
 	case 8:
-		o.CompressionKeepLast = n
+		o.ContinuousCompression = val == "true"
 	case 9:
-		o.CompressionMinMessages = n
+		o.CompressionKeepLast = n
 	case 10:
-		o.ZoneBudgeting = val == "true"
+		o.CompressionMinMessages = n
 	case 11:
-		o.ZoneArchivePercent = n
+		o.ZoneBudgeting = val == "true"
 	case 12:
-		o.SmartRouting = val == "true"
+		o.ZoneArchivePercent = n
 	case 13:
-		o.SteeringAggressive = val == "true"
+		o.SmartRouting = val == "true"
+	case 14:
+		o.SmartRoutingModel = val
+	case 15:
+		o.SteeringMode = val
+	case 16:
+		o.PersistThinking = val == "true"
 	}
 }
 
 func (o *AgentConfigOverrides) toggleBool(idx int) {
 	switch idx {
-	case 7:
+	case 8:
 		o.ContinuousCompression = !o.ContinuousCompression
-	case 10:
+	case 11:
 		o.ZoneBudgeting = !o.ZoneBudgeting
-	case 12:
-		o.SmartRouting = !o.SmartRouting
 	case 13:
-		o.SteeringAggressive = !o.SteeringAggressive
+		o.SmartRouting = !o.SmartRouting
+	case 16:
+		o.PersistThinking = !o.PersistThinking
 	}
 }
 
