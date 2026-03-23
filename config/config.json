@@ -1,6 +1,21 @@
 {
   "telegram": { "allowedUsers": [] },
   "agent": {
+    "compaction": "llm",
+    "compactionTrigger": "both",
+    "compactionThreshold": 65,
+    "compactionMaxMessages": 0,
+    "compactionKeepLastN": 10,
+    "compactionModel": "",
+    "continuousCompression": true,
+    "compressionKeepLast": 10,
+    "compressionMinMessages": 0,
+    "zoneBudgeting": true,
+    "zoneArchivePercent": 25,
+    "smartRouting": false,
+    "smartRoutingModel": "",
+    "steeringMode": "mild",
+    "persistThinking": false,
     "routing": [],
     "fallbackOrder": []
   },

@@ -348,26 +348,43 @@ type AgentConfigOverrides struct {
 }
 
 func defaultOverrides() *AgentConfigOverrides {
-	d := config.DefaultAgentConfig()
+	return overridesFromConfig(config.DefaultAgentConfig())
+}
+
+// overridesFromConfig creates config overrides from an AgentConfig.
+// MaxTokens and ContextWindow are set to 0 ("default") to allow auto-resolution.
+func overridesFromConfig(a config.AgentConfig) *AgentConfigOverrides {
+	mode := a.SteeringMode
+	if mode == "" {
+		mode = "mild"
+	}
 	return &AgentConfigOverrides{
 		MaxTokens:              0, // 0 = "default" (auto-resolved from OpenRouter/models.json)
 		ContextWindow:          0, // 0 = "default" (auto-resolved from OpenRouter/models.json)
-		Compaction:             d.Compaction,
-		CompactionTrigger:      d.CompactionTrigger,
-		CompactionThreshold:    d.CompactionThreshold,
-		CompactionMaxMessages:  d.CompactionMaxMessages,
-		CompactionKeepLastN:    d.CompactionKeepLastN,
-		CompactionModel:        "",
-		ContinuousCompression:  d.ContinuousCompression,
-		CompressionKeepLast:    d.CompressionKeepLast,
-		CompressionMinMessages: d.CompressionMinMessages,
-		ZoneBudgeting:          d.ZoneBudgeting,
-		ZoneArchivePercent:     d.ZoneArchivePercent,
-		SmartRouting:           false,
-		SmartRoutingModel:      "",
-		SteeringMode:           "mild",
-		PersistThinking:        false,
+		Compaction:             a.Compaction,
+		CompactionTrigger:      a.CompactionTrigger,
+		CompactionThreshold:    a.CompactionThreshold,
+		CompactionMaxMessages:  a.CompactionMaxMessages,
+		CompactionKeepLastN:    a.CompactionKeepLastN,
+		CompactionModel:        a.CompactionModel,
+		ContinuousCompression:  a.ContinuousCompression,
+		CompressionKeepLast:    a.CompressionKeepLast,
+		CompressionMinMessages: a.CompressionMinMessages,
+		ZoneBudgeting:          a.ZoneBudgeting,
+		ZoneArchivePercent:     a.ZoneArchivePercent,
+		SmartRouting:           a.SmartRouting,
+		SmartRoutingModel:      a.SmartRoutingModel,
+		SteeringMode:           mode,
+		PersistThinking:        a.PersistThinking,
 	}
+}
+
+// savedOverrides returns config overrides from savedConfig if available, otherwise code defaults.
+func (m setupModel) savedOverrides() *AgentConfigOverrides {
+	if m.savedConfig != nil {
+		return overridesFromConfig(*m.savedConfig)
+	}
+	return defaultOverrides()
 }
 
 // resolveModelSpecs is kept for future use but MaxTokens/ContextWindow
@@ -917,6 +934,7 @@ type setupModel struct {
 	filterText string
 
 	// Config customization (phase 5 = choose config mode, phase 6 = edit settings)
+	savedConfig     *config.AgentConfig   // loaded from config.json, used to pre-fill settings
 	configOverrides *AgentConfigOverrides
 	editingConfig   bool   // true when editing a numeric/string value
 	editBuffer      string // text buffer for numeric/string input
@@ -1257,7 +1275,7 @@ func (m setupModel) handleTextInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.phase = 5
 			m.cursor = 0
 			m.scrollOffset = 0
-			m.configOverrides = defaultOverrides()
+			m.configOverrides = m.savedOverrides()
 			m.resolveModelSpecs()
 			return m, nil
 		}
@@ -1270,7 +1288,7 @@ func (m setupModel) handleTextInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.phase = 5
 			m.cursor = 0
 			m.scrollOffset = 0
-			m.configOverrides = defaultOverrides()
+			m.configOverrides = m.savedOverrides()
 			m.resolveModelSpecs()
 			return m, nil
 		}
@@ -1601,7 +1619,7 @@ func (m setupModel) selectItem() (tea.Model, tea.Cmd) {
 		m.phase = 5
 		m.cursor = 0
 		m.scrollOffset = 0
-		m.configOverrides = defaultOverrides()
+		m.configOverrides = m.savedOverrides()
 		if mc.ContextWindow > 0 {
 			m.configOverrides.ContextWindow = mc.ContextWindow
 			m.configOverrides.MaxTokens = mc.MaxTokens
@@ -1613,7 +1631,7 @@ func (m setupModel) selectItem() (tea.Model, tea.Cmd) {
 	case 5: // Config mode
 		switch m.cursor {
 		case 0:
-			m.configOverrides = defaultOverrides()
+			m.configOverrides = m.savedOverrides()
 			m.done = true
 			return m, tea.Quit
 		case 1:
@@ -1622,7 +1640,7 @@ func (m setupModel) selectItem() (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 		case 2:
 			if m.configOverrides == nil {
-				m.configOverrides = defaultOverrides()
+				m.configOverrides = m.savedOverrides()
 			}
 			m.phase = 6
 			m.cursor = 0
@@ -1974,12 +1992,13 @@ func colorTorus(frame string) string {
 // RunStartup shows an interactive provider/model selection menu.
 // Returns a SetupResult with provider, model, and optional config overrides.
 // If skipStartup is true, returns an empty SetupResult.
-func RunStartup(skipStartup bool) SetupResult {
+func RunStartup(skipStartup bool, agentCfg config.AgentConfig) SetupResult {
 	if skipStartup {
 		return SetupResult{}
 	}
 
 	m := newSetupModel()
+	m.savedConfig = &agentCfg
 
 	p := tea.NewProgram(m, tea.WithAltScreen())
 	finalModel, err := p.Run()

@@ -66,7 +66,7 @@ func main() {
 			skipSetup = true
 		}
 	}
-	setup := ui.RunStartup(skipSetup)
+	setup := ui.RunStartup(skipSetup, cfg.Agent)
 	if setup.Provider != "" {
 		cfg.Agent.Provider = setup.Provider
 		cfg.Agent.Model = setup.Model
