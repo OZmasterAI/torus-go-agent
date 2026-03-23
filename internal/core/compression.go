@@ -642,7 +642,13 @@ func ContinuousCompressV2(messages []t.Message, keepLast, minMessages int) []t.M
 	for i, cop := range compressibleOps {
 		// Age = distance from end of compressible ops (oldest = highest age)
 		age := len(compressibleOps) - i
-		score := ScoreOperation(cop, age, totalOps, activeFiles)
+		// Pass later ops (everything after this one) for causal dependency scoring
+		var laterSlice []Operation
+		if i+1 < len(compressibleOps) {
+			laterSlice = append(laterSlice, compressibleOps[i+1:]...)
+		}
+		laterSlice = append(laterSlice, verbatimOps...)
+		score := ScoreOperation(cop, age, totalOps, activeFiles, laterSlice)
 
 		tier := "archive"
 		if score >= 0.3 {

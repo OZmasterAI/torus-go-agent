@@ -254,8 +254,8 @@ func TestScoreOperation_RecentHighFileOverlap(t *testing.T) {
 	}
 	activeFiles := []string{"auth.go", "config.go"}
 	score := ScoreOperation(op, 0, 10, activeFiles)
-	if score <= 0.5 {
-		t.Errorf("recent op with file overlap should score > 0.5, got %.2f", score)
+	if score <= 0.4 {
+		t.Errorf("recent op with file overlap should score > 0.4, got %.2f", score)
 	}
 }
 
@@ -422,5 +422,121 @@ func TestRenderWorkingMemoryOneLiner_TruncatesAt80(t *testing.T) {
 	// The truncated outcome should be 80 chars + "..."
 	if strings.Contains(line, longOutcome) {
 		t.Error("should not contain full long outcome")
+	}
+}
+
+// --- Boundary detection tests ---
+
+func TestGroupOperations_SameFilesSameOp(t *testing.T) {
+	// Two user messages working on the same files should stay in one operation
+	messages := []types.Message{
+		{Role: types.RoleAssistant, Content: textContent("system")},
+		{Role: types.RoleUser, Content: textContent("fix auth.go")},
+		{Role: types.RoleAssistant, Content: []types.ContentBlock{
+			{Type: "tool_use", ID: "t1", Name: "read", Input: map[string]any{"file_path": "auth.go"}},
+		}},
+		{Role: types.RoleUser, Content: []types.ContentBlock{
+			{Type: "tool_result", ToolUseID: "t1", Content: "code here"},
+		}},
+		{Role: types.RoleAssistant, Content: textContent("I see the issue.")},
+		{Role: types.RoleUser, Content: textContent("looks good, now edit it")},
+		{Role: types.RoleAssistant, Content: []types.ContentBlock{
+			{Type: "tool_use", ID: "t2", Name: "edit", Input: map[string]any{"file_path": "auth.go"}},
+		}},
+		{Role: types.RoleUser, Content: []types.ContentBlock{
+			{Type: "tool_result", ToolUseID: "t2", Content: "edited"},
+		}},
+		{Role: types.RoleAssistant, Content: textContent("Fixed.")},
+	}
+
+	ops := GroupOperations(messages)
+	// "looks good, now edit it" works on same file (auth.go) — should stay in same op
+	// The boundary detector should see file overlap > 0.2 and no tool transition
+	if len(ops) != 1 {
+		t.Errorf("same-file continuation should be 1 op, got %d", len(ops))
+	}
+}
+
+func TestGroupOperations_DifferentFilesNewOp(t *testing.T) {
+	// Two user messages working on completely different files should be separate operations
+	messages := []types.Message{
+		{Role: types.RoleAssistant, Content: textContent("system")},
+		{Role: types.RoleUser, Content: textContent("fix auth.go")},
+		{Role: types.RoleAssistant, Content: []types.ContentBlock{
+			{Type: "tool_use", ID: "t1", Name: "edit", Input: map[string]any{"file_path": "auth.go"}},
+		}},
+		{Role: types.RoleUser, Content: []types.ContentBlock{
+			{Type: "tool_result", ToolUseID: "t1", Content: "done"},
+		}},
+		{Role: types.RoleAssistant, Content: textContent("Fixed auth.")},
+		{Role: types.RoleUser, Content: textContent("now work on logging")},
+		{Role: types.RoleAssistant, Content: []types.ContentBlock{
+			{Type: "tool_use", ID: "t2", Name: "edit", Input: map[string]any{"file_path": "logger.go"}},
+		}},
+		{Role: types.RoleUser, Content: []types.ContentBlock{
+			{Type: "tool_result", ToolUseID: "t2", Content: "done"},
+		}},
+		{Role: types.RoleAssistant, Content: textContent("Added logging.")},
+	}
+
+	ops := GroupOperations(messages)
+	if len(ops) < 2 {
+		t.Errorf("different-file tasks should be separate ops, got %d", len(ops))
+	}
+}
+
+func TestGroupOperations_IntentSignalBoundary(t *testing.T) {
+	// Assistant says "now let's move on" → should trigger boundary
+	messages := []types.Message{
+		{Role: types.RoleAssistant, Content: textContent("system")},
+		{Role: types.RoleUser, Content: textContent("do task A")},
+		{Role: types.RoleAssistant, Content: textContent("Done with A. Now let's move on to something else.")},
+		{Role: types.RoleUser, Content: textContent("do task B")},
+		{Role: types.RoleAssistant, Content: textContent("Done with B.")},
+	}
+
+	ops := GroupOperations(messages)
+	if len(ops) < 2 {
+		t.Errorf("intent transition phrase should trigger boundary, got %d ops", len(ops))
+	}
+}
+
+// --- Causal dependency scoring tests ---
+
+func TestScoreOperation_CausalDependencyBoost(t *testing.T) {
+	op := Operation{
+		Files: []string{"auth.go"},
+		Tools: []string{"read"},
+	}
+	laterOps := []Operation{
+		{Files: []string{"auth.go"}, Tools: []string{"edit"}, Intent: "fix the bug found earlier"},
+	}
+	activeFiles := []string{}
+
+	withCausal := ScoreOperation(op, 5, 10, activeFiles, laterOps)
+	withoutCausal := ScoreOperation(op, 5, 10, activeFiles)
+
+	if withCausal <= withoutCausal {
+		t.Errorf("causal dependency should boost score: with=%.3f, without=%.3f", withCausal, withoutCausal)
+	}
+}
+
+func TestScoreOperation_NoCausalNoDifference(t *testing.T) {
+	op := Operation{
+		Files: []string{"readme.md"},
+		Tools: []string{"read"},
+	}
+	laterOps := []Operation{
+		{Files: []string{"auth.go"}, Tools: []string{"edit"}},
+	}
+	activeFiles := []string{}
+
+	withLater := ScoreOperation(op, 5, 10, activeFiles, laterOps)
+	withoutLater := ScoreOperation(op, 5, 10, activeFiles)
+
+	// No file overlap, no keyword match — causal should be 0, minimal difference
+	diff := withLater - withoutLater
+	if diff > 0.05 {
+		t.Errorf("no causal link should have minimal impact: diff=%.3f", diff)
 	}
 }
