@@ -11,6 +11,7 @@ import (
 	"github.com/joho/godotenv"
 
 	"torus_go_agent/internal/channels"
+	_ "torus_go_agent/internal/channels/http"     // register http channel
 	_ "torus_go_agent/internal/channels/telegram" // register telegram channel
 	tuichan "torus_go_agent/internal/channels/tui"
 	tuibchan "torus_go_agent/internal/channels/tui-b"
@@ -62,7 +63,7 @@ func main() {
 	// Interactive startup: let user pick provider/model (skip with --no-setup flag)
 	skipSetup := false
 	for _, arg := range os.Args[1:] {
-		if arg == "--no-setup" || arg == "--telegram" {
+		if arg == "--no-setup" || arg == "--telegram" || arg == "--http" {
 			skipSetup = true
 		}
 	}
@@ -639,11 +640,14 @@ func main() {
 		Meta:    map[string]any{"provider": cfg.Agent.Provider, "model": cfg.Agent.Model},
 	})
 
-	// Select channel: --telegram flag or default to TUI
+	// Select channel: --telegram/--http flag or default to TUI
 	channelName := "tui"
 	for _, arg := range os.Args[1:] {
 		if arg == "--telegram" {
 			channelName = "telegram"
+		}
+		if arg == "--http" {
+			channelName = "http"
 		}
 		if arg == "--tui-b" {
 			channelName = "tui-b"
