@@ -110,6 +110,21 @@ func LoadConfig(path string) (*Config, error) {
 	if v := os.Getenv("TELEGRAM_BOT_TOKEN"); v != "" {
 		cfg.Telegram.BotToken = v
 	}
+	if v := os.Getenv("AZURE_RESOURCE"); v != "" {
+		cfg.Agent.AzureResource = v
+	}
+	if v := os.Getenv("AZURE_DEPLOYMENT"); v != "" {
+		cfg.Agent.AzureDeployment = v
+	}
+	if v := os.Getenv("AZURE_API_VERSION"); v != "" {
+		cfg.Agent.AzureAPIVersion = v
+	}
+	if v := os.Getenv("VERTEX_PROJECT"); v != "" {
+		cfg.Agent.VertexProject = v
+	}
+	if v := os.Getenv("VERTEX_REGION"); v != "" {
+		cfg.Agent.VertexRegion = v
+	}
 	return &cfg, nil
 }
 
