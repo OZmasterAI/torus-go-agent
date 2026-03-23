@@ -258,18 +258,20 @@ func main() {
 		}
 		archivePercent := cfg.Agent.ZoneArchivePercent
 		if archivePercent <= 0 {
-			archivePercent = 30
+			archivePercent = 25
 		}
-		zoneBudget := core.ZoneBudget{
-			ContextWindow:  cfg.Agent.ContextWindow,
-			ArchivePercent: archivePercent,
-			OutputReserve:  cfg.Agent.MaxTokens,
+		zoneBudget := core.ZoneBudgetV2{
+			ContextWindow:    cfg.Agent.ContextWindow,
+			SystemArchivePct: archivePercent,
+			ActiveOpsPct:     25,
+			HeadroomPct:      50,
+			OutputReserve:    cfg.Agent.MaxTokens,
 		}
 		hooks.RegisterPriority(core.HookBeforeContextBuild, "zone-budgeting", func(ctx context.Context, d *core.HookData) error {
-			d.Messages = core.ApplyZoneBudget(d.Messages, zoneBudget)
+			d.Messages = core.ApplyZoneBudgetV2(d.Messages, zoneBudget, nil)
 			return nil
 		}, 60)
-		log.Printf("[main] zone budgeting enabled (archive: %d%%, output reserve: %d)", archivePercent, cfg.Agent.MaxTokens)
+		log.Printf("[main] zone budgeting V2 enabled (system+archive: %d%%, active: 25%%, headroom: 50%%)", archivePercent)
 	}
 
 	// Build tools: default 6 + MCP tools
