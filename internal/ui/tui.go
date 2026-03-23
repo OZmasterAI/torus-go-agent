@@ -2460,7 +2460,7 @@ func (m Model) buildStatus(tokIn, tokOut int, cost float64, elapsed time.Duratio
 func (m Model) turnCount() int {
 	count := 0
 	for _, dm := range m.messages {
-		if dm.role == "assistant" {
+		if dm.role == "assistant" && dm.text != "" {
 			count++
 		}
 	}
