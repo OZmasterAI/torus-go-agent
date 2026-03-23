@@ -90,6 +90,12 @@ func main() {
 		}
 	}
 
+	// Require provider and model
+	if cfg.Agent.Provider == "" || cfg.Agent.Model == "" {
+		fmt.Fprintln(os.Stderr, "AGENT_PROVIDER and AGENT_MODEL must be set (via .env, environment, or startup screen).")
+		os.Exit(1)
+	}
+
 	// Auto-detect model specs: models.json → OpenRouter API → config.json defaults
 	models := config.LoadModels(cfgDir)
 	if info := config.ResolveModelInfo(cfg.Agent.Model, cfg.Agent.Provider, models); info.ContextWindow > 0 {
