@@ -10,11 +10,12 @@ import (
 
 // Agent is the DAG-based ReAct agent loop.
 type Agent struct {
-	config        t.AgentConfig
-	provider      t.Provider
-	hooks         *HookRegistry
-	dag           *DAG
-	compaction    CompactionConfig
+	config          t.AgentConfig
+	provider        t.Provider
+	hooks           *HookRegistry
+	dag             *DAG
+	compaction      CompactionConfig
+	lastInputTokens int // actual input tokens from most recent API call
 	steeringMode  string // "mild" (default) or "aggressive"
 	Summarize     func(string) (string, error)
 	OnStreamDelta func(delta string)
@@ -124,7 +125,7 @@ func (a *Agent) runLoop(ctx context.Context, userMessage string, ch chan<- Agent
 		}
 		messages = sanitizeMessages(messages)
 
-		if a.compaction.Mode != CompactionOff && NeedsCompaction(messages, a.compaction) {
+		if a.compaction.Mode != CompactionOff && NeedsCompaction(messages, a.compaction, a.lastInputTokens) {
 			preCount := len(messages)
 			a.hooks.Fire(ctx, HookPreCompact, &HookData{
 				AgentID: "main", Messages: messages,
@@ -204,6 +205,7 @@ func (a *Agent) runLoop(ctx context.Context, userMessage string, ch chan<- Agent
 			return
 		}
 
+		a.lastInputTokens = resp.Usage.InputTokens
 		afterLLM := &HookData{AgentID: "main", Response: resp, TokensIn: resp.Usage.InputTokens, TokensOut: resp.Usage.OutputTokens}
 		a.hooks.Fire(ctx, HookAfterLLMCall, afterLLM)
 		emit(AgentEvent{Type: EventStatusUpdate, StatusHook: "after_llm_call"})

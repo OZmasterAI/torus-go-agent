@@ -283,6 +283,7 @@ type Model struct {
 	ctxProgress  progress.Model
 
 	// Usage
+	lastInputTokens int // from most recent API call (for CTX%)
 	totalTokensIn  int
 	totalTokensOut int
 	totalCost      float64
@@ -947,6 +948,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.thinking.Buf = ""
 		}
 		m.resizeViewport()
+		m.lastInputTokens = msg.tokensIn
 		m.totalTokensIn += msg.tokensIn
 		m.totalTokensOut += msg.tokensOut
 		m.totalCost += msg.cost
@@ -1951,16 +1953,21 @@ func (m Model) renderSidebar() string {
 	lines = append(lines, styleSidebarTitle.Render("Session"))
 	lines = append(lines, fmt.Sprintf(" Tools: %d", len(m.toolEvents)))
 	lines = append(lines, fmt.Sprintf(" Turns: %d", m.turnCount()))
+	ctxWin := float64(m.agentCfg.ContextWindow)
+	if ctxWin <= 0 {
+		ctxWin = 128000
+	}
 	ctxPct := 0.0
-	head, _ := m.agent.DAG().GetHead()
-	if head != "" {
-		msgs, _ := m.agent.DAG().PromptFrom(head)
-		est := core.EstimateTokens(msgs)
-		ctxWin := float64(m.agentCfg.ContextWindow)
-		if ctxWin <= 0 {
-			ctxWin = 128000
+	if m.lastInputTokens > 0 {
+		// Use actual input tokens from most recent API call
+		ctxPct = float64(m.lastInputTokens) / ctxWin * 100
+	} else {
+		// Estimate before first response arrives
+		head, _ := m.agent.DAG().GetHead()
+		if head != "" {
+			msgs, _ := m.agent.DAG().PromptFrom(head)
+			ctxPct = float64(core.EstimateTokens(msgs)) / ctxWin * 100
 		}
-		ctxPct = float64(est) / ctxWin * 100
 	}
 	lines = append(lines, fmt.Sprintf(" CTX: %.0f%%", ctxPct))
 	totalTok := m.totalTokensIn + m.totalTokensOut
@@ -2422,16 +2429,21 @@ func (m Model) buildStatus(tokIn, tokOut int, cost float64, elapsed time.Duratio
 	var parts []string
 	parts = append(parts, fmt.Sprintf("[%s]", m.modelName))
 
+	ctxWin := float64(m.agentCfg.ContextWindow)
+	if ctxWin <= 0 {
+		ctxWin = 128000
+	}
 	ctxPct := 0.0
-	head, _ := m.agent.DAG().GetHead()
-	if head != "" {
-		msgs, _ := m.agent.DAG().PromptFrom(head)
-		est := core.EstimateTokens(msgs)
-		ctxWin := float64(m.agentCfg.ContextWindow)
-		if ctxWin <= 0 {
-			ctxWin = 128000
+	if m.lastInputTokens > 0 {
+		// Use actual input tokens from most recent API call
+		ctxPct = float64(m.lastInputTokens) / ctxWin * 100
+	} else {
+		// Estimate before first response arrives
+		head, _ := m.agent.DAG().GetHead()
+		if head != "" {
+			msgs, _ := m.agent.DAG().PromptFrom(head)
+			ctxPct = float64(core.EstimateTokens(msgs)) / ctxWin * 100
 		}
-		ctxPct = float64(est) / ctxWin * 100
 	}
 	parts = append(parts, "CTX:"+m.ctxProgress.ViewAs(ctxPct/100.0)+fmt.Sprintf(" %.0f%%", ctxPct))
 

@@ -66,7 +66,8 @@ var estimateTokens = EstimateTokens
 
 // NeedsCompaction returns true when compaction should trigger based on the
 // configured trigger mode: "tokens" (default), "messages", or "both".
-func NeedsCompaction(messages []t.Message, cfg CompactionConfig) bool {
+// If actualInputTokens > 0, it uses real API token counts instead of estimating.
+func NeedsCompaction(messages []t.Message, cfg CompactionConfig, actualInputTokens ...int) bool {
 	cfg = defaultCompactionConfig(cfg)
 	if cfg.Mode == CompactionOff {
 		return false
@@ -80,7 +81,12 @@ func NeedsCompaction(messages []t.Message, cfg CompactionConfig) bool {
 	tokenHit := false
 	msgHit := false
 
-	tokens := estimateTokens(messages)
+	tokens := 0
+	if len(actualInputTokens) > 0 && actualInputTokens[0] > 0 {
+		tokens = actualInputTokens[0]
+	} else {
+		tokens = estimateTokens(messages)
+	}
 	limit := cfg.ContextWindow * cfg.Threshold / 100
 	tokenHit = tokens >= limit
 
