@@ -1,5 +1,4 @@
 {
-  "telegram": { "botToken": "ENV", "allowedUsers": [] },
   "agent": {
     "compaction": "llm",
     "compactionTrigger": "both",

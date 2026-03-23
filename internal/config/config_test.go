@@ -243,38 +243,6 @@ func TestLoadConfig_EnvOverride_TelegramToken(t *testing.T) {
 	}
 }
 
-// TestLoadConfig_TelegramTokenENV tests that "ENV" token value triggers env lookup.
-func TestLoadConfig_TelegramTokenENV(t *testing.T) {
-	tmpDir := t.TempDir()
-	configPath := filepath.Join(tmpDir, "config.json")
-
-	cfg := Config{
-		Agent: AgentConfig{
-			Provider: "anthropic",
-			Model:    "claude-3-sonnet-20250219",
-		},
-		Telegram: TelegramConfig{
-			BotToken: "ENV",
-		},
-	}
-
-	data, _ := json.Marshal(cfg)
-	os.WriteFile(configPath, data, 0644)
-
-	oldToken := os.Getenv("TELEGRAM_BOT_TOKEN")
-	defer os.Setenv("TELEGRAM_BOT_TOKEN", oldToken)
-	os.Setenv("TELEGRAM_BOT_TOKEN", "env-token-value")
-
-	loaded, err := LoadConfig(configPath)
-	if err != nil {
-		t.Fatalf("LoadConfig failed: %v", err)
-	}
-
-	if loaded.Telegram.BotToken != "env-token-value" {
-		t.Errorf("TelegramToken ENV lookup: got %q, want %q", loaded.Telegram.BotToken, "env-token-value")
-	}
-}
-
 // TestLoadConfig_FileNotFound tests error handling for missing config file.
 func TestLoadConfig_FileNotFound(t *testing.T) {
 	_, err := LoadConfig("/nonexistent/path/config.json")

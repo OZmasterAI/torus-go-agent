@@ -102,9 +102,6 @@ func LoadConfig(path string) (*Config, error) {
 	if v := os.Getenv("TELEGRAM_BOT_TOKEN"); v != "" {
 		cfg.Telegram.BotToken = v
 	}
-	if cfg.Telegram.BotToken == "ENV" {
-		cfg.Telegram.BotToken = os.Getenv("TELEGRAM_BOT_TOKEN")
-	}
 	return &cfg, nil
 }
 
