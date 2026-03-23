@@ -1,15 +1,4 @@
 {
-  "agent": {
-    "compaction": "llm",
-    "compactionTrigger": "both",
-    "compactionThreshold": 65,
-    "compactionMaxMessages": 50,
-    "compactionKeepLastN": 20,
-    "continuousCompression": true,
-    "compressionKeepLast": 10,
-    "zoneBudgeting": true,
-    "zoneArchivePercent": 25,
-    "compressionMinMessages": 0
-  },
+  "agent": {},
   "data": { "dir": "../data" }
 }

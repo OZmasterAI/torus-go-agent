@@ -46,16 +46,8 @@ func TestLoadConfig_DefaultMaxTokens(t *testing.T) {
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "config.json")
 
-	cfg := Config{
-		Agent: AgentConfig{
-			Provider: "anthropic",
-			Model:    "claude-3-sonnet-20250219",
-			// MaxTokens is 0 (zero value)
-		},
-	}
-
-	data, _ := json.Marshal(cfg)
-	os.WriteFile(configPath, data, 0644)
+	// Write minimal JSON — omit fields to test defaults
+	os.WriteFile(configPath, []byte(`{"agent":{"provider":"anthropic","model":"claude-3-sonnet-20250219"}}`), 0644)
 
 	loaded, err := LoadConfig(configPath)
 	if err != nil {
@@ -67,21 +59,12 @@ func TestLoadConfig_DefaultMaxTokens(t *testing.T) {
 	}
 }
 
-// TestLoadConfig_DefaultContextWindow tests that ContextWindow defaults to 128000 when 0.
+// TestLoadConfig_DefaultContextWindow tests that ContextWindow defaults to 128000 when omitted.
 func TestLoadConfig_DefaultContextWindow(t *testing.T) {
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "config.json")
 
-	cfg := Config{
-		Agent: AgentConfig{
-			Provider: "anthropic",
-			Model:    "claude-3-sonnet-20250219",
-			// ContextWindow is 0 (zero value)
-		},
-	}
-
-	data, _ := json.Marshal(cfg)
-	os.WriteFile(configPath, data, 0644)
+	os.WriteFile(configPath, []byte(`{"agent":{"provider":"anthropic","model":"claude-3-sonnet-20250219"}}`), 0644)
 
 	loaded, err := LoadConfig(configPath)
 	if err != nil {
@@ -93,21 +76,12 @@ func TestLoadConfig_DefaultContextWindow(t *testing.T) {
 	}
 }
 
-// TestLoadConfig_DefaultCompaction tests that Compaction defaults to "llm" when empty.
+// TestLoadConfig_DefaultCompaction tests that Compaction defaults to "llm" when omitted.
 func TestLoadConfig_DefaultCompaction(t *testing.T) {
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "config.json")
 
-	cfg := Config{
-		Agent: AgentConfig{
-			Provider: "anthropic",
-			Model:    "claude-3-sonnet-20250219",
-			// Compaction is empty
-		},
-	}
-
-	data, _ := json.Marshal(cfg)
-	os.WriteFile(configPath, data, 0644)
+	os.WriteFile(configPath, []byte(`{"agent":{"provider":"anthropic","model":"claude-3-sonnet-20250219"}}`), 0644)
 
 	loaded, err := LoadConfig(configPath)
 	if err != nil {

@@ -801,36 +801,24 @@ func TestConfigEdge_ResolveModelInfoEmpty(t *testing.T) {
 	}
 }
 
-// TestConfigEdge_NegativeAndZeroValues tests negative and zero values are preserved.
+// TestConfigEdge_NegativeAndZeroValues tests that explicit values in JSON override defaults.
 func TestConfigEdge_NegativeAndZeroValues(t *testing.T) {
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "config.json")
 
-	cfg := Config{
-		Agent: AgentConfig{
-			Provider:              "anthropic",
-			Model:                 "claude-3-sonnet-20250219",
-			MaxTokens:             -1,  // Negative should be preserved before defaults apply
-			ContextWindow:         0,   // Zero triggers default
-			CompactionMaxMessages: 0,   // Zero is valid (means disabled)
-			CompactionThreshold:   0,   // Zero is valid
-		},
-	}
-
-	data, _ := json.Marshal(cfg)
-	os.WriteFile(configPath, data, 0644)
+	// Explicit values in JSON override pre-filled defaults
+	os.WriteFile(configPath, []byte(`{"agent":{"provider":"anthropic","model":"claude-3-sonnet-20250219","maxTokens":-1,"contextWindow":0}}`), 0644)
 
 	loaded, err := LoadConfig(configPath)
 	if err != nil {
 		t.Fatalf("LoadConfig failed: %v", err)
 	}
 
-	// Verify defaults are applied correctly
-	if loaded.Agent.MaxTokens != -1 { // Negative value preserved
+	if loaded.Agent.MaxTokens != -1 {
 		t.Errorf("MaxTokens negative: got %d, want -1", loaded.Agent.MaxTokens)
 	}
-	if loaded.Agent.ContextWindow != 128000 { // Zero triggers default
-		t.Errorf("ContextWindow zero: got %d, want 128000", loaded.Agent.ContextWindow)
+	if loaded.Agent.ContextWindow != 0 { // Explicit zero overrides default
+		t.Errorf("ContextWindow explicit zero: got %d, want 0", loaded.Agent.ContextWindow)
 	}
 }
 

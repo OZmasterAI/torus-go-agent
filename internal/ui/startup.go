@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"torus_go_agent/internal/config"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -344,21 +345,20 @@ type AgentConfigOverrides struct {
 }
 
 func defaultOverrides() *AgentConfigOverrides {
+	d := config.DefaultAgentConfig()
 	return &AgentConfigOverrides{
-		MaxTokens:              8192,
-		ContextWindow:          128000,
-		Compaction:             "llm",
-		CompactionTrigger:      "both",
-		CompactionThreshold:    75,
-		CompactionMaxMessages:  50,
-		CompactionKeepLastN:    20,
-		ContinuousCompression:  true,
-		CompressionKeepLast:    10,
-		CompressionMinMessages: 0,
-		ZoneBudgeting:          true,
-		ZoneArchivePercent:     25,
-		SmartRouting:           false,
-		SteeringAggressive:     false,
+		MaxTokens:              d.MaxTokens,
+		ContextWindow:          d.ContextWindow,
+		Compaction:             d.Compaction,
+		CompactionTrigger:      d.CompactionTrigger,
+		CompactionThreshold:    d.CompactionThreshold,
+		CompactionMaxMessages:  d.CompactionMaxMessages,
+		CompactionKeepLastN:    d.CompactionKeepLastN,
+		ContinuousCompression:  d.ContinuousCompression,
+		CompressionKeepLast:    d.CompressionKeepLast,
+		CompressionMinMessages: d.CompressionMinMessages,
+		ZoneBudgeting:          d.ZoneBudgeting,
+		ZoneArchivePercent:     d.ZoneArchivePercent,
 	}
 }
 

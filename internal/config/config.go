@@ -72,25 +72,33 @@ type DataConfig struct {
 	Dir string `json:"dir"`
 }
 
+// DefaultAgentConfig returns the canonical default agent settings.
+// Used by LoadConfig and the startup screen.
+func DefaultAgentConfig() AgentConfig {
+	return AgentConfig{
+		MaxTokens:             8192,
+		ContextWindow:         128000,
+		Compaction:            "llm",
+		CompactionTrigger:     "both",
+		CompactionThreshold:   65,
+		CompactionKeepLastN:   10,
+		ContinuousCompression: true,
+		CompressionKeepLast:   10,
+		ZoneBudgeting:         true,
+		ZoneArchivePercent:    25,
+	}
+}
+
 // LoadConfig reads and parses a JSON config file with env var overrides.
+// Defaults are pre-filled so JSON only overwrites fields it contains.
 func LoadConfig(path string) (*Config, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
 	}
-	var cfg Config
+	cfg := Config{Agent: DefaultAgentConfig()}
 	if err := json.Unmarshal(data, &cfg); err != nil {
 		return nil, err
-	}
-	// Defaults
-	if cfg.Agent.MaxTokens == 0 {
-		cfg.Agent.MaxTokens = 8192
-	}
-	if cfg.Agent.ContextWindow == 0 {
-		cfg.Agent.ContextWindow = 128000 // safe default for most models
-	}
-	if cfg.Agent.Compaction == "" {
-		cfg.Agent.Compaction = "llm"
 	}
 	// Env overrides
 	if v := os.Getenv("AGENT_MODEL"); v != "" {
