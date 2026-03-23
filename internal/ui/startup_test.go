@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"strings"
 	"testing"
 )
 
@@ -131,5 +132,53 @@ func TestFilterablePhase(t *testing.T) {
 		if m.filterablePhase() {
 			t.Errorf("phase %d should not be filterable", phase)
 		}
+	}
+}
+
+func TestBuildModelPickerItems(t *testing.T) {
+	groups := []ProviderGroup{
+		{
+			Name:        "Anthropic",
+			ProviderKey: "anthropic",
+			Models: []ModelChoice{
+				{Name: "Claude Opus", ID: "claude-opus-4-6"},
+				{Name: "Custom model ID", ID: ""},
+			},
+		},
+		{
+			Name:        "NVIDIA NIM",
+			ProviderKey: "nvidia",
+			Categories: []ModelCategory{
+				{Name: "FREE", Models: []ModelChoice{
+					{Name: "GLM-5", ID: "z-ai/glm5"},
+					{Name: "Custom model ID", ID: ""},
+				}},
+			},
+		},
+		{
+			Name:        "Custom provider",
+			ProviderKey: "",
+		},
+	}
+	items := buildModelPickerItems(groups)
+	// Expect: (none), Claude Opus, GLM-5 = 3 items
+	if len(items) != 3 {
+		t.Fatalf("expected 3 items, got %d", len(items))
+	}
+	if items[0].ModelID != "" {
+		t.Errorf("first item should be none, got %q", items[0].ModelID)
+	}
+	if items[1].ModelID != "claude-opus-4-6" {
+		t.Errorf("second item: got %q, want claude-opus-4-6", items[1].ModelID)
+	}
+	if items[2].ModelID != "z-ai/glm5" {
+		t.Errorf("third item: got %q, want z-ai/glm5", items[2].ModelID)
+	}
+	// Labels should include provider name
+	if !strings.Contains(items[1].Label, "Anthropic") {
+		t.Errorf("label should contain provider: %q", items[1].Label)
+	}
+	if !strings.Contains(items[2].Label, "NVIDIA") {
+		t.Errorf("label should contain provider: %q", items[2].Label)
 	}
 }

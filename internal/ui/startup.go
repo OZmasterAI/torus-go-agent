@@ -569,6 +569,48 @@ type ModelChoice struct {
 	MaxTokens     int
 }
 
+// modelPickerEntry is a flattened model entry with provider context.
+type modelPickerEntry struct {
+	Label    string // e.g. "Claude Opus 4.6 (Anthropic)"
+	ModelID  string // e.g. "claude-opus-4-6"
+}
+
+// buildModelPickerItems gathers all models from all provider groups into a flat list.
+func buildModelPickerItems(groups []ProviderGroup) []modelPickerEntry {
+	var items []modelPickerEntry
+	// First entry: clear/none
+	items = append(items, modelPickerEntry{Label: "(none — use main model)", ModelID: ""})
+	for _, g := range groups {
+		provName := g.Name
+		if g.ProviderKey == "" {
+			continue // skip custom provider
+		}
+		// Direct models
+		for _, mc := range g.Models {
+			if mc.ID == "" {
+				continue // skip "Custom model ID" entries
+			}
+			items = append(items, modelPickerEntry{
+				Label:   mc.Name + " (" + provName + ")",
+				ModelID: mc.ID,
+			})
+		}
+		// Category models
+		for _, cat := range g.Categories {
+			for _, mc := range cat.Models {
+				if mc.ID == "" {
+					continue
+				}
+				items = append(items, modelPickerEntry{
+					Label:   mc.Name + " (" + provName + " / " + cat.Name + ")",
+					ModelID: mc.ID,
+				})
+			}
+		}
+	}
+	return items
+}
+
 // DefaultProviderGroups returns the grouped provider options.
 func DefaultProviderGroups() []ProviderGroup {
 	return []ProviderGroup{
@@ -852,7 +894,8 @@ type setupModel struct {
 	torusFrame     string
 
 	// Menu phases:
-	// 0=main, 1=pick provider, 2=pick auth, 3=pick category (if any), 4=pick model, 5=config mode, 6=edit settings
+	// 0=main, 1=pick provider, 2=pick auth, 3=pick category (if any), 4=pick model,
+	// 5=config mode, 6=edit settings, 7=model picker (for compactionModel/smartRoutingModel)
 	phase        int
 	cursor       int
 	scrollOffset int // first visible item index for scrollable menus
@@ -877,6 +920,10 @@ type setupModel struct {
 	configOverrides *AgentConfigOverrides
 	editingConfig   bool   // true when editing a numeric/string value
 	editBuffer      string // text buffer for numeric/string input
+
+	// Model picker (phase 7) — flat list for compactionModel/smartRoutingModel
+	modelPickerItems []modelPickerEntry // all models from all providers
+	modelPickerField int                // config field index that triggered the picker
 
 	// Result
 	provider string
@@ -1091,6 +1138,11 @@ func (m setupModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		switch m.phase {
+		case 7: // model picker → settings
+			m.phase = 6
+			m.cursor = m.modelPickerField
+			m.scrollOffset = 0
+			m.modelPickerItems = nil
 		case 6: // settings → config mode
 			m.phase = 5
 			m.cursor = 0
@@ -1261,7 +1313,7 @@ func filteredIndices(total int, labelFn func(i int) string, filter string) []int
 
 // filterablePhase returns true if the current phase supports type-to-filter.
 func (m setupModel) filterablePhase() bool {
-	return m.phase == 1 || m.phase == 3 || m.phase == 4
+	return m.phase == 1 || m.phase == 3 || m.phase == 4 || m.phase == 7
 }
 
 // currentModels returns the model list for the current selection context.
@@ -1301,6 +1353,8 @@ func (m setupModel) menuLen() int {
 		return 3
 	case 6:
 		return len(configFields) + 1
+	case 7:
+		return len(m.modelPickerItems)
 	}
 	return 0
 }
@@ -1322,6 +1376,10 @@ func (m setupModel) filteredItems() []int {
 		models := m.currentModels()
 		return filteredIndices(len(models), func(i int) string {
 			return models[i].Name
+		}, m.filterText)
+	case 7:
+		return filteredIndices(len(m.modelPickerItems), func(i int) string {
+			return m.modelPickerItems[i].Label
 		}, m.filterText)
 	}
 	return nil
@@ -1577,6 +1635,16 @@ func (m setupModel) selectItem() (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 		}
 		f := configFields[m.cursor]
+		// CompactionModel (5) and SmartRoutingModel (12) open model picker
+		if m.cursor == 5 || m.cursor == 12 {
+			m.modelPickerItems = buildModelPickerItems(m.groups)
+			m.modelPickerField = m.cursor
+			m.phase = 7
+			m.filterText = ""
+			m.cursor = 0
+			m.scrollOffset = 0
+			return m, nil
+		}
 		switch f.kind {
 		case "bool":
 			m.configOverrides.toggleBool(m.cursor)
@@ -1586,6 +1654,18 @@ func (m setupModel) selectItem() (tea.Model, tea.Cmd) {
 			m.editingConfig = true
 			m.editBuffer = m.configOverrides.getValue(m.cursor)
 		}
+
+	case 7: // Model picker
+		idx := m.resolveFilteredIndex()
+		m.filterText = ""
+		if idx < len(m.modelPickerItems) {
+			entry := m.modelPickerItems[idx]
+			m.configOverrides.setValue(m.modelPickerField, entry.ModelID)
+		}
+		m.cursor = m.modelPickerField
+		m.phase = 6
+		m.scrollOffset = 0
+		m.modelPickerItems = nil
 	}
 
 	return m, nil
@@ -1754,6 +1834,19 @@ func (m setupModel) renderMenu() string {
 		b.WriteByte('\n')
 		total := len(configFields) + 1 // +1 for "Done →"
 		m.renderScrollableSettings(&b, total)
+
+	case 7: // Model picker
+		fieldName := configFields[m.modelPickerField].name
+		b.WriteString(menuHeaderStyle.Render("Select " + fieldName))
+		b.WriteByte('\n')
+		if m.filterText != "" {
+			b.WriteString(textInputStyle.Render("  / " + m.filterText + "_"))
+			b.WriteByte('\n')
+		}
+		indices := m.filteredItems()
+		m.renderScrollableItems(&b, len(indices), func(i int) string {
+			return m.modelPickerItems[indices[i]].Label
+		})
 	}
 
 	// ── Text input overlay ────────────────────────────────────────
