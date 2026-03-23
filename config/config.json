@@ -16,6 +16,8 @@
     "smartRoutingModel": "",
     "steeringMode": "mild",
     "persistThinking": false,
+    "thinking": "high",
+    "thinkingBudget": 0,
     "routing": [],
     "fallbackOrder": []
   },

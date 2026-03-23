@@ -703,7 +703,15 @@ func resolveProviderModel(providerModel, defaultProvider, defaultKey string, age
 func makeProvider(providerName, apiKey, model string, agentCfg *config.AgentConfig) types.Provider {
 	switch strings.ToLower(providerName) {
 	case "anthropic":
-		return providers.NewAnthropicProvider(apiKey, model)
+		p := providers.NewAnthropicProvider(apiKey, model)
+		if agentCfg != nil {
+			if agentCfg.ThinkingBudget > 0 {
+				p.ThinkingBudget = agentCfg.ThinkingBudget
+			} else if agentCfg.Thinking != "" {
+				p.ThinkingBudget = providers.ThinkingBudgetForLevel(agentCfg.Thinking)
+			}
+		}
+		return p
 	case "nvidia":
 		return providers.NewNvidiaProvider(apiKey, model)
 	case "openai":

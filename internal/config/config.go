@@ -60,6 +60,8 @@ type AgentConfig struct {
 	SmartRoutingModel string `json:"smartRoutingModel"`
 	SteeringMode      string `json:"steeringMode,omitempty"` // "mild" (default) or "aggressive"
 	PersistThinking   bool   `json:"persistThinking"`        // store thinking blocks as DAG nodes
+	Thinking          string `json:"thinking,omitempty"`      // thinking level: "", "low", "mid", "high", "max" (Anthropic only)
+	ThinkingBudget    int    `json:"thinkingBudget,omitempty"` // explicit budget_tokens override (takes precedence over thinking level)
 	AzureResource    string `json:"azureResource,omitempty"`   // Azure OpenAI resource name
 	AzureDeployment  string `json:"azureDeployment,omitempty"` // Azure OpenAI deployment name
 	AzureAPIVersion  string `json:"azureApiVersion,omitempty"` // Azure API version (default "2024-06-01")
@@ -86,6 +88,7 @@ func DefaultAgentConfig() AgentConfig {
 		CompressionKeepLast:   10,
 		ZoneBudgeting:         true,
 		ZoneArchivePercent:    25,
+		Thinking:              "high",
 	}
 }
 

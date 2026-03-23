@@ -81,6 +81,8 @@ Divides the usable context into zones (archive, working, recent) with configurab
 |-------|------|---------|-------------|
 | `steeringMode` | string | `""` | System prompt steering intensity. `"mild"` (default behavior) or `"aggressive"` |
 | `persistThinking` | bool | `false` | Store model thinking/reasoning blocks as DAG nodes for later inspection |
+| `thinking` | string | `""` | Extended thinking level (Anthropic only). `""` = off, `"low"` = 2048 budget, `"mid"` = 8192, `"high"` = 16384, `"max"` = 32768, `"ultra"` = 65536. Thinking tokens are billed as output tokens |
+| `thinkingBudget` | int | `0` | Explicit `budget_tokens` override. Takes precedence over `thinking` level if set. `0` = use level or disabled |
 
 ### Azure-Specific
 

@@ -16,12 +16,31 @@ import (
 const anthropicBaseURL = "https://api.anthropic.com/v1"
 const anthropicVersion = "2023-06-01"
 
+// ThinkingBudgetForLevel maps a named thinking level to budget_tokens.
+func ThinkingBudgetForLevel(level string) int {
+	switch strings.ToLower(level) {
+	case "low":
+		return 2048
+	case "mid":
+		return 8192
+	case "high":
+		return 16384
+	case "max":
+		return 32768
+	case "ultra":
+		return 65536
+	default:
+		return 0
+	}
+}
+
 // AnthropicProvider calls the Anthropic Messages API.
 type AnthropicProvider struct {
-	APIKey  string
-	Model   string
-	BaseURL string
-	client  *http.Client
+	APIKey         string
+	Model          string
+	BaseURL        string
+	ThinkingBudget int // 0 = disabled; >0 = budget_tokens for extended thinking
+	client         *http.Client
 }
 
 // NewAnthropicProvider creates a provider for Anthropic/Claude models.
@@ -210,6 +229,9 @@ func (p *AnthropicProvider) Complete(ctx context.Context, systemPrompt string, m
 		System:    system,
 		Messages:  apiMsgs,
 		Tools:     apiTools,
+	}
+	if p.ThinkingBudget > 0 {
+		req.Thinking = &anthropicThinking{Type: "enabled", BudgetTokens: p.ThinkingBudget}
 	}
 
 	body, err := json.Marshal(req)
@@ -428,6 +450,9 @@ func (p *AnthropicProvider) StreamComplete(ctx context.Context, systemPrompt str
 		Messages:  apiMsgs,
 		Tools:     apiTools,
 		Stream:    true,
+	}
+	if p.ThinkingBudget > 0 {
+		req.Thinking = &anthropicThinking{Type: "enabled", BudgetTokens: p.ThinkingBudget}
 	}
 
 	body, err := json.Marshal(req)
