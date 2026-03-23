@@ -26,6 +26,8 @@ func runAgentStream(agent *core.Agent, input string, eventCh chan<- StreamEventM
 			switch ev.Type {
 			case core.EventAgentTextDelta:
 				eventCh <- StreamEventMsg{Type: StreamTextDelta, Delta: ev.Text}
+			case core.EventAgentThinkingDelta:
+				eventCh <- StreamEventMsg{Type: StreamThinkingDelta, Thinking: ev.Text}
 			case core.EventAgentToolStart:
 				toolStart = time.Now()
 				eventCh <- StreamEventMsg{Type: StreamToolStart}

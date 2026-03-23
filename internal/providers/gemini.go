@@ -104,6 +104,8 @@ type geminiContent struct {
 
 type geminiPart struct {
 	Text             string                `json:"text,omitempty"`
+	Thought          bool                  `json:"thought,omitempty"`
+	ThoughtSignature string                `json:"thoughtSignature,omitempty"`
 	FunctionCall     *geminiFunctionCall   `json:"functionCall,omitempty"`
 	FunctionResponse *geminiFuncResponse   `json:"functionResponse,omitempty"`
 }
@@ -131,7 +133,12 @@ type geminiFuncDecl struct {
 }
 
 type geminiGenConfig struct {
-	MaxOutputTokens int `json:"maxOutputTokens,omitempty"`
+	MaxOutputTokens int              `json:"maxOutputTokens,omitempty"`
+	ThinkingConfig  *geminiThinking  `json:"thinkingConfig,omitempty"`
+}
+
+type geminiThinking struct {
+	IncludeThoughts bool `json:"includeThoughts"`
 }
 
 type geminiResponse struct {
@@ -248,7 +255,11 @@ func fromGeminiResponse(resp *geminiResponse, model string) *t.AssistantMessage 
 
 	for _, part := range cand.Content.Parts {
 		if part.Text != "" {
-			blocks = append(blocks, t.ContentBlock{Type: "text", Text: part.Text})
+			blockType := "text"
+			if part.Thought {
+				blockType = "thinking"
+			}
+			blocks = append(blocks, t.ContentBlock{Type: blockType, Text: part.Text})
 		}
 		if part.FunctionCall != nil {
 			blocks = append(blocks, t.ContentBlock{
@@ -297,9 +308,12 @@ func (p *GeminiProvider) Complete(ctx context.Context, systemPrompt string, mess
 	}
 
 	req := geminiRequest{
-		Contents:         toGeminiContents(messages),
-		Tools:            toGeminiTools(tools),
-		GenerationConfig: &geminiGenConfig{MaxOutputTokens: maxTokens},
+		Contents: toGeminiContents(messages),
+		Tools:    toGeminiTools(tools),
+		GenerationConfig: &geminiGenConfig{
+			MaxOutputTokens: maxTokens,
+			ThinkingConfig:  &geminiThinking{IncludeThoughts: true},
+		},
 	}
 	if systemPrompt != "" {
 		req.SystemInstruction = &geminiContent{
@@ -350,9 +364,12 @@ func (p *GeminiProvider) StreamComplete(ctx context.Context, systemPrompt string
 	}
 
 	req := geminiRequest{
-		Contents:         toGeminiContents(messages),
-		Tools:            toGeminiTools(tools),
-		GenerationConfig: &geminiGenConfig{MaxOutputTokens: maxTokens},
+		Contents: toGeminiContents(messages),
+		Tools:    toGeminiTools(tools),
+		GenerationConfig: &geminiGenConfig{
+			MaxOutputTokens: maxTokens,
+			ThinkingConfig:  &geminiThinking{IncludeThoughts: true},
+		},
 	}
 	if systemPrompt != "" {
 		req.SystemInstruction = &geminiContent{
@@ -450,13 +467,23 @@ func (p *GeminiProvider) parseGeminiSSE(ctx context.Context, resp *http.Response
 
 		for _, part := range cand.Content.Parts {
 			if part.Text != "" {
-				textBuf.WriteString(part.Text)
-				if !send(t.StreamEvent{
-					Type:         t.EventTextDelta,
-					ContentIndex: 0,
-					Text:         part.Text,
-				}) {
-					return
+				if part.Thought {
+					if !send(t.StreamEvent{
+						Type:         t.EventThinkingDelta,
+						ContentIndex: 0,
+						Text:         part.Text,
+					}) {
+						return
+					}
+				} else {
+					textBuf.WriteString(part.Text)
+					if !send(t.StreamEvent{
+						Type:         t.EventTextDelta,
+						ContentIndex: 0,
+						Text:         part.Text,
+					}) {
+						return
+					}
 				}
 			}
 			if part.FunctionCall != nil {

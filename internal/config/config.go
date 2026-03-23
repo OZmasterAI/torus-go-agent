@@ -59,6 +59,7 @@ type AgentConfig struct {
 	SmartRouting          bool   `json:"smartRouting"`
 	SmartRoutingModel string `json:"smartRoutingModel"`
 	SteeringMode      string `json:"steeringMode,omitempty"` // "mild" (default) or "aggressive"
+	PersistThinking   bool   `json:"persistThinking"`        // store thinking blocks as DAG nodes
 	AzureResource    string `json:"azureResource,omitempty"`   // Azure OpenAI resource name
 	AzureDeployment  string `json:"azureDeployment,omitempty"` // Azure OpenAI deployment name
 	AzureAPIVersion  string `json:"azureApiVersion,omitempty"` // Azure API version (default "2024-06-01")

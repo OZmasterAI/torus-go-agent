@@ -576,3 +576,186 @@ func TestProviderInterfaceImplementation(t *testing.T) {
 		t.Fatalf("ModelID() = %q", id)
 	}
 }
+
+// TestOpenRouterStreamReasoningContent verifies that reasoning_content in stream
+// deltas emits EventThinkingDelta events (covers DeepSeek, NIM, Grok).
+func TestOpenRouterStreamReasoningContent(t *testing.T) {
+	p := NewOpenRouterProvider("test-key", "deepseek-r1")
+
+	sseBody := `data: {"id":"1","model":"deepseek-r1","choices":[{"index":0,"delta":{"role":"assistant","reasoning_content":"Let me think"},"finish_reason":null}]}
+data: {"id":"2","model":"deepseek-r1","choices":[{"index":0,"delta":{"reasoning_content":" about this"},"finish_reason":null}]}
+data: {"id":"3","model":"deepseek-r1","choices":[{"index":0,"delta":{"content":"The answer is 42"},"finish_reason":null}]}
+data: {"id":"4","model":"deepseek-r1","choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}
+data: [DONE]
+`
+
+	p.client = &http.Client{
+		Transport: &mockTransport{statusCode: 200, body: sseBody},
+	}
+
+	ctx := context.Background()
+	ch, err := p.StreamComplete(ctx, "system", nil, nil, 100)
+	if err != nil {
+		t.Fatalf("StreamComplete returned error: %v", err)
+	}
+
+	var thinkingDeltas []string
+	var textDeltas []string
+	for ev := range ch {
+		switch ev.Type {
+		case tp.EventThinkingDelta:
+			thinkingDeltas = append(thinkingDeltas, ev.Text)
+		case tp.EventTextDelta:
+			textDeltas = append(textDeltas, ev.Text)
+		}
+	}
+
+	if len(thinkingDeltas) != 2 {
+		t.Fatalf("expected 2 thinking deltas, got %d", len(thinkingDeltas))
+	}
+	fullThinking := strings.Join(thinkingDeltas, "")
+	if fullThinking != "Let me think about this" {
+		t.Fatalf("thinking text = %q, want %q", fullThinking, "Let me think about this")
+	}
+
+	if len(textDeltas) != 1 {
+		t.Fatalf("expected 1 text delta, got %d", len(textDeltas))
+	}
+	if textDeltas[0] != "The answer is 42" {
+		t.Fatalf("text = %q, want %q", textDeltas[0], "The answer is 42")
+	}
+}
+
+// TestOpenRouterStreamReasoningContentOnly verifies stream with only reasoning_content
+// and no regular content (model still thinking when stopped).
+func TestOpenRouterStreamReasoningContentOnly(t *testing.T) {
+	p := NewNvidiaProvider("test-key", "deepseek-r1")
+
+	sseBody := `data: {"id":"1","model":"deepseek-r1","choices":[{"index":0,"delta":{"role":"assistant","reasoning_content":"Step 1: "},"finish_reason":null}]}
+data: {"id":"2","model":"deepseek-r1","choices":[{"index":0,"delta":{"reasoning_content":"analyze the problem"},"finish_reason":null}]}
+data: {"id":"3","model":"deepseek-r1","choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}
+data: [DONE]
+`
+
+	p.client = &http.Client{
+		Transport: &mockTransport{statusCode: 200, body: sseBody},
+	}
+
+	ctx := context.Background()
+	ch, err := p.StreamComplete(ctx, "system", nil, nil, 100)
+	if err != nil {
+		t.Fatalf("StreamComplete returned error: %v", err)
+	}
+
+	var thinkingDeltas []string
+	var textDeltas []string
+	for ev := range ch {
+		switch ev.Type {
+		case tp.EventThinkingDelta:
+			thinkingDeltas = append(thinkingDeltas, ev.Text)
+		case tp.EventTextDelta:
+			textDeltas = append(textDeltas, ev.Text)
+		}
+	}
+
+	if len(thinkingDeltas) != 2 {
+		t.Fatalf("expected 2 thinking deltas, got %d", len(thinkingDeltas))
+	}
+	if len(textDeltas) != 0 {
+		t.Fatalf("expected 0 text deltas, got %d", len(textDeltas))
+	}
+}
+
+// TestOpenRouterCompleteWithReasoningContent verifies non-streaming Complete produces
+// a ContentBlock{Type:"thinking"} when reasoning_content is present in the response.
+func TestOpenRouterCompleteWithReasoningContent(t *testing.T) {
+	p := NewOpenRouterProvider("test-key", "deepseek-r1")
+
+	respBody := `{
+		"choices": [{
+			"message": {
+				"role": "assistant",
+				"reasoning_content": "I need to consider the input carefully",
+				"content": "The answer is 42"
+			},
+			"finish_reason": "stop"
+		}],
+		"usage": {"prompt_tokens": 10, "completion_tokens": 20, "total_tokens": 30},
+		"model": "deepseek-r1"
+	}`
+
+	p.client = &http.Client{
+		Transport: &mockTransport{statusCode: 200, body: respBody},
+	}
+
+	ctx := context.Background()
+	msg := tp.Message{
+		Role:    tp.RoleUser,
+		Content: []tp.ContentBlock{{Type: "text", Text: "What is 6*7?"}},
+	}
+
+	result, err := p.Complete(ctx, "system", []tp.Message{msg}, nil, 100)
+	if err != nil {
+		t.Fatalf("Complete returned error: %v", err)
+	}
+
+	if len(result.Content) != 2 {
+		t.Fatalf("expected 2 content blocks (thinking + text), got %d", len(result.Content))
+	}
+
+	// Thinking block should come first
+	if result.Content[0].Type != "thinking" {
+		t.Fatalf("first block type = %q, want %q", result.Content[0].Type, "thinking")
+	}
+	if result.Content[0].Text != "I need to consider the input carefully" {
+		t.Fatalf("thinking text = %q", result.Content[0].Text)
+	}
+
+	// Text block second
+	if result.Content[1].Type != "text" {
+		t.Fatalf("second block type = %q, want %q", result.Content[1].Type, "text")
+	}
+	if result.Content[1].Text != "The answer is 42" {
+		t.Fatalf("text = %q", result.Content[1].Text)
+	}
+}
+
+// TestOpenRouterCompleteNoReasoningContent verifies that responses without
+// reasoning_content still work normally (no thinking block added).
+func TestOpenRouterCompleteNoReasoningContent(t *testing.T) {
+	p := NewOpenRouterProvider("test-key", "gpt-4o")
+
+	respBody := `{
+		"choices": [{
+			"message": {
+				"role": "assistant",
+				"content": "Hello!"
+			},
+			"finish_reason": "stop"
+		}],
+		"usage": {"prompt_tokens": 5, "completion_tokens": 2, "total_tokens": 7},
+		"model": "gpt-4o"
+	}`
+
+	p.client = &http.Client{
+		Transport: &mockTransport{statusCode: 200, body: respBody},
+	}
+
+	ctx := context.Background()
+	msg := tp.Message{
+		Role:    tp.RoleUser,
+		Content: []tp.ContentBlock{{Type: "text", Text: "Hi"}},
+	}
+
+	result, err := p.Complete(ctx, "system", []tp.Message{msg}, nil, 100)
+	if err != nil {
+		t.Fatalf("Complete returned error: %v", err)
+	}
+
+	if len(result.Content) != 1 {
+		t.Fatalf("expected 1 content block, got %d", len(result.Content))
+	}
+	if result.Content[0].Type != "text" {
+		t.Fatalf("block type = %q, want %q", result.Content[0].Type, "text")
+	}
+}

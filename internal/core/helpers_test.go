@@ -287,6 +287,93 @@ func TestExtractToolCalls(t *testing.T) {
 	}
 }
 
+// TestEventAgentThinkingDelta verifies the constant exists and has the expected value.
+func TestEventAgentThinkingDelta(t *testing.T) {
+	if EventAgentThinkingDelta != "thinking_delta" {
+		t.Errorf("EventAgentThinkingDelta = %q, want %q", EventAgentThinkingDelta, "thinking_delta")
+	}
+	// Must be distinct from EventAgentTextDelta.
+	if EventAgentThinkingDelta == EventAgentTextDelta {
+		t.Error("EventAgentThinkingDelta must differ from EventAgentTextDelta")
+	}
+}
+
+// TestFilterThinking tests that FilterThinking correctly separates thinking blocks.
+func TestFilterThinking(t *testing.T) {
+	tests := []struct {
+		name          string
+		blocks        []types.ContentBlock
+		wantClean     int
+		wantThinking  int
+	}{
+		{
+			name:          "nil input",
+			blocks:        nil,
+			wantClean:     0,
+			wantThinking:  0,
+		},
+		{
+			name:          "empty input",
+			blocks:        []types.ContentBlock{},
+			wantClean:     0,
+			wantThinking:  0,
+		},
+		{
+			name: "no thinking blocks",
+			blocks: []types.ContentBlock{
+				{Type: "text", Text: "Hello"},
+				{Type: "tool_use", ID: "call_1", Name: "read_file"},
+			},
+			wantClean:    2,
+			wantThinking: 0,
+		},
+		{
+			name: "only thinking blocks",
+			blocks: []types.ContentBlock{
+				{Type: "thinking", Text: "Let me reason..."},
+				{Type: "thinking", Text: "So the answer is..."},
+			},
+			wantClean:    0,
+			wantThinking: 2,
+		},
+		{
+			name: "mixed blocks",
+			blocks: []types.ContentBlock{
+				{Type: "thinking", Text: "Reasoning here"},
+				{Type: "text", Text: "The answer is 42"},
+				{Type: "tool_use", ID: "call_1", Name: "calc"},
+				{Type: "thinking", Text: "More reasoning"},
+			},
+			wantClean:    2,
+			wantThinking: 2,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			clean, thinking := FilterThinking(tc.blocks)
+			if len(clean) != tc.wantClean {
+				t.Errorf("clean count = %d, want %d", len(clean), tc.wantClean)
+			}
+			if len(thinking) != tc.wantThinking {
+				t.Errorf("thinking count = %d, want %d", len(thinking), tc.wantThinking)
+			}
+			// Verify no thinking blocks in clean slice.
+			for _, b := range clean {
+				if b.Type == "thinking" {
+					t.Error("clean slice contains a thinking block")
+				}
+			}
+			// Verify all thinking blocks are thinking type.
+			for _, b := range thinking {
+				if b.Type != "thinking" {
+					t.Errorf("thinking slice contains block of type %q", b.Type)
+				}
+			}
+		})
+	}
+}
+
 // BenchmarkHasToolUse benchmarks the HasToolUse function.
 func BenchmarkHasToolUse(b *testing.B) {
 	msg := &types.AssistantMessage{

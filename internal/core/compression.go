@@ -23,6 +23,11 @@ func ScoreMessage(m t.Message) MessageScore {
 		return ScoreZero
 	}
 
+	// Thinking nodes are always expendable — drop first.
+	if m.Role == "thinking" {
+		return ScoreZero
+	}
+
 	// Collect all text content
 	var text string
 	hasToolUse := false

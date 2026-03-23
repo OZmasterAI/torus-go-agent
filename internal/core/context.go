@@ -172,6 +172,10 @@ func CompactLLM(messages []t.Message, keepLastN int, summarize func(string) (str
 func extractKeyContent(messages []t.Message) string {
 	var sb strings.Builder
 	for _, m := range messages {
+		// Skip thinking nodes — they are ephemeral reasoning, not conversation content.
+		if m.Role == "thinking" {
+			continue
+		}
 		switch m.Role {
 		case t.RoleUser:
 			sb.WriteString("[User]\n")

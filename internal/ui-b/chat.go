@@ -8,19 +8,22 @@ import (
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/glamour"
+
+	"torus_go_agent/internal/tui/shared"
 )
 
 // osc8LinkRe matches markdown-style [text](url) links in rendered output.
 var osc8LinkRe = regexp.MustCompile(`\[([^\]]+)\]\((https?://[^\s)]+)\)`)
 
 // chatModel manages the chat viewport, message list, glamour rendering,
-// and tool card display.
+// tool card display, and thinking blocks.
 type chatModel struct {
 	theme        Theme
 	messages     []DisplayMsg
 	viewport     viewport.Model
 	glamRenderer *glamour.TermRenderer
 	toolCards    *ToolCardRegistry
+	thinking     shared.ThinkingModel
 	ready        bool
 	streaming    bool
 }
@@ -92,6 +95,12 @@ func (c *chatModel) Rebuild() {
 		chatW = 40
 	}
 	var sb strings.Builder
+
+	// Render finalized thinking cards before messages.
+	for _, card := range c.thinking.Cards {
+		sb.WriteString(c.thinking.RenderCard(card, chatW))
+	}
+
 	for i := range c.messages {
 		dm := &c.messages[i]
 		switch dm.Role {
@@ -104,6 +113,10 @@ func (c *chatModel) Rebuild() {
 		case "assistant":
 			isStreaming := c.streaming && i == len(c.messages)-1
 			if isStreaming || dm.Text == "" {
+				// Render pending thinking before streaming assistant text.
+				if isStreaming {
+					sb.WriteString(c.thinking.RenderPending(chatW))
+				}
 				sb.WriteString(indentBlock(wrapText(dm.Text, chatW-12), "          "))
 				if dm.Text != "" {
 					sb.WriteByte('\n')

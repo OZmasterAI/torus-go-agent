@@ -51,3 +51,32 @@ func TestChatModelResize(t *testing.T) {
 		t.Fatalf("expected viewport width 120, got %d", c.viewport.Width)
 	}
 }
+
+func TestChatModelThinkingEmbedded(t *testing.T) {
+	c := newChatModel(DefaultTheme(), 80, 20)
+	// Verify ThinkingModel is embedded and usable.
+	c.thinking.AppendDelta("hello thinking")
+	if !c.thinking.HasPending() {
+		t.Fatal("expected pending thinking")
+	}
+	c.thinking.Collapse()
+	if c.thinking.HasPending() {
+		t.Fatal("should not have pending after collapse")
+	}
+	if len(c.thinking.Cards) != 1 {
+		t.Fatalf("expected 1 card, got %d", len(c.thinking.Cards))
+	}
+}
+
+func TestChatModelRebuildWithThinking(t *testing.T) {
+	c := newChatModel(DefaultTheme(), 80, 20)
+	c.thinking.Verbosity = 1
+	c.thinking.AppendDelta("deep thought")
+	c.thinking.Collapse()
+	c.AddMessage("assistant", "the answer is 42")
+	c.Rebuild()
+	content := c.viewport.View()
+	if content == "" {
+		t.Fatal("viewport should have content after rebuild with thinking")
+	}
+}

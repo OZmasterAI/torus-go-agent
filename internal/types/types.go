@@ -59,12 +59,14 @@ const (
 	EventMessageStop      StreamEventType = "message_stop"
 	EventError            StreamEventType = "error"
 	EventUsage            StreamEventType = "usage"
+	EventThinkingDelta    StreamEventType = "thinking_delta"
 )
 
 // StreamEvent is a single event from a streaming LLM response.
 type StreamEvent struct {
 	Type         StreamEventType
 	Text         string            // text_delta: the text fragment
+	Thinking     string            // thinking_delta: reasoning text fragment
 	ContentIndex int               // block index within the message
 	ID           string            // tool_use_start: tool use ID
 	Name         string            // tool_use_start: tool name
@@ -108,6 +110,7 @@ type AgentConfig struct {
 	ContextWindow     int            `json:"context_window"` // model's full context window for compaction threshold
 	SmartRouting      bool           `json:"smart_routing"`
 	SmartRoutingModel string         `json:"smart_routing_model,omitempty"`
+	PersistThinking   bool           `json:"persist_thinking"`
 }
 
 // Provider is the interface all LLM providers implement.

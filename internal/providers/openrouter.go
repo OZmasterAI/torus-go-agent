@@ -117,11 +117,12 @@ func (p *OpenRouterProvider) setAuthHeader(req *http.Request) {
 }
 
 type openaiRequest struct {
-	Model     string       `json:"model"`
-	Messages  []openaiMsg  `json:"messages"`
-	Tools     []openaiTool `json:"tools,omitempty"`
-	MaxTokens int          `json:"max_tokens,omitempty"`
-	Stream    bool         `json:"stream,omitempty"`
+	Model              string         `json:"model"`
+	Messages           []openaiMsg    `json:"messages"`
+	Tools              []openaiTool   `json:"tools,omitempty"`
+	MaxTokens          int            `json:"max_tokens,omitempty"`
+	Stream             bool           `json:"stream,omitempty"`
+	ChatTemplateKwargs map[string]any `json:"chat_template_kwargs,omitempty"`
 }
 
 type openaiMsg struct {
@@ -154,9 +155,10 @@ type openaiChoice struct {
 }
 
 type openaiRespMsg struct {
-	Role      string           `json:"role"`
-	Content   string           `json:"content"`
-	ToolCalls []openaiToolCall `json:"tool_calls,omitempty"`
+	Role             string           `json:"role"`
+	Content          string           `json:"content"`
+	ReasoningContent string           `json:"reasoning_content,omitempty"`
+	ToolCalls        []openaiToolCall `json:"tool_calls,omitempty"`
 }
 
 type openaiToolCall struct {
@@ -191,9 +193,10 @@ type openaiStreamChoice struct {
 }
 
 type openaiStreamDelta struct {
-	Role      string                 `json:"role,omitempty"`
-	Content   string                 `json:"content,omitempty"`
-	ToolCalls []openaiStreamToolCall `json:"tool_calls,omitempty"`
+	Role             string                 `json:"role,omitempty"`
+	Content          string                 `json:"content,omitempty"`
+	ReasoningContent string                 `json:"reasoning_content,omitempty"`
+	ToolCalls        []openaiStreamToolCall `json:"tool_calls,omitempty"`
 }
 
 type openaiStreamToolCall struct {
@@ -292,11 +295,15 @@ func (p *OpenRouterProvider) Complete(ctx context.Context, systemPrompt string, 
 		MaxTokens: maxTokens,
 	}
 
+	// Enable thinking for NVIDIA NIM models that support it.
+	if p.providerName == "nvidia" {
+		req.ChatTemplateKwargs = map[string]any{"enable_thinking": true}
+	}
+
 	body, err := json.Marshal(req)
 	if err != nil {
 		return nil, fmt.Errorf("marshal: %w", err)
 	}
-
 
 	httpReq, err := http.NewRequestWithContext(ctx, "POST", p.chatEndpoint(), bytes.NewReader(body))
 	if err != nil {
@@ -332,6 +339,11 @@ func (p *OpenRouterProvider) Complete(ctx context.Context, systemPrompt string, 
 
 	choice := apiResp.Choices[0]
 	var blocks []t.ContentBlock
+
+	// Reasoning/thinking content (DeepSeek, NIM, Grok)
+	if choice.Message.ReasoningContent != "" {
+		blocks = append(blocks, t.ContentBlock{Type: "thinking", Text: choice.Message.ReasoningContent})
+	}
 
 	// Text content
 	if choice.Message.Content != "" {
@@ -455,11 +467,15 @@ func (p *OpenRouterProvider) StreamComplete(ctx context.Context, systemPrompt st
 		Stream:    true,
 	}
 
+	// Enable thinking for NVIDIA NIM models that support it.
+	if p.providerName == "nvidia" {
+		req.ChatTemplateKwargs = map[string]any{"enable_thinking": true}
+	}
+
 	body, err := json.Marshal(req)
 	if err != nil {
 		return nil, fmt.Errorf("marshal: %w", err)
 	}
-
 
 	httpReq, err := http.NewRequestWithContext(ctx, "POST", p.chatEndpoint(), bytes.NewReader(body))
 	if err != nil {
@@ -565,6 +581,17 @@ func (p *OpenRouterProvider) parseOpenAISSE(ctx context.Context, resp *http.Resp
 				Type:         t.EventTextDelta,
 				ContentIndex: 0,
 				Text:         delta.Content,
+			}) {
+				return
+			}
+		}
+
+		// Reasoning/thinking content (DeepSeek, NIM, Grok)
+		if delta.ReasoningContent != "" {
+			if !send(t.StreamEvent{
+				Type:         t.EventThinkingDelta,
+				ContentIndex: 0,
+				Text:         delta.ReasoningContent,
 			}) {
 				return
 			}

@@ -442,6 +442,7 @@ func (o overlayModel) renderHelp() string {
 		{"Ctrl+U", "Kill to start of line"},
 		{"Ctrl+L/R", "Word-level cursor movement"},
 		{"Left/Right", "Move cursor"},
+		{"Ctrl+O", "Toggle thinking"},
 		{"Ctrl+C", "Cancel (or quit if idle)"},
 		{"Ctrl+D", "Force quit"},
 	}

@@ -17,7 +17,8 @@ const (
 	EventAgentTurnEnd   AgentEventType = "turn_end"     // loop turn finished
 	EventAgentDone      AgentEventType = "done"         // final text ready
 	EventAgentError     AgentEventType = "error"        // fatal error
-	EventStatusUpdate   AgentEventType = "status"       // hook-triggered status update
+	EventStatusUpdate       AgentEventType = "status"          // hook-triggered status update
+	EventAgentThinkingDelta AgentEventType = "thinking_delta"  // streaming thinking fragment
 )
 
 // AgentEvent is a single event emitted by RunStream.
@@ -63,4 +64,16 @@ func ExtractText(msg *t.AssistantMessage) string {
 		}
 	}
 	return strings.Join(parts, "")
+}
+
+// FilterThinking separates thinking content blocks from other blocks.
+func FilterThinking(blocks []t.ContentBlock) (clean, thinking []t.ContentBlock) {
+	for _, b := range blocks {
+		if b.Type == "thinking" {
+			thinking = append(thinking, b)
+		} else {
+			clean = append(clean, b)
+		}
+	}
+	return
 }

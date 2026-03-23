@@ -976,6 +976,57 @@ func TestConfig_SkillsDir(t *testing.T) {
 	}
 }
 
+// TestConfig_PersistThinking tests that PersistThinking parses from JSON.
+func TestConfig_PersistThinking(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.json")
+
+	cfg := Config{
+		Agent: AgentConfig{
+			Provider:        "anthropic",
+			Model:           "claude-3-sonnet-20250219",
+			PersistThinking: true,
+		},
+	}
+
+	data, _ := json.Marshal(cfg)
+	os.WriteFile(configPath, data, 0644)
+
+	loaded, err := LoadConfig(configPath)
+	if err != nil {
+		t.Fatalf("LoadConfig failed: %v", err)
+	}
+
+	if !loaded.Agent.PersistThinking {
+		t.Errorf("PersistThinking: got false, want true")
+	}
+}
+
+// TestConfig_PersistThinking_DefaultFalse tests that PersistThinking defaults to false.
+func TestConfig_PersistThinking_DefaultFalse(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.json")
+
+	cfg := Config{
+		Agent: AgentConfig{
+			Provider: "anthropic",
+			Model:    "claude-3-sonnet-20250219",
+		},
+	}
+
+	data, _ := json.Marshal(cfg)
+	os.WriteFile(configPath, data, 0644)
+
+	loaded, err := LoadConfig(configPath)
+	if err != nil {
+		t.Fatalf("LoadConfig failed: %v", err)
+	}
+
+	if loaded.Agent.PersistThinking {
+		t.Errorf("PersistThinking default: got true, want false")
+	}
+}
+
 // TestConfig_TelegramAllowedUsers tests parsing of Telegram allowed users.
 func TestConfig_TelegramAllowedUsers(t *testing.T) {
 	tmpDir := t.TempDir()

@@ -22,6 +22,7 @@ import (
 	"torus_go_agent/internal/config"
 	"torus_go_agent/internal/core"
 	"torus_go_agent/internal/features"
+	"torus_go_agent/internal/tui/shared"
 	"torus_go_agent/internal/types"
 )
 
@@ -149,6 +150,8 @@ type toolEventMsg struct{ event toolEvent }
 
 type statusHookMsg struct{ hook string }
 
+type thinkingDeltaMsg struct{ delta string }
+
 type tickMsg time.Time
 
 // ── Overlay mode ──────────────────────────────────────────────────────────────
@@ -226,12 +229,13 @@ func defaultPaletteCommands(skills *features.SkillRegistry) []paletteCommand {
 // ── displayMsg ────────────────────────────────────────────────────────────────
 
 type displayMsg struct {
-	role     string // "user", "assistant", "error", "tool"
-	text     string
-	isError  bool
-	rendered string     // cached glamour output
-	tool     *toolEvent // set when role == "tool"
-	ts       time.Time  // when this message was created
+	role         string     // "user", "assistant", "error", "tool"
+	text         string
+	isError      bool
+	rendered     string     // cached glamour output
+	tool         *toolEvent // set when role == "tool"
+	ts           time.Time  // when this message was created
+	thinkingText string     // finalized thinking for this response (inline display)
 }
 
 // ── Model ─────────────────────────────────────────────────────────────────────
@@ -259,9 +263,13 @@ type Model struct {
 	glamRenderer *glamour.TermRenderer
 
 	// Streaming channels
-	deltaCh chan string
-	toolCh   chan toolEvent
-	statusCh chan string
+	deltaCh    chan string
+	toolCh     chan toolEvent
+	statusCh   chan string
+	thinkingCh chan string
+
+	// Thinking
+	thinking shared.ThinkingModel
 
 	// Status
 	statusLine   string
@@ -525,6 +533,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.openSessions()
 			return m, nil
 
+		case tea.KeyCtrlO:
+			m.thinking.Toggle()
+			m.rebuildContent()
+			return m, nil
+
 		case tea.KeyCtrlW:
 			// Delete word backward from cursor
 			runes := []rune(m.input)
@@ -727,19 +740,22 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			deltaCh := make(chan string, 64)
 			toolCh := make(chan toolEvent, 32)
 			statusCh := make(chan string, 16)
+			thinkingCh := make(chan string, 64)
 			m.deltaCh = deltaCh
 			m.toolCh = toolCh
 			m.statusCh = statusCh
+			m.thinkingCh = thinkingCh
 			if m.agent.Steering == nil {
 				m.agent.Steering = make(chan types.Message, 16)
 			}
 			m.resizeViewport()
 			m.rebuildContent()
 			return m, tea.Batch(
-				runAgentStream(m.agent, input, deltaCh, toolCh, statusCh),
+				runAgentStream(m.agent, input, deltaCh, toolCh, statusCh, thinkingCh),
 				waitForDelta(deltaCh),
 				waitForToolEvent(toolCh),
 				waitForStatus(statusCh),
+				waitForThinking(thinkingCh),
 				tick(),
 			)
 
@@ -829,6 +845,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.rebuildContent()
 		return m, waitForDelta(m.deltaCh)
 
+	// ── Thinking delta ──────────────────────────────────────────────────
+	case thinkingDeltaMsg:
+		m.thinking.AppendDelta(msg.delta)
+		m.statusPhrase = fmt.Sprintf("Thinking... (%d chars)", len(m.thinking.Buf))
+		m.rebuildContent()
+		return m, waitForThinking(m.thinkingCh)
+
 	// ── Tool event ───────────────────────────────────────────────────────
 	case toolEventMsg:
 		ev := msg.event
@@ -840,12 +863,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.modifiedFiles[ev.filePath]++
 		}
 
-		// Remove empty trailing placeholder
-		if len(m.messages) > 0 {
-			last := m.messages[len(m.messages)-1]
-			if last.role == "assistant" && last.text == "" {
-				m.messages = m.messages[:len(m.messages)-1]
+		// Flush pending thinking onto the last assistant message before removal check
+		if m.thinking.HasPending() {
+			for i := len(m.messages) - 1; i >= 0; i-- {
+				if m.messages[i].role == "assistant" {
+					m.messages[i].thinkingText = m.thinking.Buf
+					m.messages[i].rendered = ""
+					break
+				}
 			}
+			m.thinking.Buf = ""
 		}
 
 		// Add tool card
@@ -892,6 +919,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.lastElapsed = msg.elapsed
 		m.deltaCh = nil
 		m.toolCh = nil
+		m.thinkingCh = nil
+		// Store pending thinking on the last assistant message (inline display)
+		if m.thinking.HasPending() {
+			for i := len(m.messages) - 1; i >= 0; i-- {
+				if m.messages[i].role == "assistant" {
+					m.messages[i].thinkingText = m.thinking.Buf
+					m.messages[i].rendered = "" // invalidate cache
+					break
+				}
+			}
+			m.thinking.Buf = ""
+		}
 		m.resizeViewport()
 		m.totalTokensIn += msg.tokensIn
 		m.totalTokensOut += msg.tokensOut
@@ -922,6 +961,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.streaming = false
 		m.deltaCh = nil
 		m.toolCh = nil
+		m.thinkingCh = nil
+		// Store pending thinking on the last assistant message (inline display)
+		if m.thinking.HasPending() {
+			for i := len(m.messages) - 1; i >= 0; i-- {
+				if m.messages[i].role == "assistant" {
+					m.messages[i].thinkingText = m.thinking.Buf
+					m.messages[i].rendered = "" // invalidate cache
+					break
+				}
+			}
+			m.thinking.Buf = ""
+		}
 		m.resizeViewport()
 		m.err = msg.err
 		if len(m.messages) > 0 {
@@ -1348,6 +1399,9 @@ func (m Model) View() string {
 			statusLine += fmt.Sprintf(" | next: ~%s tok", fmtTok(preEst))
 		}
 	}
+	if m.thinking.Verbosity > 0 {
+		statusLine += " | " + m.thinking.VerbosityLabel()
+	}
 	if !m.viewport.AtBottom() {
 		statusLine += " | " + styleScrollHint.Render("PgDn ↓")
 	}
@@ -1381,29 +1435,77 @@ func (m *Model) rebuildContent() {
 
 		case "assistant":
 			isStreaming := m.streaming && i == len(m.messages)-1
-			if isStreaming || dm.text == "" {
+			nextIsTool := i+1 < len(m.messages) && m.messages[i+1].role == "tool"
+			if isStreaming || (dm.text == "" && dm.thinkingText == "" && !nextIsTool) {
+				// Render pending thinking above streaming text
+				if isStreaming && m.thinking.HasPending() {
+					sb.WriteString(m.thinking.RenderPending(chatW))
+				}
 				sb.WriteString(indentBlock(wrapText(dm.text, chatW-12), "          "))
 				if dm.text != "" {
 					sb.WriteByte('\n')
 				}
 			} else {
+				followsTool := m.thinking.Verbosity == shared.VerbosityCompact && i > 0 && m.messages[i-1].role == "tool"
 				if !dm.ts.IsZero() {
 					ts := fmtTimestamp(dm.ts)
-					sb.WriteString(styleTimestamp.Render(ts) + " " + styleAssistantPrefix.Render("◉ <torus>") + "\n")
+					if followsTool {
+						// Mid-turn: just show thinking indicator, no header/timestamp
+						if dm.thinkingText != "" {
+							sb.WriteString("            " + m.thinking.RenderInline(shared.ThinkingCard{Text: dm.thinkingText}) + "\n")
+						}
+						if dm.text != "" {
+							// Final response after tools: timestamp prefix, aligned with <torus> text
+							if dm.rendered == "" {
+								dm.rendered = m.glamourRender(dm.text)
+							}
+							indented := indentBlock(dm.rendered, "          ")
+							sb.WriteString(styleTimestamp.Render(ts) + "  " + strings.TrimLeft(indented, " "))
+							sb.WriteString("\n\n\n")
+						}
+					} else {
+						header := styleTimestamp.Render(ts) + " " + styleAssistantPrefix.Render("◉ <torus>")
+						if dm.thinkingText != "" {
+							header += "  " + m.thinking.RenderInline(shared.ThinkingCard{Text: dm.thinkingText})
+						}
+						sb.WriteString(header + "\n")
+					}
 				}
-				if dm.rendered == "" {
-					dm.rendered = m.glamourRender(dm.text)
+				if dm.thinkingText != "" && m.thinking.Verbosity >= shared.VerbosityVerbose {
+					sb.WriteString(shared.ThinkingStyle.Render(indentBlock(wrapText(dm.thinkingText, chatW-14), "              ")) + "\n")
 				}
-				sb.WriteString(indentBlock(dm.rendered, "          "))
-				sb.WriteString("\n\n\n")
+				if dm.text != "" && !followsTool {
+					if dm.rendered == "" {
+						dm.rendered = m.glamourRender(dm.text)
+					}
+					sb.WriteString(indentBlock(dm.rendered, "          "))
+					if nextIsTool {
+						// Tight spacing before tool cards
+					} else {
+						sb.WriteString("\n\n\n")
+					}
+				}
 			}
 
 		case "tool":
 			if dm.tool != nil {
-				ts := fmtTimestamp(dm.ts)
-				sb.WriteString(styleTimestamp.Render(ts) + " ")
-				sb.WriteString(m.renderToolCard(dm.tool, chatW-10))
-				sb.WriteByte('\n')
+				switch m.thinking.Verbosity {
+				case shared.VerbosityFull:
+					// Super verbose: full tool card with NO truncation
+					ts := fmtTimestamp(dm.ts)
+					sb.WriteString(styleTimestamp.Render(ts) + " ")
+					sb.WriteString(m.renderToolCardFull(dm.tool, chatW-10))
+					sb.WriteByte('\n')
+				case shared.VerbosityVerbose:
+					// Verbose: full tool card with truncated output
+					ts := fmtTimestamp(dm.ts)
+					sb.WriteString(styleTimestamp.Render(ts) + " ")
+					sb.WriteString(m.renderToolCard(dm.tool, chatW-10))
+					sb.WriteByte('\n')
+				default:
+					// Compact: inline under torus header (no timestamp)
+					sb.WriteString(m.renderToolCardCompact(dm.tool))
+				}
 			}
 
 		case "error":
@@ -1421,6 +1523,154 @@ func (m *Model) rebuildContent() {
 }
 
 // ── Tool card rendering ───────────────────────────────────────────────────────
+
+// renderTreeLines formats lines with box-drawing tree characters.
+// Each line gets ├── prefix except the last which gets └──.
+func renderTreeLines(lines []string, style lipgloss.Style, maxWidth int) string {
+	treeStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("166"))
+	var sb strings.Builder
+	for i, l := range lines {
+		if i == len(lines)-1 {
+			sb.WriteString("             " + treeStyle.Render("└─") + " " + style.Render(truncStr(l, maxWidth)) + "\n")
+		} else {
+			sb.WriteString("             " + treeStyle.Render("├─") + " " + style.Render(truncStr(l, maxWidth)) + "\n")
+		}
+	}
+	return sb.String()
+}
+
+// renderToolCardCompact returns a brief multi-line block for a tool event
+// (used in compact mode when Verbosity == 0).
+// Shows up to 3 lines of result preview below the tool header, Claude Code style.
+// Tool lines are indented (no timestamp) to sit under the preceding torus header.
+// Returns a complete block ending with a newline.
+func (m Model) renderToolCardCompact(ev *toolEvent) string {
+	const maxPreview = 3
+	prefix := "            "
+
+	var sb strings.Builder
+
+	switch ev.name {
+	case "read":
+		path := ev.filePath
+		if path == "" {
+			path = "file"
+		}
+		sb.WriteString(prefix + styleToolDim.Render("Read "+truncPath(path, 60)) + "\n")
+		if ev.result != "" {
+			lines := splitNonEmpty(ev.result)
+			show := lines
+			if len(show) > maxPreview {
+				show = show[:maxPreview]
+			}
+			var treeLines []string
+			for _, l := range show {
+				treeLines = append(treeLines, l)
+			}
+			if len(lines) > maxPreview {
+				treeLines = append(treeLines, fmt.Sprintf("... +%d lines", len(lines)-maxPreview))
+			}
+			sb.WriteString(renderTreeLines(treeLines, styleToolDim, 56))
+		}
+
+	case "edit":
+		path := ev.filePath
+		if path == "" {
+			path = "file"
+		}
+		sb.WriteString(prefix + styleToolDim.Render("Edit "+truncPath(path, 60)) + "\n")
+		oldStr, _ := ev.args["old_str"].(string)
+		newStr, _ := ev.args["new_str"].(string)
+		var editLines []string
+		if oldStr != "" {
+			firstOld := strings.SplitN(oldStr, "\n", 2)[0]
+			editLines = append(editLines, styleDiffDel.Render("- "+truncStr(firstOld, 52)))
+		}
+		if newStr != "" {
+			firstNew := strings.SplitN(newStr, "\n", 2)[0]
+			editLines = append(editLines, styleDiffAdd.Render("+ "+truncStr(firstNew, 52)))
+		}
+		for i, l := range editLines {
+			treePrefix := "             ├─ "
+			if i == len(editLines)-1 {
+				treePrefix = "             └─ "
+			}
+			sb.WriteString(treePrefix + l + "\n")
+		}
+
+	case "write":
+		path := ev.filePath
+		if path == "" {
+			path = "file"
+		}
+		content, _ := ev.args["content"].(string)
+		lines := strings.Count(content, "\n") + 1
+		sb.WriteString(prefix + styleToolDim.Render(fmt.Sprintf("Write %s (%d lines)", truncPath(path, 50), lines)) + "\n")
+
+	case "bash":
+		cmd, _ := ev.args["command"].(string)
+		sb.WriteString(prefix + styleToolDim.Render("$ "+truncStr(cmd, 60)) + "\n")
+		if ev.result != "" {
+			lines := splitNonEmpty(ev.result)
+			show := lines
+			if len(show) > maxPreview {
+				show = show[:maxPreview]
+			}
+			var treeLines []string
+			for _, l := range show {
+				treeLines = append(treeLines, l)
+			}
+			if len(lines) > maxPreview {
+				treeLines = append(treeLines, fmt.Sprintf("... +%d lines", len(lines)-maxPreview))
+			}
+			sb.WriteString(renderTreeLines(treeLines, styleToolDim, 56))
+		}
+
+	case "glob", "grep":
+		pat, _ := ev.args["pattern"].(string)
+		matches := strings.Count(ev.result, "\n")
+		if ev.result != "" && !strings.Contains(ev.result, "no matches") {
+			matches++
+		}
+		sb.WriteString(prefix + styleToolDim.Render(fmt.Sprintf("%q → %d matches", pat, matches)) + "\n")
+		if ev.result != "" {
+			lines := splitNonEmpty(ev.result)
+			show := lines
+			if len(show) > maxPreview {
+				show = show[:maxPreview]
+			}
+			var treeLines []string
+			for _, l := range show {
+				treeLines = append(treeLines, l)
+			}
+			if len(lines) > maxPreview {
+				treeLines = append(treeLines, fmt.Sprintf("... +%d more", len(lines)-maxPreview))
+			}
+			sb.WriteString(renderTreeLines(treeLines, styleToolDim, 56))
+		}
+
+	default:
+		capName := strings.ToUpper(ev.name[:1]) + ev.name[1:]
+		sb.WriteString(prefix + styleToolDim.Render(capName) + "\n")
+		if ev.result != "" {
+			sb.WriteString(renderTreeLines([]string{truncStr(ev.result, 56)}, styleToolDim, 56))
+		}
+	}
+
+	return sb.String()
+}
+
+// splitNonEmpty splits s by newline and returns only non-empty lines.
+func splitNonEmpty(s string) []string {
+	raw := strings.Split(s, "\n")
+	out := make([]string, 0, len(raw))
+	for _, l := range raw {
+		if l != "" {
+			out = append(out, l)
+		}
+	}
+	return out
+}
 
 func (m Model) renderToolCard(ev *toolEvent, maxWidth int) string {
 	var sb strings.Builder
@@ -1506,6 +1756,130 @@ func (m Model) renderToolCard(ev *toolEvent, maxWidth int) string {
 
 	// Footer separator
 	sb.WriteString("  " + styleToolSep.Render(strings.Repeat("─", cardW)) + "\n")
+
+	return sb.String()
+}
+
+// renderToolCardFull renders a tool card with NO truncation limits.
+// Used in super-verbose mode (Verbosity == 2).
+func (m Model) renderToolCardFull(ev *toolEvent, maxWidth int) string {
+	var sb strings.Builder
+	cardW := maxWidth - 4
+	if cardW < 20 {
+		cardW = 20
+	}
+
+	// Header line with optional duration
+	headerText := fmt.Sprintf("─── %s ", ev.name)
+	if ev.duration > 0 {
+		headerText = fmt.Sprintf("─── %s (%s) ", ev.name, fmtDuration(ev.duration))
+	}
+	header := styleToolHeader.Render(headerText)
+	headerPad := ""
+	hLen := lipgloss.Width(header)
+	if cardW > hLen {
+		headerPad = styleToolSep.Render(strings.Repeat("─", cardW-hLen))
+	}
+	sb.WriteString("  " + header + headerPad + "\n")
+
+	// Body — full output, no truncation
+	switch ev.name {
+	case "edit":
+		if ev.filePath != "" {
+			sb.WriteString("  " + styleToolDim.Render(truncPath(ev.filePath, cardW-2)) + "\n")
+		}
+		oldStr, _ := ev.args["old_str"].(string)
+		newStr, _ := ev.args["new_str"].(string)
+		if oldStr != "" || newStr != "" {
+			sb.WriteString(renderDiffFull(oldStr, newStr, cardW-4))
+		}
+
+	case "write":
+		if ev.filePath != "" {
+			sb.WriteString("  " + styleToolDim.Render(truncPath(ev.filePath, cardW-2)) + "\n")
+		}
+		content, _ := ev.args["content"].(string)
+		contentLines := strings.Split(content, "\n")
+		show := contentLines
+		if len(show) > 20 {
+			show = show[:20]
+		}
+		for _, line := range show {
+			sb.WriteString("  " + styleToolDim.Render(truncStr(line, cardW-2)) + "\n")
+		}
+		if len(contentLines) > 20 {
+			sb.WriteString("  " + styleDim.Render(fmt.Sprintf("... +%d lines", len(contentLines)-20)) + "\n")
+		}
+
+	case "bash":
+		cmd, _ := ev.args["command"].(string)
+		if cmd != "" {
+			sb.WriteString("  " + styleDim.Render("$ "+truncStr(cmd, cardW-4)) + "\n")
+		}
+		if ev.result != "" && !ev.isError {
+			outLines := strings.Split(ev.result, "\n")
+			for _, line := range outLines {
+				sb.WriteString("  " + styleToolDim.Render(truncStr(line, cardW-2)) + "\n")
+			}
+		}
+
+	case "read":
+		if ev.filePath != "" {
+			sb.WriteString("  " + styleToolDim.Render(truncPath(ev.filePath, cardW-2)) + "\n")
+		}
+		if ev.result != "" {
+			resultLines := strings.Split(ev.result, "\n")
+			show := resultLines
+			if len(show) > 20 {
+				show = show[:20]
+			}
+			for _, line := range show {
+				sb.WriteString("  " + styleToolDim.Render(truncStr(line, cardW-2)) + "\n")
+			}
+			if len(resultLines) > 20 {
+				sb.WriteString("  " + styleDim.Render(fmt.Sprintf("... +%d lines", len(resultLines)-20)) + "\n")
+			}
+		}
+
+	case "glob", "grep":
+		pat, _ := ev.args["pattern"].(string)
+		matches := strings.Count(ev.result, "\n")
+		if ev.result != "" && !strings.Contains(ev.result, "no matches") {
+			matches++
+		}
+		sb.WriteString("  " + styleToolDim.Render(fmt.Sprintf("%s → %d matches", pat, matches)) + "\n")
+		if ev.result != "" {
+			for _, line := range splitNonEmpty(ev.result) {
+				sb.WriteString("  " + styleToolDim.Render(truncStr(line, cardW-2)) + "\n")
+			}
+		}
+
+	default:
+		sb.WriteString("  " + styleToolDim.Render(ev.result) + "\n")
+	}
+
+	if ev.isError {
+		sb.WriteString("  " + styleError.Render("error") + "\n")
+	}
+
+	// Footer separator
+	sb.WriteString("  " + styleToolSep.Render(strings.Repeat("─", cardW)) + "\n")
+
+	return sb.String()
+}
+
+// renderDiffFull renders a full diff with no line limit.
+func renderDiffFull(oldStr, newStr string, maxWidth int) string {
+	var sb strings.Builder
+	oldLines := strings.Split(oldStr, "\n")
+	newLines := strings.Split(newStr, "\n")
+
+	for _, line := range oldLines {
+		sb.WriteString("  " + styleDiffDel.Render("- "+truncStr(line, maxWidth-4)) + "\n")
+	}
+	for _, line := range newLines {
+		sb.WriteString("  " + styleDiffAdd.Render("+ "+truncStr(line, maxWidth-4)) + "\n")
+	}
 
 	return sb.String()
 }
@@ -1881,6 +2255,7 @@ func (m Model) renderHelp() string {
 	bindings := []struct{ key, desc string }{
 		{"Ctrl+K", "Command palette"},
 		{"Ctrl+B", "Switch session/branch"},
+		{"Ctrl+O", "Cycle verbosity (compact/verbose/full)"},
 		{"/", "Command palette (empty input)"},
 		{"?", "Show this help (empty input)"},
 		{"@", "File autocomplete"},
@@ -2372,7 +2747,7 @@ var hookPhrases = map[string]string{
 
 // ── Commands ──────────────────────────────────────────────────────────────────
 
-func runAgentStream(agent *core.Agent, input string, deltaCh chan<- string, toolCh chan<- toolEvent, statusCh chan<- string) tea.Cmd {
+func runAgentStream(agent *core.Agent, input string, deltaCh chan<- string, toolCh chan<- toolEvent, statusCh chan<- string, thinkingCh chan<- string) tea.Cmd {
 	return func() tea.Msg {
 		start := time.Now()
 		var finalText string
@@ -2384,6 +2759,8 @@ func runAgentStream(agent *core.Agent, input string, deltaCh chan<- string, tool
 			switch ev.Type {
 			case core.EventAgentTextDelta:
 				deltaCh <- ev.Text
+			case core.EventAgentThinkingDelta:
+				thinkingCh <- ev.Text
 			case core.EventAgentToolStart:
 				toolStartTime = time.Now()
 			case core.EventAgentToolEnd:
@@ -2418,6 +2795,7 @@ func runAgentStream(agent *core.Agent, input string, deltaCh chan<- string, tool
 		close(deltaCh)
 		close(toolCh)
 		close(statusCh)
+		close(thinkingCh)
 		elapsed := time.Since(start)
 		if finalErr != nil {
 			return agentErrorMsg{err: finalErr}
@@ -2468,6 +2846,19 @@ func waitForStatus(ch <-chan string) tea.Cmd {
 			return nil
 		}
 		return statusHookMsg{hook: hook}
+	}
+}
+
+func waitForThinking(ch <-chan string) tea.Cmd {
+	if ch == nil {
+		return nil
+	}
+	return func() tea.Msg {
+		delta, ok := <-ch
+		if !ok {
+			return nil
+		}
+		return thinkingDeltaMsg{delta: delta}
 	}
 }
 

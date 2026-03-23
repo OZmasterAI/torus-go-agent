@@ -649,3 +649,172 @@ func TestGeminiStreamCompleteDefaultMaxTokens(t *testing.T) {
 		t.Errorf("MaxOutputTokens = %d, want 8192", capturedReq.GenerationConfig.MaxOutputTokens)
 	}
 }
+
+// TestGeminiStreamThinkingDelta verifies that parts with thought:true emit EventThinkingDelta.
+func TestGeminiStreamThinkingDelta(t *testing.T) {
+	provider := NewGeminiProvider("test-key", "gemini-2.5-flash")
+
+	// Simulate Gemini SSE: first chunk has a thinking part, second has regular text.
+	sseBody := `data: {"candidates":[{"content":{"parts":[{"text":"Let me think...","thought":true}]},"finishReason":""}]}
+data: {"candidates":[{"content":{"parts":[{"text":"The answer is 42."}]},"finishReason":"STOP"}]}
+`
+
+	provider.client = &http.Client{
+		Transport: &mockGeminiTransport{statusCode: 200, body: sseBody},
+	}
+
+	ch, err := provider.StreamComplete(context.Background(), "", nil, nil, 100)
+	if err != nil {
+		t.Fatalf("StreamComplete returned error: %v", err)
+	}
+
+	var thinkingDeltas []tp.StreamEvent
+	var textDeltas []tp.StreamEvent
+	var messageStop *tp.StreamEvent
+
+	for ev := range ch {
+		switch ev.Type {
+		case tp.EventThinkingDelta:
+			thinkingDeltas = append(thinkingDeltas, ev)
+		case tp.EventTextDelta:
+			textDeltas = append(textDeltas, ev)
+		case tp.EventMessageStop:
+			messageStop = &ev
+		}
+	}
+
+	// Verify thinking delta was emitted.
+	if len(thinkingDeltas) != 1 {
+		t.Fatalf("Expected 1 thinking delta, got %d", len(thinkingDeltas))
+	}
+	if thinkingDeltas[0].Text != "Let me think..." {
+		t.Errorf("Thinking delta text = %q, want %q", thinkingDeltas[0].Text, "Let me think...")
+	}
+
+	// Verify text delta was emitted for the non-thinking part.
+	if len(textDeltas) != 1 {
+		t.Fatalf("Expected 1 text delta, got %d", len(textDeltas))
+	}
+	if textDeltas[0].Text != "The answer is 42." {
+		t.Errorf("Text delta text = %q, want %q", textDeltas[0].Text, "The answer is 42.")
+	}
+
+	// Verify final assembled response contains only regular text (thinking not in textBuf).
+	if messageStop == nil {
+		t.Fatal("Expected EventMessageStop")
+	}
+	if messageStop.Response == nil {
+		t.Fatal("EventMessageStop.Response is nil")
+	}
+	if len(messageStop.Response.Content) != 1 {
+		t.Fatalf("Expected 1 content block in final response, got %d", len(messageStop.Response.Content))
+	}
+	if messageStop.Response.Content[0].Type != "text" {
+		t.Errorf("Content[0].Type = %q, want %q", messageStop.Response.Content[0].Type, "text")
+	}
+	if messageStop.Response.Content[0].Text != "The answer is 42." {
+		t.Errorf("Content[0].Text = %q, want %q", messageStop.Response.Content[0].Text, "The answer is 42.")
+	}
+}
+
+// TestGeminiCompleteThinkingPart verifies that non-streaming responses tag thinking parts correctly.
+func TestGeminiCompleteThinkingPart(t *testing.T) {
+	provider := NewGeminiProvider("test-key", "gemini-2.5-flash")
+
+	mockResp := geminiResponse{
+		Candidates: []geminiCandidate{
+			{
+				Content: geminiContent{
+					Parts: []geminiPart{
+						{Text: "Internal reasoning here", Thought: true},
+						{Text: "The answer is 42."},
+					},
+				},
+				FinishReason: "STOP",
+			},
+		},
+		UsageMetadata: &geminiUsage{
+			PromptTokenCount:     10,
+			CandidatesTokenCount: 20,
+			TotalTokenCount:      30,
+		},
+	}
+
+	respBodyJSON, _ := json.Marshal(mockResp)
+
+	provider.client = &http.Client{
+		Transport: &mockGeminiTransport{statusCode: 200, body: string(respBodyJSON)},
+	}
+
+	resp, err := provider.Complete(context.Background(), "", nil, nil, 100)
+	if err != nil {
+		t.Fatalf("Complete returned error: %v", err)
+	}
+
+	if len(resp.Content) != 2 {
+		t.Fatalf("Expected 2 content blocks, got %d", len(resp.Content))
+	}
+
+	// First block should be "thinking" type.
+	if resp.Content[0].Type != "thinking" {
+		t.Errorf("Content[0].Type = %q, want %q", resp.Content[0].Type, "thinking")
+	}
+	if resp.Content[0].Text != "Internal reasoning here" {
+		t.Errorf("Content[0].Text = %q, want %q", resp.Content[0].Text, "Internal reasoning here")
+	}
+
+	// Second block should be regular "text" type.
+	if resp.Content[1].Type != "text" {
+		t.Errorf("Content[1].Type = %q, want %q", resp.Content[1].Type, "text")
+	}
+	if resp.Content[1].Text != "The answer is 42." {
+		t.Errorf("Content[1].Text = %q, want %q", resp.Content[1].Text, "The answer is 42.")
+	}
+}
+
+// TestGeminiStreamThinkingOnly verifies a stream with only thinking parts (no regular text).
+func TestGeminiStreamThinkingOnly(t *testing.T) {
+	provider := NewGeminiProvider("test-key", "gemini-2.5-flash")
+
+	sseBody := `data: {"candidates":[{"content":{"parts":[{"text":"thinking only","thought":true}]},"finishReason":"STOP"}]}
+`
+
+	provider.client = &http.Client{
+		Transport: &mockGeminiTransport{statusCode: 200, body: sseBody},
+	}
+
+	ch, err := provider.StreamComplete(context.Background(), "", nil, nil, 100)
+	if err != nil {
+		t.Fatalf("StreamComplete returned error: %v", err)
+	}
+
+	var thinkingCount int
+	var textCount int
+	var messageStop *tp.StreamEvent
+
+	for ev := range ch {
+		switch ev.Type {
+		case tp.EventThinkingDelta:
+			thinkingCount++
+		case tp.EventTextDelta:
+			textCount++
+		case tp.EventMessageStop:
+			messageStop = &ev
+		}
+	}
+
+	if thinkingCount != 1 {
+		t.Errorf("Expected 1 thinking delta, got %d", thinkingCount)
+	}
+	if textCount != 0 {
+		t.Errorf("Expected 0 text deltas, got %d", textCount)
+	}
+
+	// Final response should have no content blocks (thinking not added to textBuf).
+	if messageStop == nil {
+		t.Fatal("Expected EventMessageStop")
+	}
+	if len(messageStop.Response.Content) != 0 {
+		t.Errorf("Expected 0 content blocks in final response (thinking excluded from textBuf), got %d", len(messageStop.Response.Content))
+	}
+}

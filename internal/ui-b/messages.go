@@ -11,10 +11,11 @@ import "time"
 type StreamEventType int
 
 const (
-	StreamTextDelta    StreamEventType = iota // Streaming text fragment.
-	StreamToolStart                           // Tool execution starting.
-	StreamToolEnd                             // Tool execution finished.
-	StreamStatusUpdate                        // Hook-triggered status phrase.
+	StreamTextDelta     StreamEventType = iota // Streaming text fragment.
+	StreamThinkingDelta                        // Streaming thinking fragment.
+	StreamToolStart                            // Tool execution starting.
+	StreamToolEnd                              // Tool execution finished.
+	StreamStatusUpdate                         // Hook-triggered status phrase.
 )
 
 // StreamEventMsg is a unified event from the agent stream.
@@ -23,6 +24,7 @@ const (
 type StreamEventMsg struct {
 	Type       StreamEventType
 	Delta      string    // StreamTextDelta: the text fragment.
+	Thinking   string    // StreamThinkingDelta: thinking text.
 	Tool       ToolEvent // StreamToolEnd: completed tool details.
 	StatusHook string    // StreamStatusUpdate: hook name.
 }

@@ -214,12 +214,16 @@ func (a *Agent) runLoop(ctx context.Context, userMessage string, ch chan<- Agent
 			resp = afterLLM.Response
 		}
 
-		nodeID, err := a.dag.AddNode(currentHead, t.RoleAssistant, resp.Content, resp.Model, a.provider.Name(), resp.Usage.TotalTokens)
+		cleanContent, thinkingBlocks := FilterThinking(resp.Content)
+		nodeID, err := a.dag.AddNode(currentHead, t.RoleAssistant, cleanContent, resp.Model, a.provider.Name(), resp.Usage.TotalTokens)
 		if err != nil {
 			emit(AgentEvent{Type: EventAgentError, Error: fmt.Errorf("add assistant node: %w", err)})
 			return
 		}
 		a.dag.SetAlias(nodeID, a.dag.NextAutoAlias())
+		if a.config.PersistThinking && len(thinkingBlocks) > 0 {
+			a.dag.AddNode(nodeID, "thinking", thinkingBlocks, "", "", 0)
+		}
 
 		if !HasToolUse(resp) {
 			finalText = ExtractText(resp)
@@ -315,6 +319,8 @@ func consumeStreamEmit(streamCh <-chan t.StreamEvent, emit func(AgentEvent)) (*t
 		switch ev.Type {
 		case t.EventTextDelta:
 			emit(AgentEvent{Type: EventAgentTextDelta, Text: ev.Text})
+		case t.EventThinkingDelta:
+			emit(AgentEvent{Type: EventAgentThinkingDelta, Text: ev.Text})
 		case t.EventError:
 			return nil, ev.Error
 		case t.EventMessageStop:

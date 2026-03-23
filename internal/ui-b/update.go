@@ -99,6 +99,11 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.openSessions()
 		return m, nil
 
+	case tea.KeyCtrlO:
+		m.chat.thinking.Toggle()
+		m.chat.Rebuild()
+		return m, nil
+
 	case tea.KeyPgUp, tea.KeyPgDown:
 		cmd := m.chat.Update(msg)
 		return m, cmd
@@ -215,6 +220,10 @@ func (m Model) handleStreamEvent(msg StreamEventMsg) (tea.Model, tea.Cmd) {
 		m.chat.AppendDelta(msg.Delta)
 		m.status.statusPhrase = "Torus relaying..."
 
+	case StreamThinkingDelta:
+		m.chat.thinking.AppendDelta(msg.Thinking)
+		m.chat.Rebuild()
+
 	case StreamToolStart:
 		// No-op for now; tool start can be shown later.
 
@@ -238,6 +247,9 @@ func (m Model) handleAgentDone(msg AgentDoneMsg) (tea.Model, tea.Cmd) {
 	m.chat.streaming = false
 	m.status.lastElapsed = msg.Elapsed
 	m.eventCh = nil
+
+	// Collapse any pending thinking into a card.
+	m.chat.thinking.Collapse()
 
 	m.status.totalTokensIn += msg.TokensIn
 	m.status.totalTokensOut += msg.TokensOut

@@ -9,13 +9,23 @@ import (
 
 func TestStreamEventTypes(t *testing.T) {
 	// Verify all event types are distinct integers.
-	types := []StreamEventType{StreamTextDelta, StreamToolStart, StreamToolEnd, StreamStatusUpdate}
+	types := []StreamEventType{StreamTextDelta, StreamThinkingDelta, StreamToolStart, StreamToolEnd, StreamStatusUpdate}
 	seen := map[StreamEventType]bool{}
 	for _, st := range types {
 		if seen[st] {
 			t.Fatalf("duplicate StreamEventType: %d", st)
 		}
 		seen[st] = true
+	}
+}
+
+func TestStreamThinkingDeltaField(t *testing.T) {
+	msg := StreamEventMsg{Type: StreamThinkingDelta, Thinking: "let me reason"}
+	if msg.Type != StreamThinkingDelta {
+		t.Fatalf("expected StreamThinkingDelta, got %d", msg.Type)
+	}
+	if msg.Thinking != "let me reason" {
+		t.Fatalf("expected thinking text, got %q", msg.Thinking)
 	}
 }
 

@@ -301,6 +301,119 @@ func (c *channelErrorProvider) StreamComplete(_ context.Context, _ string, _ []t
 	return ch, nil
 }
 
+// thinkingMockProvider returns a response that includes both text and thinking blocks.
+type thinkingMockProvider struct {
+	name    string
+	modelID string
+}
+
+func (m *thinkingMockProvider) Name() string    { return m.name }
+func (m *thinkingMockProvider) ModelID() string { return m.modelID }
+func (m *thinkingMockProvider) Complete(_ context.Context, _ string, _ []typ.Message, _ []typ.Tool, _ int) (*typ.AssistantMessage, error) {
+	return nil, fmt.Errorf("not implemented")
+}
+func (m *thinkingMockProvider) StreamComplete(_ context.Context, _ string, _ []typ.Message, _ []typ.Tool, _ int) (<-chan typ.StreamEvent, error) {
+	ch := make(chan typ.StreamEvent, 4)
+	go func() {
+		defer close(ch)
+		ch <- typ.StreamEvent{Type: typ.EventTextDelta, Text: "visible reply"}
+		ch <- typ.StreamEvent{Type: typ.EventThinkingDelta, Text: "internal reasoning"}
+		resp := &typ.AssistantMessage{
+			Message: typ.Message{
+				Role: typ.RoleAssistant,
+				Content: []typ.ContentBlock{
+					{Type: "thinking", Text: "internal reasoning"},
+					{Type: "text", Text: "visible reply"},
+				},
+			},
+			Model:      m.modelID,
+			StopReason: "end_turn",
+			Usage:      typ.Usage{TotalTokens: 10},
+		}
+		ch <- typ.StreamEvent{Type: typ.EventMessageStop, Response: resp}
+	}()
+	return ch, nil
+}
+
+// TestPersistThinking_Enabled verifies that when PersistThinking is true,
+// thinking blocks are stored as a separate DAG node.
+func TestPersistThinking_Enabled(t *testing.T) {
+	mp := &thinkingMockProvider{name: "mock", modelID: "think-model"}
+	dag := newTestDAG(t)
+	cfg := typ.AgentConfig{
+		Provider:        typ.ProviderConfig{Name: mp.name, Model: mp.modelID, MaxTokens: 1024},
+		MaxTurns:        3,
+		PersistThinking: true,
+	}
+	hooks := NewHookRegistry()
+	agent := NewAgent(cfg, mp, hooks, dag)
+	agent.SetCompaction(CompactionConfig{Mode: CompactionOff})
+
+	evs := collectEvents(agent.RunStream(context.Background(), "think about this"))
+
+	// Run must complete successfully.
+	doneEvs := findEvents(evs, EventAgentDone)
+	if len(doneEvs) == 0 {
+		t.Fatal("no EventAgentDone")
+	}
+
+	// The DAG should have: user node, assistant node (clean), thinking node.
+	// Walk from head backward to count nodes.
+	head, _ := dag.GetHead()
+	messages, err := dag.PromptFrom(head)
+	if err != nil {
+		t.Fatalf("PromptFrom: %v", err)
+	}
+
+	// Find a node with role "thinking"
+	foundThinking := false
+	for _, msg := range messages {
+		if string(msg.Role) == "thinking" {
+			foundThinking = true
+			if len(msg.Content) == 0 || msg.Content[0].Text == "" {
+				t.Error("thinking node has empty content")
+			}
+		}
+	}
+	if !foundThinking {
+		t.Error("expected a thinking node in DAG when PersistThinking=true")
+	}
+}
+
+// TestPersistThinking_Disabled verifies that when PersistThinking is false,
+// no thinking node is stored in the DAG.
+func TestPersistThinking_Disabled(t *testing.T) {
+	mp := &thinkingMockProvider{name: "mock", modelID: "think-model"}
+	dag := newTestDAG(t)
+	cfg := typ.AgentConfig{
+		Provider:        typ.ProviderConfig{Name: mp.name, Model: mp.modelID, MaxTokens: 1024},
+		MaxTurns:        3,
+		PersistThinking: false,
+	}
+	hooks := NewHookRegistry()
+	agent := NewAgent(cfg, mp, hooks, dag)
+	agent.SetCompaction(CompactionConfig{Mode: CompactionOff})
+
+	evs := collectEvents(agent.RunStream(context.Background(), "think about this"))
+
+	doneEvs := findEvents(evs, EventAgentDone)
+	if len(doneEvs) == 0 {
+		t.Fatal("no EventAgentDone")
+	}
+
+	head, _ := dag.GetHead()
+	messages, err := dag.PromptFrom(head)
+	if err != nil {
+		t.Fatalf("PromptFrom: %v", err)
+	}
+
+	for _, msg := range messages {
+		if string(msg.Role) == "thinking" {
+			t.Error("found thinking node in DAG when PersistThinking=false")
+		}
+	}
+}
+
 // TestAutoAlias verifies that after AddNode, the returned node ID can be
 // aliased via NextAutoAlias and resolved back.
 func TestAutoAlias(t *testing.T) {

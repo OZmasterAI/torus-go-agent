@@ -34,6 +34,18 @@ func TestStreamEventChannelMultipleTypes(t *testing.T) {
 	}
 }
 
+func TestStreamThinkingDeltaChannel(t *testing.T) {
+	ch := make(chan StreamEventMsg, 16)
+	ch <- StreamEventMsg{Type: StreamThinkingDelta, Thinking: "reasoning about it"}
+	ev := <-ch
+	if ev.Type != StreamThinkingDelta {
+		t.Fatal("expected StreamThinkingDelta")
+	}
+	if ev.Thinking != "reasoning about it" {
+		t.Fatalf("expected thinking text, got %q", ev.Thinking)
+	}
+}
+
 func TestWaitForStreamEventNilChannel(t *testing.T) {
 	cmd := waitForStreamEvent(nil)
 	if cmd != nil {

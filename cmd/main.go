@@ -314,6 +314,7 @@ func main() {
 		ContextWindow:     cfg.Agent.ContextWindow,
 		SmartRouting:      cfg.Agent.SmartRouting,
 		SmartRoutingModel: cfg.Agent.SmartRoutingModel,
+		PersistThinking:   cfg.Agent.PersistThinking,
 	}, prov, hooks, dag)
 
 	// Wire smart routing if configured

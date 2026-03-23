@@ -41,6 +41,20 @@ type anthropicRequest struct {
 	Messages  []anthropicMsg      `json:"messages"`
 	Tools     []anthropicTool     `json:"tools,omitempty"`
 	Stream    bool                `json:"stream,omitempty"`
+	Thinking  *anthropicThinking  `json:"thinking,omitempty"`
+}
+
+// anthropicThinking enables extended thinking for supported models.
+// Set Thinking on anthropicRequest to opt in; leaving it nil (the default)
+// means no thinking block is sent and the API behaves normally.
+// To enable, callers should set:
+//
+//	req.Thinking = &anthropicThinking{Type: "enabled", BudgetTokens: N}
+//
+// A future config flag will control this; for now it is not auto-enabled.
+type anthropicThinking struct {
+	Type         string `json:"type"`          // "enabled"
+	BudgetTokens int    `json:"budget_tokens"` // token budget for the thinking block
 }
 
 type anthropicMsg struct {
@@ -305,6 +319,7 @@ type sseContentBlockDelta struct {
 	Delta struct {
 		Type        string `json:"type"`
 		Text        string `json:"text,omitempty"`
+		Thinking    string `json:"thinking,omitempty"`
 		PartialJSON string `json:"partial_json,omitempty"`
 	} `json:"delta"`
 }
@@ -548,6 +563,19 @@ func (p *AnthropicProvider) parseAnthropicSSE(ctx context.Context, resp *http.Re
 					}) {
 						return
 					}
+				case "thinking_delta":
+					if ev.Index < len(blocks) {
+						blocks[ev.Index].Text += ev.Delta.Thinking
+					}
+					if !send(t.StreamEvent{
+						Type:         t.EventThinkingDelta,
+						ContentIndex: ev.Index,
+						Text:         ev.Delta.Thinking,
+					}) {
+						return
+					}
+				case "signature_delta":
+					// Signature for multi-turn thinking verification — ignore for now.
 				}
 			}
 

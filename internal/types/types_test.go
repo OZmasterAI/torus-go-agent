@@ -41,6 +41,7 @@ func TestStreamEventTypeConstants(t *testing.T) {
 		{"EventMessageStop", EventMessageStop, "message_stop"},
 		{"EventError", EventError, "error"},
 		{"EventUsage", EventUsage, "usage"},
+		{"EventThinkingDelta", EventThinkingDelta, "thinking_delta"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -1033,5 +1034,28 @@ func TestStreamEventTypeConversion(t *testing.T) {
 	newEventType = StreamEventType("text_delta")
 	if newEventType != EventTextDelta {
 		t.Errorf("EventType creation: expected %q, got %q", EventTextDelta, newEventType)
+	}
+}
+
+// TestEventThinkingDeltaDistinct verifies EventThinkingDelta exists and differs from EventTextDelta.
+func TestEventThinkingDeltaDistinct(t *testing.T) {
+	if EventThinkingDelta == EventTextDelta {
+		t.Error("EventThinkingDelta must be distinct from EventTextDelta")
+	}
+	if string(EventThinkingDelta) != "thinking_delta" {
+		t.Errorf("EventThinkingDelta: expected %q, got %q", "thinking_delta", string(EventThinkingDelta))
+	}
+
+	// Verify the Thinking field on StreamEvent works correctly.
+	ev := StreamEvent{
+		Type:         EventThinkingDelta,
+		Thinking:     "reasoning fragment",
+		ContentIndex: 0,
+	}
+	if ev.Type != EventThinkingDelta {
+		t.Errorf("Type: expected %q, got %q", EventThinkingDelta, ev.Type)
+	}
+	if ev.Thinking != "reasoning fragment" {
+		t.Errorf("Thinking: expected %q, got %q", "reasoning fragment", ev.Thinking)
 	}
 }
