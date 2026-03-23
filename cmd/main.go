@@ -111,6 +111,8 @@ func main() {
 		cfg.Agent.SmartRoutingModel = setup.Config.SmartRoutingModel
 		cfg.Agent.SteeringMode = setup.Config.SteeringMode
 		cfg.Agent.PersistThinking = setup.Config.PersistThinking
+		cfg.Agent.Thinking = setup.Config.Thinking
+		cfg.Agent.ThinkingBudget = setup.Config.ThinkingBudget
 	}
 
 	soul := config.LoadTorus(cfgDir)

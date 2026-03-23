@@ -345,6 +345,8 @@ type AgentConfigOverrides struct {
 	SmartRoutingModel      string
 	SteeringMode           string
 	PersistThinking        bool
+	Thinking               string
+	ThinkingBudget         int
 }
 
 func defaultOverrides() *AgentConfigOverrides {
@@ -376,6 +378,8 @@ func overridesFromConfig(a config.AgentConfig) *AgentConfigOverrides {
 		SmartRoutingModel:      a.SmartRoutingModel,
 		SteeringMode:           mode,
 		PersistThinking:        a.PersistThinking,
+		Thinking:               a.Thinking,
+		ThinkingBudget:         a.ThinkingBudget,
 	}
 }
 
@@ -416,8 +420,10 @@ var configFields = []configField{
 	{"SmartRoutingModel", "string", nil},   // 12
 	{"SteeringMode", "cycle", []string{"mild", "aggressive"}}, // 13
 	{"PersistThinking", "bool", nil},       // 14
-	{"MaxTokens", "int", nil},              // 15
-	{"ContextWindow", "int", nil},          // 16
+	{"Thinking", "cycle", []string{"", "low", "mid", "high", "max", "ultra"}}, // 15
+	{"ThinkingBudget", "int", nil},         // 16
+	{"MaxTokens", "int", nil},              // 17
+	{"ContextWindow", "int", nil},          // 18
 }
 
 func (o *AgentConfigOverrides) getValue(idx int) string {
@@ -471,11 +477,21 @@ func (o *AgentConfigOverrides) getValue(idx int) string {
 		}
 		return "false"
 	case 15:
+		if o.Thinking == "" {
+			return "off"
+		}
+		return o.Thinking
+	case 16:
+		if o.ThinkingBudget == 0 {
+			return "auto"
+		}
+		return fmt.Sprintf("%d", o.ThinkingBudget)
+	case 17:
 		if o.MaxTokens == 0 {
 			return "default"
 		}
 		return fmt.Sprintf("%d", o.MaxTokens)
-	case 16:
+	case 18:
 		if o.ContextWindow == 0 {
 			return "default"
 		}
@@ -518,8 +534,12 @@ func (o *AgentConfigOverrides) setValue(idx int, val string) {
 	case 14:
 		o.PersistThinking = val == "true"
 	case 15:
-		o.MaxTokens = n
+		o.Thinking = val
 	case 16:
+		o.ThinkingBudget = n
+	case 17:
+		o.MaxTokens = n
+	case 18:
 		o.ContextWindow = n
 	}
 }
