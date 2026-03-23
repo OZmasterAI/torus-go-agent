@@ -436,7 +436,7 @@ func (o *AgentConfigOverrides) getValue(idx int) string {
 		if o.CompactionModel == "" {
 			return "(main model)"
 		}
-		return o.CompactionModel
+		return formatProviderModel(o.CompactionModel)
 	case 6:
 		if o.ContinuousCompression {
 			return "true"
@@ -462,7 +462,7 @@ func (o *AgentConfigOverrides) getValue(idx int) string {
 		if o.SmartRoutingModel == "" {
 			return "(none)"
 		}
-		return o.SmartRoutingModel
+		return formatProviderModel(o.SmartRoutingModel)
 	case 13:
 		return o.SteeringMode
 	case 14:
@@ -588,15 +588,32 @@ type ModelChoice struct {
 
 // modelPickerEntry is a flattened model entry with provider context.
 type modelPickerEntry struct {
-	Label    string // e.g. "Claude Opus 4.6 (Anthropic)"
-	ModelID  string // e.g. "claude-opus-4-6"
+	Label       string // e.g. "Claude Opus 4.6 (Anthropic)"
+	ModelID     string // e.g. "claude-opus-4-6"
+	ProviderKey string // e.g. "anthropic"
+}
+
+// formatProviderModel formats "provider:model" as "model (provider)" for display.
+func formatProviderModel(pm string) string {
+	if idx := strings.IndexByte(pm, ':'); idx > 0 {
+		return pm[idx+1:] + " (" + pm[:idx] + ")"
+	}
+	return pm
+}
+
+// ProviderModelID returns "provider:model" format for storage in config.
+func (e modelPickerEntry) ProviderModelID() string {
+	if e.ModelID == "" {
+		return ""
+	}
+	return e.ProviderKey + ":" + e.ModelID
 }
 
 // buildModelPickerItems gathers all models from all provider groups into a flat list.
 func buildModelPickerItems(groups []ProviderGroup) []modelPickerEntry {
 	var items []modelPickerEntry
 	// First entry: clear/none
-	items = append(items, modelPickerEntry{Label: "(none — use main model)", ModelID: ""})
+	items = append(items, modelPickerEntry{Label: "(none — use main model)", ModelID: "", ProviderKey: ""})
 	for _, g := range groups {
 		provName := g.Name
 		if g.ProviderKey == "" {
@@ -608,8 +625,9 @@ func buildModelPickerItems(groups []ProviderGroup) []modelPickerEntry {
 				continue // skip "Custom model ID" entries
 			}
 			items = append(items, modelPickerEntry{
-				Label:   mc.Name + " (" + provName + ")",
-				ModelID: mc.ID,
+				Label:       mc.Name + " (" + provName + ")",
+				ModelID:     mc.ID,
+				ProviderKey: g.ProviderKey,
 			})
 		}
 		// Category models
@@ -619,8 +637,9 @@ func buildModelPickerItems(groups []ProviderGroup) []modelPickerEntry {
 					continue
 				}
 				items = append(items, modelPickerEntry{
-					Label:   mc.Name + " (" + provName + " / " + cat.Name + ")",
-					ModelID: mc.ID,
+					Label:       mc.Name + " (" + provName + " / " + cat.Name + ")",
+					ModelID:     mc.ID,
+					ProviderKey: g.ProviderKey,
 				})
 			}
 		}
@@ -1678,7 +1697,7 @@ func (m setupModel) selectItem() (tea.Model, tea.Cmd) {
 		m.filterText = ""
 		if idx < len(m.modelPickerItems) {
 			entry := m.modelPickerItems[idx]
-			m.configOverrides.setValue(m.modelPickerField, entry.ModelID)
+			m.configOverrides.setValue(m.modelPickerField, entry.ProviderModelID())
 		}
 		m.cursor = m.modelPickerField
 		m.phase = 6

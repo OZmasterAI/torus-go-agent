@@ -181,4 +181,33 @@ func TestBuildModelPickerItems(t *testing.T) {
 	if !strings.Contains(items[2].Label, "NVIDIA") {
 		t.Errorf("label should contain provider: %q", items[2].Label)
 	}
+	// ProviderKey should be set
+	if items[1].ProviderKey != "anthropic" {
+		t.Errorf("item 1 provider: got %q, want anthropic", items[1].ProviderKey)
+	}
+	if items[2].ProviderKey != "nvidia" {
+		t.Errorf("item 2 provider: got %q, want nvidia", items[2].ProviderKey)
+	}
+	// ProviderModelID format
+	if items[1].ProviderModelID() != "anthropic:claude-opus-4-6" {
+		t.Errorf("ProviderModelID: got %q, want anthropic:claude-opus-4-6", items[1].ProviderModelID())
+	}
+	if items[0].ProviderModelID() != "" {
+		t.Errorf("none entry ProviderModelID: got %q, want empty", items[0].ProviderModelID())
+	}
+}
+
+func TestFormatProviderModel(t *testing.T) {
+	tests := []struct{ input, want string }{
+		{"anthropic:claude-haiku-4-5", "claude-haiku-4-5 (anthropic)"},
+		{"nvidia:z-ai/glm5", "z-ai/glm5 (nvidia)"},
+		{"bare-model-id", "bare-model-id"},
+		{"", ""},
+	}
+	for _, tt := range tests {
+		got := formatProviderModel(tt.input)
+		if got != tt.want {
+			t.Errorf("formatProviderModel(%q) = %q, want %q", tt.input, got, tt.want)
+		}
+	}
 }

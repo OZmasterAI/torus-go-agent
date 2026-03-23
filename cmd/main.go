@@ -334,7 +334,7 @@ func main() {
 
 	// Wire smart routing if configured
 	if cfg.Agent.SmartRouting && cfg.Agent.SmartRoutingModel != "" {
-		smartProv := makeProvider(cfg.Agent.Provider, key, cfg.Agent.SmartRoutingModel, &cfg.Agent)
+		smartProv := resolveProviderModel(cfg.Agent.SmartRoutingModel, cfg.Agent.Provider, key, &cfg.Agent)
 		agent.RouteProvider = func(userMessage string) types.Provider {
 			if features.IsSimpleMessage(userMessage) {
 				return smartProv
@@ -401,7 +401,7 @@ func main() {
 	// Set up compaction summarize callback — use compactionModel if set, otherwise session's model
 	compactProv := prov
 	if cfg.Agent.CompactionModel != "" {
-		compactProv = makeProvider(cfg.Agent.Provider, key, cfg.Agent.CompactionModel, &cfg.Agent)
+		compactProv = resolveProviderModel(cfg.Agent.CompactionModel, cfg.Agent.Provider, key, &cfg.Agent)
 		log.Printf("[main] compaction model: %s", cfg.Agent.CompactionModel)
 	}
 	agent.Summarize = func(keyContent string) (string, error) {
@@ -679,6 +679,21 @@ func main() {
 		AgentID: "main",
 	})
 	log.Printf("[telemetry] %s", telemetry.Summary())
+}
+
+// resolveProviderModel parses a "provider:model" string and creates the right provider.
+// If no ":" is found, uses defaultProvider and defaultKey as fallback.
+func resolveProviderModel(providerModel, defaultProvider, defaultKey string, agentCfg *config.AgentConfig) types.Provider {
+	prov, model := defaultProvider, providerModel
+	if idx := strings.IndexByte(providerModel, ':'); idx > 0 {
+		prov = providerModel[:idx]
+		model = providerModel[idx+1:]
+	}
+	k := config.APIKeyFor(prov)
+	if k == "" {
+		k = defaultKey
+	}
+	return makeProvider(prov, k, model, agentCfg)
 }
 
 // makeProvider creates a Provider for the given provider name, API key, and model.
