@@ -126,21 +126,18 @@ func (a *Agent) runLoop(ctx context.Context, userMessage string, ch chan<- Agent
 
 		if a.compaction.Mode != CompactionOff && NeedsCompaction(messages, a.compaction) {
 			preCount := len(messages)
-			log.Printf("[loop] compaction triggered (%d messages)", preCount)
 			a.hooks.Fire(ctx, HookPreCompact, &HookData{
 				AgentID: "main", Messages: messages,
 				Meta: map[string]any{"mode": string(a.compaction.Mode), "message_count": preCount},
 			})
 			emit(AgentEvent{Type: EventStatusUpdate, StatusHook: "pre_compact"})
 			if err := CompactDAG(a.dag, a.compaction, a.Summarize); err != nil {
-				log.Printf("[loop] DAG compaction failed: %v, falling back to in-memory", err)
 				switch a.compaction.Mode {
 				case CompactionSliding:
 					messages = CompactSliding(messages, a.compaction.KeepLastN)
 				case CompactionLLM:
 					compacted, err := CompactLLM(messages, a.compaction.KeepLastN, a.Summarize)
 					if err != nil {
-						log.Printf("[loop] LLM compaction error: %v, using sliding fallback", err)
 						messages = CompactSliding(messages, a.compaction.KeepLastN)
 					} else {
 						messages = compacted

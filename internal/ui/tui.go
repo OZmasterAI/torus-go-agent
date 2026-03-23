@@ -888,6 +888,21 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if phrase, ok := hookPhrases[msg.hook]; ok {
 			m.statusPhrase = phrase
 		}
+		// Reset progress bar on compaction to avoid duplicates
+		if msg.hook == "post_compact" {
+			m.barPos = 0
+			m.barDir = 1
+			m.startTime = time.Now()
+			// Clear stale messages — compaction rewrote the conversation
+			if len(m.messages) > 0 {
+				last := m.messages[len(m.messages)-1]
+				if last.role == "assistant" && last.text == "" {
+					// Keep only the streaming placeholder
+					m.messages = []displayMsg{last}
+				}
+			}
+			m.rebuildContent()
+		}
 		return m, waitForStatus(m.statusCh)
 
 	// ── Tick ─────────────────────────────────────────────────────────────
