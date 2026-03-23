@@ -347,8 +347,8 @@ type AgentConfigOverrides struct {
 func defaultOverrides() *AgentConfigOverrides {
 	d := config.DefaultAgentConfig()
 	return &AgentConfigOverrides{
-		MaxTokens:              d.MaxTokens,
-		ContextWindow:          d.ContextWindow,
+		MaxTokens:              0, // 0 = "default" (auto-resolved from OpenRouter/models.json)
+		ContextWindow:          0, // 0 = "default" (auto-resolved from OpenRouter/models.json)
 		Compaction:             d.Compaction,
 		CompactionTrigger:      d.CompactionTrigger,
 		CompactionThreshold:    d.CompactionThreshold,
@@ -362,19 +362,11 @@ func defaultOverrides() *AgentConfigOverrides {
 	}
 }
 
-// resolveModelSpecs looks up the selected model's specs from OpenRouter
-// and updates configOverrides with the real values.
+// resolveModelSpecs is kept for future use but MaxTokens/ContextWindow
+// are now resolved in main.go after the startup screen, so the user can
+// override them. The settings screen shows "default" for these fields.
 func (m *setupModel) resolveModelSpecs() {
-	if m.configOverrides == nil || m.model == "" {
-		return
-	}
-	info := config.ResolveModelInfo(m.model, m.provider, nil, "")
-	if info.ContextWindow > 0 {
-		m.configOverrides.ContextWindow = info.ContextWindow
-	}
-	if info.MaxTokens > 0 {
-		m.configOverrides.MaxTokens = info.MaxTokens
-	}
+	// No-op: MaxTokens/ContextWindow resolved in main.go
 }
 
 type configField struct {
@@ -402,8 +394,14 @@ var configFields = []configField{
 func (o *AgentConfigOverrides) getValue(idx int) string {
 	switch idx {
 	case 0:
+		if o.MaxTokens == 0 {
+			return "default"
+		}
 		return fmt.Sprintf("%d", o.MaxTokens)
 	case 1:
+		if o.ContextWindow == 0 {
+			return "default"
+		}
 		return fmt.Sprintf("%d", o.ContextWindow)
 	case 2:
 		return o.Compaction

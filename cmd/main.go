@@ -71,9 +71,30 @@ func main() {
 		cfg.Agent.Provider = setup.Provider
 		cfg.Agent.Model = setup.Model
 	}
+	// Require provider and model
+	if cfg.Agent.Provider == "" || cfg.Agent.Model == "" {
+		fmt.Fprintln(os.Stderr, "AGENT_PROVIDER and AGENT_MODEL must be set (via .env, environment, or startup screen).")
+		os.Exit(1)
+	}
+
+	// Auto-detect model specs: models.json → OpenRouter API → code defaults
+	models := config.LoadModels(cfgDir)
+	if info := config.ResolveModelInfo(cfg.Agent.Model, cfg.Agent.Provider, models, cfgDir); info.ContextWindow > 0 {
+		cfg.Agent.ContextWindow = info.ContextWindow
+		if info.MaxTokens > 0 {
+			cfg.Agent.MaxTokens = info.MaxTokens
+		}
+		log.Printf("[main] model %s: context=%d, maxTokens=%d (auto-detected)", cfg.Agent.Model, info.ContextWindow, info.MaxTokens)
+	}
+
+	// Apply startup screen overrides (user values win over auto-resolved)
 	if setup.Config != nil {
-		cfg.Agent.MaxTokens = setup.Config.MaxTokens
-		cfg.Agent.ContextWindow = setup.Config.ContextWindow
+		if setup.Config.MaxTokens > 0 {
+			cfg.Agent.MaxTokens = setup.Config.MaxTokens
+		}
+		if setup.Config.ContextWindow > 0 {
+			cfg.Agent.ContextWindow = setup.Config.ContextWindow
+		}
 		cfg.Agent.Compaction = setup.Config.Compaction
 		cfg.Agent.CompactionTrigger = setup.Config.CompactionTrigger
 		cfg.Agent.CompactionThreshold = setup.Config.CompactionThreshold
@@ -88,22 +109,6 @@ func main() {
 		if setup.Config.SteeringAggressive {
 			cfg.Agent.SteeringMode = "aggressive"
 		}
-	}
-
-	// Require provider and model
-	if cfg.Agent.Provider == "" || cfg.Agent.Model == "" {
-		fmt.Fprintln(os.Stderr, "AGENT_PROVIDER and AGENT_MODEL must be set (via .env, environment, or startup screen).")
-		os.Exit(1)
-	}
-
-	// Auto-detect model specs: models.json → OpenRouter API → config.json defaults
-	models := config.LoadModels(cfgDir)
-	if info := config.ResolveModelInfo(cfg.Agent.Model, cfg.Agent.Provider, models, cfgDir); info.ContextWindow > 0 {
-		cfg.Agent.ContextWindow = info.ContextWindow
-		if info.MaxTokens > 0 {
-			cfg.Agent.MaxTokens = info.MaxTokens
-		}
-		log.Printf("[main] model %s: context=%d, maxTokens=%d (auto-detected)", cfg.Agent.Model, info.ContextWindow, info.MaxTokens)
 	}
 
 	soul := config.LoadTorus(cfgDir)
