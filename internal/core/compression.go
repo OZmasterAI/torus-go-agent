@@ -92,18 +92,59 @@ func ScoreMessage(m t.Message) MessageScore {
 	return ScoreMedium
 }
 
+// ToolTruncLimit defines head+tail line limits for a specific tool type.
+type ToolTruncLimit struct {
+	HeadLines int
+	TailLines int
+}
+
+// DefaultToolLimits maps tool names to their truncation line limits.
+var DefaultToolLimits = map[string]ToolTruncLimit{
+	"bash":  {HeadLines: 30, TailLines: 15},
+	"read":  {HeadLines: 60, TailLines: 20},
+	"glob":  {HeadLines: 30, TailLines: 0},
+	"grep":  {HeadLines: 30, TailLines: 10},
+	"write": {HeadLines: 5, TailLines: 0},
+	"edit":  {HeadLines: 20, TailLines: 10},
+}
+
 // CompressMessage shortens a message's text content to maxChars using
-// head+tail preservation. Tool results keep the first ~60% and last ~30%
-// of lines with a truncation notice in between. Text blocks keep the
+// head+tail preservation. Tool results use per-tool line limits when available,
+// falling back to percentage-based head+tail. Text blocks keep the
 // first ~70% and last ~20% of characters with a truncation marker.
-func CompressMessage(m t.Message, maxChars int) t.Message {
+//
+// toolNames is an optional map from ToolUseID to tool name for per-tool limits.
+// Pass nil to use percentage-based truncation for all tool results.
+func CompressMessage(m t.Message, maxChars int, toolNames ...map[string]string) t.Message {
 	compressed := t.Message{Role: m.Role}
+	// Build tool name lookup: first check variadic map, then scan this message's blocks
+	var toolNameMap map[string]string
+	if len(toolNames) > 0 && toolNames[0] != nil {
+		toolNameMap = toolNames[0]
+	}
+	// Also scan for tool_use blocks in this message (handles combined messages)
+	for _, b := range m.Content {
+		if b.Type == "tool_use" && b.Name != "" && b.ID != "" {
+			if toolNameMap == nil {
+				toolNameMap = make(map[string]string)
+			}
+			toolNameMap[b.ID] = b.Name
+		}
+	}
 	for _, b := range m.Content {
 		switch b.Type {
 		case "tool_result":
 			content := b.Content
+			toolName := ""
+			if toolNameMap != nil {
+				toolName = toolNameMap[b.ToolUseID]
+			}
 			if len(content) > maxChars {
-				content = compressToolResult(content, maxChars, len(b.Content))
+				if limits, ok := DefaultToolLimits[toolName]; ok {
+					content = compressToolResultByLines(content, limits.HeadLines, limits.TailLines, len(b.Content))
+				} else {
+					content = compressToolResult(content, maxChars, len(b.Content))
+				}
 			}
 			compressed.Content = append(compressed.Content, t.ContentBlock{
 				Type:      "tool_result",
@@ -123,6 +164,43 @@ func CompressMessage(m t.Message, maxChars int) t.Message {
 		}
 	}
 	return compressed
+}
+
+// compressToolResultByLines applies head+tail truncation using explicit line counts.
+// Used when per-tool limits are available (e.g., bash: 30 head + 15 tail lines).
+func compressToolResultByLines(content string, headCount, tailCount, origLen int) string {
+	lines := strings.Split(content, "\n")
+	total := len(lines)
+	if headCount+tailCount >= total {
+		return content // fits within limits
+	}
+
+	var head, tail []string
+	if headCount > 0 {
+		if headCount > total {
+			headCount = total
+		}
+		head = lines[:headCount]
+	}
+	if tailCount > 0 {
+		start := total - tailCount
+		if start < headCount {
+			start = headCount
+		}
+		tail = lines[start:]
+	}
+
+	skipped := total - len(head) - len(tail)
+	if skipped <= 0 {
+		return content
+	}
+
+	result := strings.Join(head, "\n")
+	result += fmt.Sprintf("\n[...%d lines truncated from %d total]\n", skipped, total)
+	if len(tail) > 0 {
+		result += strings.Join(tail, "\n")
+	}
+	return result
 }
 
 // compressToolResult applies head+tail truncation by lines.
@@ -500,9 +578,8 @@ func hasTextContent(m t.Message) bool {
 // Pipeline:
 //  1. GroupOperations -- segment messages into semantic operations
 //  2. ScoreOperation -- score each non-active op (exponential decay + file overlap)
-//  3. Classify: score >= 0.3 -> keep full (with head+tail truncation on tool output)
-//     score 0.1-0.3 -> replace with template summary in message array
-//     score < 0.1 -> archive to working memory one-liner in messages[0]
+//  3. Classify: score >= 0.3 -> replace with template summary in message array
+//     score < 0.3 -> archive to working memory one-liner in messages[0]
 //  4. Assemble result
 //
 // keepLast controls how many recent messages are always kept verbatim (operations
@@ -569,8 +646,6 @@ func ContinuousCompressV2(messages []t.Message, keepLast, minMessages int) []t.M
 
 		tier := "archive"
 		if score >= 0.3 {
-			tier = "template" // outside verbatim zone: at best, template summary
-		} else if score >= 0.1 {
 			tier = "template"
 		}
 		classified = append(classified, classifiedOp{op: cop, tier: tier, score: score})
@@ -592,10 +667,21 @@ func ContinuousCompressV2(messages []t.Message, keepLast, minMessages int) []t.M
 	}
 
 	// Verbatim operations: keep all their messages as-is (with head+tail truncation on tool output)
+	// Build ToolUseID→toolName map from all operations for per-tool truncation
+	toolNameMap := make(map[string]string)
+	for _, op := range ops {
+		for _, msg := range op.Messages {
+			for _, b := range msg.Content {
+				if b.Type == "tool_use" && b.ID != "" && b.Name != "" {
+					toolNameMap[b.ID] = b.Name
+				}
+			}
+		}
+	}
 	var verbatimMessages []t.Message
 	for _, vop := range verbatimOps {
 		for _, msg := range vop.Messages {
-			verbatimMessages = append(verbatimMessages, CompressMessage(msg, 2000))
+			verbatimMessages = append(verbatimMessages, CompressMessage(msg, 2000, toolNameMap))
 		}
 	}
 
