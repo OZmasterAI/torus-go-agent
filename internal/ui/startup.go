@@ -870,6 +870,9 @@ type setupModel struct {
 	inputMode bool // true when typing custom provider/model
 	inputStep int  // 0=provider name, 1=model id
 
+	// Type-to-filter for list screens (phases 1, 3, 4)
+	filterText string
+
 	// Config customization (phase 5 = choose config mode, phase 6 = edit settings)
 	configOverrides *AgentConfigOverrides
 	editingConfig   bool   // true when editing a numeric/string value
@@ -1000,7 +1003,21 @@ func (m setupModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 		}
 
+	case "backspace":
+		if m.filterText != "" {
+			m.filterText = m.filterText[:len(m.filterText)-1]
+			m.cursor = 0
+			m.scrollOffset = 0
+		}
+
 	case "esc":
+		// Clear filter first; if no filter, navigate back
+		if m.filterText != "" {
+			m.filterText = ""
+			m.cursor = 0
+			m.scrollOffset = 0
+			return m, nil
+		}
 		switch m.phase {
 		case 6: // settings → config mode
 			m.phase = 5
@@ -1039,6 +1056,17 @@ func (m setupModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.cursor = 0
 			m.scrollOffset = 0
 			m.selectedGroup = nil
+		}
+
+	default:
+		// Type-to-filter on list screens
+		if m.filterablePhase() {
+			r := msg.String()
+			if len(r) == 1 && r[0] >= 32 && r[0] <= 126 {
+				m.filterText += r
+				m.cursor = 0
+				m.scrollOffset = 0
+			}
 		}
 	}
 
@@ -1139,6 +1167,31 @@ func (m setupModel) handleTextInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// filteredIndices returns the indices of items whose label contains the filter text.
+// If filterText is empty, returns all indices.
+func filteredIndices(total int, labelFn func(i int) string, filter string) []int {
+	if filter == "" {
+		idx := make([]int, total)
+		for i := range idx {
+			idx[i] = i
+		}
+		return idx
+	}
+	lower := strings.ToLower(filter)
+	var idx []int
+	for i := 0; i < total; i++ {
+		if strings.Contains(strings.ToLower(labelFn(i)), lower) {
+			idx = append(idx, i)
+		}
+	}
+	return idx
+}
+
+// filterablePhase returns true if the current phase supports type-to-filter.
+func (m setupModel) filterablePhase() bool {
+	return m.phase == 1 || m.phase == 3 || m.phase == 4
+}
+
 // currentModels returns the model list for the current selection context.
 // If a category is selected, returns that category's models; otherwise the group's direct models.
 func (m setupModel) currentModels() []ModelChoice {
@@ -1152,6 +1205,9 @@ func (m setupModel) currentModels() []ModelChoice {
 }
 
 func (m setupModel) menuLen() int {
+	if m.filterText != "" && m.filterablePhase() {
+		return len(m.filteredItems())
+	}
 	switch m.phase {
 	case 0:
 		return 2
@@ -1173,6 +1229,40 @@ func (m setupModel) menuLen() int {
 		return 3
 	case 6:
 		return len(configFields) + 1
+	}
+	return 0
+}
+
+// filteredItems returns filtered indices for the current phase.
+func (m setupModel) filteredItems() []int {
+	switch m.phase {
+	case 1:
+		return filteredIndices(len(m.groups), func(i int) string {
+			return m.groups[i].Name
+		}, m.filterText)
+	case 3:
+		if m.selectedGroup != nil {
+			return filteredIndices(len(m.selectedGroup.Categories), func(i int) string {
+				return m.selectedGroup.Categories[i].Name
+			}, m.filterText)
+		}
+	case 4:
+		models := m.currentModels()
+		return filteredIndices(len(models), func(i int) string {
+			return models[i].Name
+		}, m.filterText)
+	}
+	return nil
+}
+
+// resolveFilteredIndex maps cursor position to original index when filtering.
+func (m setupModel) resolveFilteredIndex() int {
+	if m.filterText == "" || !m.filterablePhase() {
+		return m.cursor
+	}
+	items := m.filteredItems()
+	if m.cursor < len(items) {
+		return items[m.cursor]
 	}
 	return 0
 }
@@ -1326,7 +1416,9 @@ func (m setupModel) selectItem() (tea.Model, tea.Cmd) {
 		}
 
 	case 1: // Pick provider group
-		group := m.groups[m.cursor]
+		idx := m.resolveFilteredIndex()
+		m.filterText = ""
+		group := m.groups[idx]
 		if group.ProviderKey == "" {
 			m.inputMode = true
 			m.inputStep = 0
@@ -1355,7 +1447,9 @@ func (m setupModel) selectItem() (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case 3: // Pick category
-		cat := m.selectedGroup.Categories[m.cursor]
+		idx := m.resolveFilteredIndex()
+		m.filterText = ""
+		cat := m.selectedGroup.Categories[idx]
 		m.selectedCategory = &cat
 		m.phase = 4
 		m.cursor = 0
@@ -1363,8 +1457,10 @@ func (m setupModel) selectItem() (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case 4: // Pick model
+		idx := m.resolveFilteredIndex()
+		m.filterText = ""
 		models := m.currentModels()
-		mc := models[m.cursor]
+		mc := models[idx]
 		if mc.ID == "" {
 			m.inputMode = true
 			m.textInput = ""
@@ -1506,8 +1602,13 @@ func (m setupModel) renderMenu() string {
 	case 1: // Pick provider
 		b.WriteString(menuHeaderStyle.Render("Select Provider"))
 		b.WriteByte('\n')
-		m.renderScrollableItems(&b, len(m.groups), func(i int) string {
-			return m.groups[i].Name
+		if m.filterText != "" {
+			b.WriteString(textInputStyle.Render("  / " + m.filterText + "_"))
+			b.WriteByte('\n')
+		}
+		indices := m.filteredItems()
+		m.renderScrollableItems(&b, len(indices), func(i int) string {
+			return m.groups[indices[i]].Name
 		})
 
 	case 2: // Pick auth method
@@ -1531,10 +1632,15 @@ func (m setupModel) renderMenu() string {
 		}
 		b.WriteString(menuHeaderStyle.Render(header))
 		b.WriteByte('\n')
+		if m.filterText != "" {
+			b.WriteString(textInputStyle.Render("  / " + m.filterText + "_"))
+			b.WriteByte('\n')
+		}
 		if m.selectedGroup != nil {
 			cats := m.selectedGroup.Categories
-			m.renderScrollableItems(&b, len(cats), func(i int) string {
-				return fmt.Sprintf("%s (%d)", cats[i].Name, len(cats[i].Models))
+			indices := m.filteredItems()
+			m.renderScrollableItems(&b, len(indices), func(i int) string {
+				return fmt.Sprintf("%s (%d)", cats[indices[i]].Name, len(cats[indices[i]].Models))
 			})
 		}
 
@@ -1549,9 +1655,14 @@ func (m setupModel) renderMenu() string {
 		}
 		b.WriteString(menuHeaderStyle.Render(header))
 		b.WriteByte('\n')
+		if m.filterText != "" {
+			b.WriteString(textInputStyle.Render("  / " + m.filterText + "_"))
+			b.WriteByte('\n')
+		}
 		models := m.currentModels()
-		m.renderScrollableItems(&b, len(models), func(i int) string {
-			return models[i].Name
+		indices := m.filteredItems()
+		m.renderScrollableItems(&b, len(indices), func(i int) string {
+			return models[indices[i]].Name
 		})
 
 	case 5: // Config mode

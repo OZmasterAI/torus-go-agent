@@ -1,6 +1,8 @@
 package ui
 
-import "testing"
+import (
+	"testing"
+)
 
 func TestClampScrollOffset(t *testing.T) {
 	tests := []struct {
@@ -47,5 +49,87 @@ func TestClampScrollOffset(t *testing.T) {
 					tt.cursor, tt.scrollOffset, tt.total, got, tt.want)
 			}
 		})
+	}
+}
+
+func TestFilteredIndices_NoFilter(t *testing.T) {
+	labels := []string{"Alpha", "Beta", "Gamma"}
+	got := filteredIndices(3, func(i int) string { return labels[i] }, "")
+	if len(got) != 3 {
+		t.Fatalf("expected 3 indices, got %d", len(got))
+	}
+	for i, v := range got {
+		if v != i {
+			t.Errorf("index %d: got %d, want %d", i, v, i)
+		}
+	}
+}
+
+func TestFilteredIndices_MatchSubstring(t *testing.T) {
+	labels := []string{"OpenRouter", "NVIDIA NIM", "Anthropic Claude", "OpenAI"}
+	got := filteredIndices(4, func(i int) string { return labels[i] }, "open")
+	if len(got) != 2 {
+		t.Fatalf("expected 2 matches for 'open', got %d", len(got))
+	}
+	if got[0] != 0 || got[1] != 3 {
+		t.Errorf("expected [0, 3], got %v", got)
+	}
+}
+
+func TestFilteredIndices_CaseInsensitive(t *testing.T) {
+	labels := []string{"Claude Opus", "GPT-4o", "Gemini Pro"}
+	got := filteredIndices(3, func(i int) string { return labels[i] }, "CLAUDE")
+	if len(got) != 1 || got[0] != 0 {
+		t.Errorf("expected [0] for case-insensitive match, got %v", got)
+	}
+}
+
+func TestFilteredIndices_NoMatch(t *testing.T) {
+	labels := []string{"Alpha", "Beta"}
+	got := filteredIndices(2, func(i int) string { return labels[i] }, "xyz")
+	if len(got) != 0 {
+		t.Errorf("expected empty, got %v", got)
+	}
+}
+
+func TestResolveFilteredIndex_NoFilter(t *testing.T) {
+	m := setupModel{cursor: 2}
+	if got := m.resolveFilteredIndex(); got != 2 {
+		t.Errorf("no filter: got %d, want 2", got)
+	}
+}
+
+func TestResolveFilteredIndex_WithFilter(t *testing.T) {
+	groups := []ProviderGroup{
+		{Name: "OpenRouter", ProviderKey: "openrouter"},
+		{Name: "NVIDIA NIM", ProviderKey: "nvidia"},
+		{Name: "Anthropic Claude", ProviderKey: "anthropic"},
+		{Name: "OpenAI", ProviderKey: "openai"},
+	}
+	m := setupModel{
+		phase:      1,
+		cursor:     1, // second filtered result
+		filterText: "open",
+		groups:     groups,
+	}
+	// "open" matches index 0 (OpenRouter) and 3 (OpenAI)
+	got := m.resolveFilteredIndex()
+	if got != 3 {
+		t.Errorf("filtered index: got %d, want 3 (OpenAI)", got)
+	}
+}
+
+func TestFilterablePhase(t *testing.T) {
+	for _, phase := range []int{1, 3, 4} {
+		m := setupModel{phase: phase}
+		if !m.filterablePhase() {
+			t.Errorf("phase %d should be filterable", phase)
+		}
+	}
+	for _, phase := range []int{0, 2, 5, 6} {
+		m := setupModel{phase: phase}
+		if m.filterablePhase() {
+			t.Errorf("phase %d should not be filterable", phase)
+		}
 	}
 }
