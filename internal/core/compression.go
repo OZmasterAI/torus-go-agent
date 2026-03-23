@@ -92,9 +92,10 @@ func ScoreMessage(m t.Message) MessageScore {
 	return ScoreMedium
 }
 
-// CompressMessage shortens a message's text content to maxChars.
-// Tool results get summarized to their first line + truncation notice.
-// Regular text gets truncated with "..." suffix.
+// CompressMessage shortens a message's text content to maxChars using
+// head+tail preservation. Tool results keep the first ~60% and last ~30%
+// of lines with a truncation notice in between. Text blocks keep the
+// first ~70% and last ~20% of characters with a truncation marker.
 func CompressMessage(m t.Message, maxChars int) t.Message {
 	compressed := t.Message{Role: m.Role}
 	for _, b := range m.Content {
@@ -102,15 +103,7 @@ func CompressMessage(m t.Message, maxChars int) t.Message {
 		case "tool_result":
 			content := b.Content
 			if len(content) > maxChars {
-				// Keep first line + truncation
-				firstLine := content
-				if idx := strings.Index(content, "\n"); idx > 0 {
-					firstLine = content[:idx]
-				}
-				if len(firstLine) > maxChars {
-					firstLine = firstLine[:maxChars]
-				}
-				content = fmt.Sprintf("%s\n[...truncated from %d chars]", firstLine, len(b.Content))
+				content = compressToolResult(content, maxChars, len(b.Content))
 			}
 			compressed.Content = append(compressed.Content, t.ContentBlock{
 				Type:      "tool_result",
@@ -121,7 +114,7 @@ func CompressMessage(m t.Message, maxChars int) t.Message {
 		case "text":
 			text := b.Text
 			if len(text) > maxChars {
-				text = text[:maxChars] + "\n[...truncated]"
+				text = compressText(text, maxChars)
 			}
 			compressed.Content = append(compressed.Content, t.ContentBlock{Type: "text", Text: text})
 		default:
@@ -130,6 +123,72 @@ func CompressMessage(m t.Message, maxChars int) t.Message {
 		}
 	}
 	return compressed
+}
+
+// compressToolResult applies head+tail truncation by lines.
+// Keeps ~60% of maxChars from the top lines and ~30% from the bottom lines,
+// with a truncation notice showing how many lines were removed.
+func compressToolResult(content string, maxChars, origLen int) string {
+	lines := strings.Split(content, "\n")
+	if len(lines) <= 2 {
+		// Too few lines to split by line; fall back to char-based truncation
+		if len(content) > maxChars {
+			return content[:maxChars] + fmt.Sprintf("\n[...truncated from %d chars]", origLen)
+		}
+		return content
+	}
+
+	headBudget := maxChars * 60 / 100
+	tailBudget := maxChars * 30 / 100
+
+	// Collect head lines
+	var headLines []string
+	headChars := 0
+	for _, line := range lines {
+		cost := len(line) + 1 // +1 for newline
+		if headChars+cost > headBudget && len(headLines) > 0 {
+			break
+		}
+		headLines = append(headLines, line)
+		headChars += cost
+	}
+
+	// Collect tail lines (backwards from end)
+	var tailLines []string
+	tailChars := 0
+	for i := len(lines) - 1; i >= len(headLines); i-- {
+		cost := len(lines[i]) + 1
+		if tailChars+cost > tailBudget && len(tailLines) > 0 {
+			break
+		}
+		tailLines = append([]string{lines[i]}, tailLines...)
+		tailChars += cost
+	}
+
+	skipped := len(lines) - len(headLines) - len(tailLines)
+	if skipped <= 0 {
+		// Head+tail covers everything; no truncation needed
+		return content
+	}
+
+	head := strings.Join(headLines, "\n")
+	tail := strings.Join(tailLines, "\n")
+	marker := fmt.Sprintf("\n[...%d lines truncated from %d chars]\n", skipped, origLen)
+
+	return head + marker + tail
+}
+
+// compressText applies head+tail truncation by characters.
+// Keeps ~70% of maxChars from the beginning and ~20% from the end,
+// with a truncation marker in the middle.
+func compressText(text string, maxChars int) string {
+	headBudget := maxChars * 70 / 100
+	tailBudget := maxChars * 20 / 100
+
+	head := text[:headBudget]
+	tail := text[len(text)-tailBudget:]
+
+	return head + "\n[...truncated]\n" + tail
 }
 
 // ContinuousCompress applies gradual compression to a message list based on
@@ -205,8 +264,9 @@ type ZoneBudget struct {
 // the slice) is always preserved in full.
 //
 // Zone layout:
-//   [archive messages — capped at ArchivePercent of usable budget]
-//   [history messages — fills remaining budget]
+//
+//	[archive messages — capped at ArchivePercent of usable budget]
+//	[history messages — fills remaining budget]
 //
 // Messages should already be compressed via ContinuousCompress before calling this.
 func ApplyZoneBudget(messages []t.Message, budget ZoneBudget) []t.Message {
@@ -274,5 +334,278 @@ func ApplyZoneBudget(messages []t.Message, budget ZoneBudget) []t.Message {
 	result := make([]t.Message, 0, len(archive)+n-historyStart)
 	result = append(result, archive...)
 	result = append(result, messages[historyStart:]...)
+	return result
+}
+
+// ZoneBudgetV2 configures 3-zone token allocation with dynamic rebalancing.
+type ZoneBudgetV2 struct {
+	ContextWindow    int // total token budget
+	SystemArchivePct int // percentage for system prompt + archived one-liners (default 25)
+	ActiveOpsPct     int // percentage for active/recent operations (default 25)
+	HeadroomPct      int // percentage reserved for model output + next tools (default 50)
+	OutputReserve    int // minimum tokens reserved for output (default 4096)
+}
+
+// ApplyZoneBudgetV2 distributes messages across 3 zones with dynamic rebalancing.
+// Zone 1: system prompt + archived content (SystemArchivePct)
+// Zone 2: active/recent operations (ActiveOpsPct)
+// Zone 3: headroom for output (HeadroomPct, reserved -- not filled)
+// Unused budget from Zone 1 flows to Zone 2.
+// Per-operation cap: no single operation can use more than 50% of Zone 2.
+// activeFiles is passed for scoring context (can be nil).
+func ApplyZoneBudgetV2(messages []t.Message, budget ZoneBudgetV2, activeFiles []string) []t.Message {
+	if len(messages) == 0 {
+		return nil
+	}
+
+	// Apply defaults
+	if budget.SystemArchivePct <= 0 {
+		budget.SystemArchivePct = 25
+	}
+	if budget.ActiveOpsPct <= 0 {
+		budget.ActiveOpsPct = 25
+	}
+	if budget.HeadroomPct <= 0 {
+		budget.HeadroomPct = 50
+	}
+	if budget.OutputReserve <= 0 {
+		budget.OutputReserve = 4096
+	}
+	if budget.ContextWindow <= 0 {
+		return messages
+	}
+
+	// Calculate usable budget (total minus output reserve)
+	usable := budget.ContextWindow - budget.OutputReserve
+	if usable <= 0 {
+		// Not enough room -- return at least messages[0] + last message
+		if len(messages) <= 2 {
+			return messages
+		}
+		return []t.Message{messages[0], messages[len(messages)-1]}
+	}
+
+	// Zone budgets
+	zone1Budget := usable * budget.SystemArchivePct / 100
+	zone2Budget := usable * budget.ActiveOpsPct / 100
+
+	// --- Zone 1: system prompt (messages[0]) ---
+	zone1Tokens := estimateTokens(messages[0:1])
+	zone1Unused := zone1Budget - zone1Tokens
+	if zone1Unused < 0 {
+		zone1Unused = 0
+	}
+
+	// --- Dynamic rebalancing: unused Zone 1 flows to Zone 2 ---
+	zone2Effective := zone2Budget + zone1Unused
+
+	// Per-operation cap: no single op can exceed 50% of Zone 2
+	perOpCap := zone2Effective / 2
+	if perOpCap <= 0 {
+		perOpCap = 1
+	}
+
+	// --- Zone 2: fill from the end (most recent first) ---
+	// Track operations by user-message boundaries to enforce per-op cap.
+	// Walk backwards from the last message, grouping by user-message starts.
+	n := len(messages)
+	zone2Tokens := 0
+	zone2Start := n // index where Zone 2 begins (exclusive of messages[0])
+
+	// Track per-operation token usage while scanning backwards
+	currentOpTokens := 0
+	inOperation := false
+
+	for i := n - 1; i >= 1; i-- {
+		msg := messages[i]
+		msgTokens := estimateTokens(messages[i : i+1])
+
+		// Detect operation boundary: a user message with text starts a new op
+		isOpStart := msg.Role == t.RoleUser && hasTextContent(msg)
+
+		if isOpStart && inOperation {
+			// We just finished scanning one operation (backwards).
+			// The previous operation's tokens are in currentOpTokens.
+			// Check per-op cap for the operation we just finished.
+			if currentOpTokens > perOpCap {
+				// This op exceeds cap -- skip it entirely by not
+				// moving zone2Start back past it. But we still need
+				// to try the current message's operation.
+				// Undo: restore zone2Tokens and zone2Start to before this op.
+				zone2Tokens -= currentOpTokens
+				zone2Start = i + 1 // exclude the oversized op
+				// But continue scanning -- earlier ops may fit.
+			}
+			currentOpTokens = 0
+		}
+
+		// Check if adding this message would exceed Zone 2 effective budget
+		if zone2Tokens+msgTokens > zone2Effective {
+			break
+		}
+
+		zone2Tokens += msgTokens
+		currentOpTokens += msgTokens
+		zone2Start = i
+		inOperation = true
+	}
+
+	// Handle the last operation scanned (the earliest one we reached)
+	if inOperation && currentOpTokens > perOpCap && zone2Start > 1 {
+		// The earliest operation we included exceeds per-op cap.
+		// Find where it ends and exclude it.
+		zone2Tokens -= currentOpTokens
+		// Scan forward to find the next operation start
+		for j := zone2Start + 1; j < n; j++ {
+			msg := messages[j]
+			if msg.Role == t.RoleUser && hasTextContent(msg) {
+				zone2Start = j
+				break
+			}
+		}
+		// Recalculate zone2Tokens from zone2Start
+		zone2Tokens = 0
+		for j := zone2Start; j < n; j++ {
+			zone2Tokens += estimateTokens(messages[j : j+1])
+		}
+	}
+
+	// --- Assemble result: Zone 1 (messages[0]) + Zone 2 (zone2Start..n) ---
+	result := make([]t.Message, 0, 1+(n-zone2Start))
+	result = append(result, messages[0])
+
+	if zone2Start < n && zone2Start > 0 {
+		result = append(result, messages[zone2Start:]...)
+	} else if zone2Start == 0 {
+		// Everything fits -- but messages[0] is already added
+		result = append(result, messages[1:]...)
+	}
+
+	return result
+}
+
+// hasTextContent returns true if the message has at least one non-empty text content block.
+func hasTextContent(m t.Message) bool {
+	for _, b := range m.Content {
+		if b.Type == "text" && b.Text != "" {
+			return true
+		}
+	}
+	return false
+}
+
+// ContinuousCompressV2 applies operation-aware compression with operation grouping,
+// template summaries, scoring, and working memory. Returns a new slice.
+//
+// Pipeline:
+//  1. GroupOperations -- segment messages into semantic operations
+//  2. ScoreOperation -- score each non-active op (exponential decay + file overlap)
+//  3. Classify: score >= 0.3 -> keep full (with head+tail truncation on tool output)
+//     score 0.1-0.3 -> replace with template summary in message array
+//     score < 0.1 -> archive to working memory one-liner in messages[0]
+//  4. Assemble result
+//
+// keepLast controls how many recent messages are always kept verbatim (operations
+// that fall entirely within this window are not scored). minMessages sets the
+// minimum message count before compression activates (0 = use keepLast).
+func ContinuousCompressV2(messages []t.Message, keepLast, minMessages int) []t.Message {
+	if keepLast <= 0 {
+		keepLast = 10
+	}
+	n := len(messages)
+	if n <= keepLast {
+		return messages
+	}
+	if minMessages > 0 && n < minMessages {
+		return messages
+	}
+
+	// Step 1: Group messages into operations (messages[0] is system prompt, excluded)
+	ops := GroupOperations(messages)
+	if len(ops) == 0 {
+		return messages
+	}
+
+	// Step 2: Identify the verbatim boundary and active files.
+	// Operations whose StartIdx >= verbatimStart are kept verbatim.
+	verbatimStart := n - keepLast
+	if verbatimStart < 1 {
+		verbatimStart = 1 // never compress the system prompt
+	}
+
+	// Find the active operation (last one) and collect its files for scoring.
+	activeOp := ops[len(ops)-1]
+	activeFiles := activeOp.Files
+
+	// Separate operations into verbatim (recent) and compressible (old).
+	var verbatimOps []Operation
+	var compressibleOps []Operation
+	for i := range ops {
+		if ops[i].StartIdx >= verbatimStart {
+			verbatimOps = append(verbatimOps, ops[i])
+		} else {
+			compressibleOps = append(compressibleOps, ops[i])
+		}
+	}
+
+	// If nothing to compress, return original.
+	if len(compressibleOps) == 0 {
+		return messages
+	}
+
+	// Step 3: Score and classify compressible operations.
+	type classifiedOp struct {
+		op    Operation
+		tier  string // "keep", "template", "archive"
+		score float64
+	}
+	totalOps := len(ops)
+	var classified []classifiedOp
+
+	for i, cop := range compressibleOps {
+		// Age = distance from end of compressible ops (oldest = highest age)
+		age := len(compressibleOps) - i
+		score := ScoreOperation(cop, age, totalOps, activeFiles)
+
+		tier := "archive"
+		if score >= 0.3 {
+			tier = "template" // outside verbatim zone: at best, template summary
+		} else if score >= 0.1 {
+			tier = "template"
+		}
+		classified = append(classified, classifiedOp{op: cop, tier: tier, score: score})
+	}
+
+	// Step 4: Build result
+	var archivedOps []Operation
+	var middleMessages []t.Message
+
+	for _, c := range classified {
+		switch c.tier {
+		case "template":
+			// Replace entire operation with a single template message
+			middleMessages = append(middleMessages, OperationToMessage(c.op))
+		case "archive":
+			// Collect for working memory in system prompt
+			archivedOps = append(archivedOps, c.op)
+		}
+	}
+
+	// Verbatim operations: keep all their messages as-is (with head+tail truncation on tool output)
+	var verbatimMessages []t.Message
+	for _, vop := range verbatimOps {
+		for _, msg := range vop.Messages {
+			verbatimMessages = append(verbatimMessages, CompressMessage(msg, 2000))
+		}
+	}
+
+	// Step 5: Assemble
+	// System prompt (with working memory appended) + template messages + verbatim messages
+	sysMsg := AppendWorkingMemory(messages[0], archivedOps)
+	result := make([]t.Message, 0, 1+len(middleMessages)+len(verbatimMessages))
+	result = append(result, sysMsg)
+	result = append(result, middleMessages...)
+	result = append(result, verbatimMessages...)
+
 	return result
 }

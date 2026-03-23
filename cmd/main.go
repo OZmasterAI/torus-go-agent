@@ -241,10 +241,10 @@ func main() {
 	compressionMinMessages := cfg.Agent.CompressionMinMessages
 	if cfg.Agent.ContinuousCompression {
 		hooks.RegisterPriority(core.HookBeforeContextBuild, "continuous-compression", func(ctx context.Context, d *core.HookData) error {
-			d.Messages = core.ContinuousCompress(d.Messages, compressionKeepLast, compressionMinMessages)
+			d.Messages = core.ContinuousCompressV2(d.Messages, compressionKeepLast, compressionMinMessages)
 			return nil
 		}, 50)
-		log.Printf("[main] continuous compression enabled (keepLast: %d)", compressionKeepLast)
+		log.Printf("[main] continuous compression V2 enabled (keepLast: %d)", compressionKeepLast)
 	}
 
 	// Register zone budgeting hook (optional, requires continuousCompression)
@@ -252,7 +252,7 @@ func main() {
 		if !cfg.Agent.ContinuousCompression {
 			log.Printf("[main] WARNING: zoneBudgeting requires continuousCompression — enabling it")
 			hooks.RegisterPriority(core.HookBeforeContextBuild, "continuous-compression", func(ctx context.Context, d *core.HookData) error {
-				d.Messages = core.ContinuousCompress(d.Messages, compressionKeepLast, compressionMinMessages)
+				d.Messages = core.ContinuousCompressV2(d.Messages, compressionKeepLast, compressionMinMessages)
 				return nil
 			}, 50)
 		}

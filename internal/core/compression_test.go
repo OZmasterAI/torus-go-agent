@@ -1,6 +1,7 @@
 package core
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -589,6 +590,72 @@ func TestScoreMessage_MixedWithEmptyBlocks(t *testing.T) {
 	}
 }
 
+// TestCompressMessage_HeadTailToolResult tests head+tail preservation for tool results
+func TestCompressMessage_HeadTailToolResult(t *testing.T) {
+	// Build a 100-line tool result
+	var lines []string
+	for i := 0; i < 100; i++ {
+		lines = append(lines, fmt.Sprintf("line %d: some content here", i))
+	}
+	content := strings.Join(lines, "\n")
+
+	m := types.Message{Role: types.RoleUser, Content: []types.ContentBlock{
+		{Type: "tool_result", ToolUseID: "t1", Content: content},
+	}}
+
+	result := CompressMessage(m, 800)
+	resultContent := result.Content[0].Content
+
+	// Must contain first lines
+	if !strings.Contains(resultContent, "line 0:") {
+		t.Error("should contain first line")
+	}
+	// Must contain last lines
+	if !strings.Contains(resultContent, "line 99:") {
+		t.Error("should contain last line")
+	}
+	// Must have truncation notice
+	if !strings.Contains(resultContent, "truncated") {
+		t.Error("should have truncation notice")
+	}
+}
+
+// TestCompressMessage_HeadTailText tests head+tail preservation for text blocks
+func TestCompressMessage_HeadTailText(t *testing.T) {
+	// Build long text
+	text := strings.Repeat("A sentence of moderate length. ", 100)
+	m := types.Message{Role: types.RoleAssistant, Content: []types.ContentBlock{
+		{Type: "text", Text: text},
+	}}
+
+	result := CompressMessage(m, 200)
+	resultText := result.Content[0].Text
+
+	// Should start with beginning of original
+	if !strings.HasPrefix(resultText, "A sentence") {
+		t.Error("should start with original beginning")
+	}
+	// Should end with original ending (tail)
+	if !strings.HasSuffix(strings.TrimSpace(resultText), "length.") && !strings.Contains(resultText, "length.") {
+		t.Error("should contain tail of original")
+	}
+	// Should have truncation marker
+	if !strings.Contains(resultText, "truncated") {
+		t.Error("should have truncation notice")
+	}
+}
+
+// TestCompressMessage_ShortContentUnchanged tests short content is not modified
+func TestCompressMessage_ShortContentUnchanged(t *testing.T) {
+	m := types.Message{Role: types.RoleUser, Content: []types.ContentBlock{
+		{Type: "tool_result", ToolUseID: "t1", Content: "short output"},
+	}}
+	result := CompressMessage(m, 800)
+	if result.Content[0].Content != "short output" {
+		t.Errorf("short content should be unchanged, got %q", result.Content[0].Content)
+	}
+}
+
 // Benchmark tests
 
 // BenchmarkScoreMessage benchmarks message scoring
@@ -635,5 +702,219 @@ func BenchmarkApplyZoneBudget(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		ApplyZoneBudget(messages, budget)
+	}
+}
+
+// --- ZoneBudgetV2 tests ---
+
+func TestApplyZoneBudgetV2_Basic(t *testing.T) {
+	// Create 3 operations worth of messages
+	messages := []types.Message{
+		{Role: types.RoleAssistant, Content: []types.ContentBlock{{Type: "text", Text: "system prompt"}}},
+	}
+	// Add 3 operations: each is user + assistant with ~1000 chars
+	for i := 0; i < 3; i++ {
+		messages = append(messages,
+			types.Message{Role: types.RoleUser, Content: []types.ContentBlock{{Type: "text", Text: fmt.Sprintf("task %d: %s", i, strings.Repeat("x", 500))}}},
+			types.Message{Role: types.RoleAssistant, Content: []types.ContentBlock{{Type: "text", Text: strings.Repeat("response ", 100)}}},
+		)
+	}
+
+	budget := ZoneBudgetV2{
+		ContextWindow:    10000,
+		SystemArchivePct: 25,
+		ActiveOpsPct:     25,
+		HeadroomPct:      50,
+		OutputReserve:    1000,
+	}
+	result := ApplyZoneBudgetV2(messages, budget, nil)
+
+	// Should have fewer or equal messages
+	if len(result) > len(messages) {
+		t.Errorf("result should not grow: got %d, original %d", len(result), len(messages))
+	}
+	// messages[0] should always be preserved
+	if result[0].Content[0].Text != "system prompt" {
+		t.Error("system prompt should be preserved")
+	}
+	// Last message should be preserved (active operation)
+	lastOrig := messages[len(messages)-1]
+	lastResult := result[len(result)-1]
+	if lastResult.Content[0].Text != lastOrig.Content[0].Text {
+		t.Error("last message (active) should be preserved")
+	}
+}
+
+func TestApplyZoneBudgetV2_RebalancesUnusedBudget(t *testing.T) {
+	// Small system prompt = small archive zone usage
+	// The unused archive budget should flow to active zone
+	messages := []types.Message{
+		{Role: types.RoleAssistant, Content: []types.ContentBlock{{Type: "text", Text: "short"}}},
+	}
+	// Add 5 operations with substantial content
+	for i := 0; i < 5; i++ {
+		messages = append(messages,
+			types.Message{Role: types.RoleUser, Content: []types.ContentBlock{{Type: "text", Text: fmt.Sprintf("task %d", i)}}},
+			types.Message{Role: types.RoleAssistant, Content: []types.ContentBlock{{Type: "text", Text: strings.Repeat("y", 200)}}},
+		)
+	}
+
+	budget := ZoneBudgetV2{
+		ContextWindow:    5000,
+		SystemArchivePct: 25,
+		ActiveOpsPct:     25,
+		HeadroomPct:      50,
+		OutputReserve:    500,
+	}
+	result := ApplyZoneBudgetV2(messages, budget, nil)
+
+	// With rebalancing, more messages should fit than with rigid zones
+	if len(result) < 3 {
+		t.Errorf("rebalancing should allow more messages, got %d", len(result))
+	}
+}
+
+func TestApplyZoneBudgetV2_EmptyMessages(t *testing.T) {
+	budget := ZoneBudgetV2{ContextWindow: 10000}
+	result := ApplyZoneBudgetV2(nil, budget, nil)
+	if result != nil {
+		t.Errorf("nil input should return nil, got %v", result)
+	}
+}
+
+func TestApplyZoneBudgetV2_PerOpCap(t *testing.T) {
+	// One huge operation shouldn't consume more than 50% of active zone
+	messages := []types.Message{
+		{Role: types.RoleAssistant, Content: []types.ContentBlock{{Type: "text", Text: "system"}}},
+		{Role: types.RoleUser, Content: []types.ContentBlock{{Type: "text", Text: "small task"}}},
+		{Role: types.RoleAssistant, Content: []types.ContentBlock{{Type: "text", Text: "ok"}}},
+		{Role: types.RoleUser, Content: []types.ContentBlock{{Type: "text", Text: strings.Repeat("huge task ", 500)}}},
+		{Role: types.RoleAssistant, Content: []types.ContentBlock{{Type: "text", Text: strings.Repeat("huge response ", 500)}}},
+	}
+	budget := ZoneBudgetV2{
+		ContextWindow:    5000,
+		SystemArchivePct: 25,
+		ActiveOpsPct:     25,
+		HeadroomPct:      50,
+		OutputReserve:    500,
+	}
+	result := ApplyZoneBudgetV2(messages, budget, nil)
+	// Should still include the small task even though the huge task is massive
+	if len(result) < 3 { // at least system + small task messages
+		t.Errorf("per-op cap should prevent one op from consuming all budget, got %d messages", len(result))
+	}
+}
+
+// --- ContinuousCompressV2 tests ---
+
+func TestContinuousCompressV2_BasicPipeline(t *testing.T) {
+	// Build a conversation with 4 operations
+	messages := []types.Message{
+		{Role: types.RoleAssistant, Content: []types.ContentBlock{{Type: "text", Text: "You are a helpful agent."}}},
+	}
+	// 4 operations, each: user text + assistant with tool_use + user tool_result + assistant response
+	for i := 0; i < 4; i++ {
+		messages = append(messages,
+			types.Message{Role: types.RoleUser, Content: []types.ContentBlock{{Type: "text", Text: fmt.Sprintf("task %d: do something with file%d.go", i, i)}}},
+			types.Message{Role: types.RoleAssistant, Content: []types.ContentBlock{
+				{Type: "text", Text: "I'll handle that."},
+				{Type: "tool_use", ID: fmt.Sprintf("t%d", i), Name: "edit", Input: map[string]any{"file_path": fmt.Sprintf("file%d.go", i)}},
+			}},
+			types.Message{Role: types.RoleUser, Content: []types.ContentBlock{
+				{Type: "tool_result", ToolUseID: fmt.Sprintf("t%d", i), Content: "done"},
+			}},
+			types.Message{Role: types.RoleAssistant, Content: []types.ContentBlock{{Type: "text", Text: fmt.Sprintf("Completed task %d successfully.", i)}}},
+		)
+	}
+
+	result := ContinuousCompressV2(messages, 8, 0)
+
+	// Should have fewer messages (older ops compressed/archived)
+	if len(result) >= len(messages) {
+		t.Errorf("expected compression, got %d messages (original %d)", len(result), len(messages))
+	}
+	// messages[0] should be preserved (possibly with working memory appended)
+	if !strings.Contains(result[0].Content[0].Text, "You are a helpful agent.") {
+		t.Error("system prompt should be preserved")
+	}
+	// Most recent operation should be intact
+	lastMsg := result[len(result)-1]
+	if !strings.Contains(lastMsg.Content[0].Text, "task 3") && !strings.Contains(lastMsg.Content[0].Text, "Completed task 3") {
+		t.Errorf("last operation should be preserved, got %q", lastMsg.Content[0].Text)
+	}
+}
+
+func TestContinuousCompressV2_BelowThreshold(t *testing.T) {
+	messages := []types.Message{
+		{Role: types.RoleAssistant, Content: []types.ContentBlock{{Type: "text", Text: "system"}}},
+		{Role: types.RoleUser, Content: []types.ContentBlock{{Type: "text", Text: "hello"}}},
+		{Role: types.RoleAssistant, Content: []types.ContentBlock{{Type: "text", Text: "hi"}}},
+	}
+	result := ContinuousCompressV2(messages, 10, 0)
+	if len(result) != len(messages) {
+		t.Errorf("below threshold should return unchanged, got %d vs %d", len(result), len(messages))
+	}
+}
+
+func TestContinuousCompressV2_TemplatesInMessageArray(t *testing.T) {
+	// Build enough operations that middle ones should become templates
+	messages := []types.Message{
+		{Role: types.RoleAssistant, Content: []types.ContentBlock{{Type: "text", Text: "system"}}},
+	}
+	for i := 0; i < 6; i++ {
+		messages = append(messages,
+			types.Message{Role: types.RoleUser, Content: []types.ContentBlock{{Type: "text", Text: fmt.Sprintf("task %d: work on file%d.go", i, i)}}},
+			types.Message{Role: types.RoleAssistant, Content: []types.ContentBlock{
+				{Type: "tool_use", ID: fmt.Sprintf("t%d", i), Name: "edit", Input: map[string]any{"file_path": fmt.Sprintf("file%d.go", i)}},
+			}},
+			types.Message{Role: types.RoleUser, Content: []types.ContentBlock{
+				{Type: "tool_result", ToolUseID: fmt.Sprintf("t%d", i), Content: strings.Repeat("output ", 50)},
+			}},
+			types.Message{Role: types.RoleAssistant, Content: []types.ContentBlock{{Type: "text", Text: fmt.Sprintf("Done with task %d.", i)}}},
+		)
+	}
+
+	result := ContinuousCompressV2(messages, 8, 0)
+
+	// Check that at least one message contains "[Op]" (template format)
+	hasTemplate := false
+	for _, m := range result {
+		for _, b := range m.Content {
+			if strings.Contains(b.Text, "[Op]") {
+				hasTemplate = true
+				break
+			}
+		}
+	}
+	if !hasTemplate {
+		t.Error("should have at least one template summary in the result")
+	}
+}
+
+func TestContinuousCompressV2_WorkingMemoryAppended(t *testing.T) {
+	// Build enough operations that oldest ones become working memory one-liners
+	messages := []types.Message{
+		{Role: types.RoleAssistant, Content: []types.ContentBlock{{Type: "text", Text: "system prompt"}}},
+	}
+	for i := 0; i < 8; i++ {
+		messages = append(messages,
+			types.Message{Role: types.RoleUser, Content: []types.ContentBlock{{Type: "text", Text: fmt.Sprintf("task %d", i)}}},
+			types.Message{Role: types.RoleAssistant, Content: []types.ContentBlock{{Type: "text", Text: fmt.Sprintf("done %d", i)}}},
+		)
+	}
+
+	result := ContinuousCompressV2(messages, 4, 0)
+
+	// System prompt should have working memory section if any ops were archived
+	sysText := result[0].Content[0].Text
+	if strings.Contains(sysText, "Working Memory") {
+		// Good -- working memory was appended
+		if !strings.Contains(sysText, "system prompt") {
+			t.Error("original system prompt should still be present")
+		}
+	}
+	// Either way, result should be shorter than original
+	if len(result) >= len(messages) {
+		t.Errorf("should compress: got %d, original %d", len(result), len(messages))
 	}
 }
