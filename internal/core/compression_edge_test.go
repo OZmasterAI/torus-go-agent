@@ -395,7 +395,7 @@ func TestCompressionEdge_CompressMessage_FirstLineExactlyMaxChars(t *testing.T) 
 
 // TestCompressionEdge_ContinuousCompress_NilMessages tests nil slice input
 func TestCompressionEdge_ContinuousCompress_NilMessages(t *testing.T) {
-	result := ContinuousCompress(nil, 10, 0)
+	result := ContinuousCompressV2(nil, 10, 0)
 	if result != nil {
 		t.Errorf("nil input should return nil, got %v", result)
 	}
@@ -411,7 +411,7 @@ func TestCompressionEdge_ContinuousCompress_SingleMessage(t *testing.T) {
 			},
 		},
 	}
-	result := ContinuousCompress(messages, 10, 0)
+	result := ContinuousCompressV2(messages, 10, 0)
 	if len(result) != 1 {
 		t.Errorf("single message: got %d, want 1", len(result))
 	}
@@ -431,7 +431,7 @@ func TestCompressionEdge_ContinuousCompress_NegativeKeepLast(t *testing.T) {
 			},
 		}
 	}
-	result := ContinuousCompress(messages, -5, 0)
+	result := ContinuousCompressV2(messages, -5, 0)
 	// Negative keepLast should default to 10
 	if len(result) != 20 {
 		t.Errorf("should return all messages: got %d", len(result))
@@ -449,7 +449,7 @@ func TestCompressionEdge_ContinuousCompress_NegativeMinMessages(t *testing.T) {
 			},
 		}
 	}
-	result := ContinuousCompress(messages, 2, -1)
+	result := ContinuousCompressV2(messages, 2, -1)
 	// Negative minMessages should be treated as <= 0 (compression enabled)
 	if len(result) != 5 {
 		t.Error("should return all messages")
@@ -467,7 +467,7 @@ func TestCompressionEdge_ContinuousCompress_LargeKeepLast(t *testing.T) {
 			},
 		}
 	}
-	result := ContinuousCompress(messages, 100, 0)
+	result := ContinuousCompressV2(messages, 100, 0)
 	if len(result) != len(messages) {
 		t.Error("keepLast larger than messages should return all")
 	}
@@ -484,7 +484,7 @@ func TestCompressionEdge_ContinuousCompress_ExactMinMessagesMatch(t *testing.T) 
 			},
 		}
 	}
-	result := ContinuousCompress(messages, 5, 10)
+	result := ContinuousCompressV2(messages, 5, 10)
 	if len(result) != 10 {
 		t.Error("exact minMessages match should not compress")
 	}
@@ -499,7 +499,7 @@ func TestCompressionEdge_ContinuousCompress_AllZeroScores(t *testing.T) {
 			Content: []types.ContentBlock{},
 		}
 	}
-	result := ContinuousCompress(messages, 5, 0)
+	result := ContinuousCompressV2(messages, 5, 0)
 	if len(result) != 20 {
 		t.Error("should return all messages")
 	}
@@ -519,7 +519,7 @@ func TestCompressionEdge_ContinuousCompress_MixedScores(t *testing.T) {
 		types.Message{Role: types.RoleUser, Content: []types.ContentBlock{{Type: "text", Text: "What is " + strings.Repeat("x", 150)}}}, // ScoreHigh
 		types.Message{Role: types.RoleUser, Content: []types.ContentBlock{{Type: "text", Text: "recent"}}},
 	}
-	result := ContinuousCompress(messages, 1, 0)
+	result := ContinuousCompressV2(messages, 1, 0)
 	if len(result) != 4 {
 		t.Errorf("should have 4 messages, got %d", len(result))
 	}
@@ -532,7 +532,7 @@ func TestCompressionEdge_ApplyZoneBudget_ZeroContextWindow(t *testing.T) {
 	messages := []types.Message{
 		types.Message{Role: types.RoleUser, Content: []types.ContentBlock{{Type: "text", Text: "msg"}}},
 	}
-	result := ApplyZoneBudget(messages, ZoneBudget{ContextWindow: 0})
+	result := ApplyZoneBudgetV2(messages, ZoneBudgetV2{ContextWindow: 0}, nil)
 	if len(result) != len(messages) {
 		t.Error("zero context window should return messages unchanged")
 	}
@@ -543,7 +543,7 @@ func TestCompressionEdge_ApplyZoneBudget_NegativeContextWindow(t *testing.T) {
 	messages := []types.Message{
 		types.Message{Role: types.RoleUser, Content: []types.ContentBlock{{Type: "text", Text: "msg"}}},
 	}
-	result := ApplyZoneBudget(messages, ZoneBudget{ContextWindow: -1000})
+	result := ApplyZoneBudgetV2(messages, ZoneBudgetV2{ContextWindow: -1000}, nil)
 	if len(result) != len(messages) {
 		t.Error("negative context window should return messages unchanged")
 	}
@@ -558,11 +558,11 @@ func TestCompressionEdge_ApplyZoneBudget_OutputReserveExceedsWindow(t *testing.T
 			Content: []types.ContentBlock{{Type: "text", Text: "msg"}},
 		}
 	}
-	result := ApplyZoneBudget(messages, ZoneBudget{
+	result := ApplyZoneBudgetV2(messages, ZoneBudgetV2{
 		ContextWindow:  1000,
 		OutputReserve:  5000, // Exceeds window
-		ArchivePercent: 30,
-	})
+		SystemArchivePct: 30,
+	}, nil)
 	// Should handle gracefully (usable would be <= 0)
 	if len(result) == 0 {
 		t.Error("should return at least schema + current message")
@@ -576,11 +576,11 @@ func TestCompressionEdge_ApplyZoneBudget_ZeroArchivePercent(t *testing.T) {
 		types.Message{Role: types.RoleAssistant, Content: []types.ContentBlock{{Type: "text", Text: "msg1"}}},
 		types.Message{Role: types.RoleUser, Content: []types.ContentBlock{{Type: "text", Text: "msg2"}}},
 	}
-	result := ApplyZoneBudget(messages, ZoneBudget{
+	result := ApplyZoneBudgetV2(messages, ZoneBudgetV2{
 		ContextWindow:  100000,
-		ArchivePercent: 0, // Should default to 30
+		SystemArchivePct: 0, // Should default to 30
 		OutputReserve:  4096,
-	})
+	}, nil)
 	if len(result) < 2 {
 		t.Error("should apply defaults and include messages")
 	}
@@ -595,11 +595,11 @@ func TestCompressionEdge_ApplyZoneBudget_HighArchivePercent(t *testing.T) {
 			Content: []types.ContentBlock{{Type: "text", Text: "msg"}},
 		}
 	}
-	result := ApplyZoneBudget(messages, ZoneBudget{
+	result := ApplyZoneBudgetV2(messages, ZoneBudgetV2{
 		ContextWindow:  100000,
-		ArchivePercent: 150, // > 100
+		SystemArchivePct: 150, // > 100
 		OutputReserve:  4096,
-	})
+	}, nil)
 	// Should handle without crashing
 	if len(result) == 0 {
 		t.Error("should return some messages")
@@ -612,11 +612,11 @@ func TestCompressionEdge_ApplyZoneBudget_SingleMessageWithLargeBudget(t *testing
 		Role:    types.RoleUser,
 		Content: []types.ContentBlock{{Type: "text", Text: "single"}},
 	}
-	result := ApplyZoneBudget([]types.Message{msg}, ZoneBudget{
+	result := ApplyZoneBudgetV2([]types.Message{msg}, ZoneBudgetV2{
 		ContextWindow:  1000000,
-		ArchivePercent: 30,
+		SystemArchivePct: 30,
 		OutputReserve:  4096,
-	})
+	}, nil)
 	if len(result) != 1 || result[0].Content[0].Text != "single" {
 		t.Error("single message should be preserved")
 	}
@@ -631,11 +631,11 @@ func TestCompressionEdge_ApplyZoneBudget_VeryTinyBudget(t *testing.T) {
 			Content: []types.ContentBlock{{Type: "text", Text: "msg"}},
 		}
 	}
-	result := ApplyZoneBudget(messages, ZoneBudget{
+	result := ApplyZoneBudgetV2(messages, ZoneBudgetV2{
 		ContextWindow:  100, // Very small
-		ArchivePercent: 30,
+		SystemArchivePct: 30,
 		OutputReserve:  50,
-	})
+	}, nil)
 	// Should include at least current message
 	if len(result) == 0 {
 		t.Error("should include at least current message")
@@ -738,8 +738,8 @@ func TestCompressionEdge_Consistency_ContinuousCompressIsDeterministic(t *testin
 			},
 		}
 	}
-	result1 := ContinuousCompress(messages, 5, 0)
-	result2 := ContinuousCompress(messages, 5, 0)
+	result1 := ContinuousCompressV2(messages, 5, 0)
+	result2 := ContinuousCompressV2(messages, 5, 0)
 	for i := range result1 {
 		if len(result1[i].Content) != len(result2[i].Content) {
 			t.Errorf("message %d: length mismatch", i)
