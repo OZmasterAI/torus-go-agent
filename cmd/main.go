@@ -393,7 +393,7 @@ func main() {
 		},
 		Execute: func(args map[string]any) (*types.ToolResult, error) {
 			query, _ := args["query"].(string)
-			limit := int(tools.GF(args, "limit", 5))
+			limit := int(tools.GetFloat(args, "limit", 5))
 			rows, err := dag.SearchAll(query, limit)
 			if err != nil {
 				return &types.ToolResult{Content: "Error: " + err.Error(), IsError: true}, nil
@@ -616,7 +616,7 @@ func main() {
 			if agentType == "" {
 				agentType = "builder"
 			}
-			maxIter := int(tools.GF(args, "max_iterations", 5))
+			maxIter := int(tools.GetFloat(args, "max_iterations", 5))
 			stopPhrase, _ := args["stop_phrase"].(string)
 
 			cfg := features.SubAgentConfig{
