@@ -16,6 +16,11 @@ import (
 // Update is the main Bubble Tea update function. It routes messages to the
 // appropriate sub-model.
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	// ── Startup phase intercept ─────────────────────────────────────────
+	if m.startupPhase {
+		return m.updateStartup(msg)
+	}
+
 	switch msg := msg.(type) {
 
 	// ── Window resize ────────────────────────────────────────────────────
@@ -398,4 +403,60 @@ func (m *Model) openSessions() {
 		}
 	}
 	m.overlay.Open("sessions", items)
+}
+
+// updateStartup routes messages to the startup sub-model during the startup phase.
+// When the startup sub-model completes, it transitions to the main chat phase.
+func (m Model) updateStartup(msg tea.Msg) (tea.Model, tea.Cmd) {
+	updated, cmd := m.startup.Update(msg)
+	m.startup = updated
+
+	// Check if startup is done (user made selections or quit)
+	if m.startup.done {
+		if m.startup.quit {
+			// User hit Ctrl+C or q -- quit the whole program
+			return m, tea.Quit
+		}
+		// Transition to main chat phase
+		m.startupPhase = false
+
+		// Apply startup selections to model state
+		if m.startup.provider != "" {
+			m.modelName = m.startup.provider + ":" + m.startup.model
+		}
+		if m.startup.configOverrides != nil {
+			m.applyStartupOverrides(m.startup.configOverrides)
+		}
+
+		return m, nil
+	}
+
+	return m, cmd
+}
+
+// applyStartupOverrides applies config overrides from the startup screen to the agent config.
+func (m *Model) applyStartupOverrides(o *StartupConfigOverrides) {
+	if o.MaxTokens > 0 {
+		m.agentCfg.MaxTokens = o.MaxTokens
+	}
+	if o.ContextWindow > 0 {
+		m.agentCfg.ContextWindow = o.ContextWindow
+	}
+	m.agentCfg.Compaction = o.Compaction
+	m.agentCfg.CompactionTrigger = o.CompactionTrigger
+	m.agentCfg.CompactionThreshold = o.CompactionThreshold
+	m.agentCfg.CompactionMaxMessages = o.CompactionMaxMessages
+	m.agentCfg.CompactionKeepLastN = o.CompactionKeepLastN
+	m.agentCfg.CompactionModel = o.CompactionModel
+	m.agentCfg.ContinuousCompression = o.ContinuousCompression
+	m.agentCfg.CompressionKeepLast = o.CompressionKeepLast
+	m.agentCfg.CompressionMinMessages = o.CompressionMinMessages
+	m.agentCfg.ZoneBudgeting = o.ZoneBudgeting
+	m.agentCfg.ZoneArchivePercent = o.ZoneArchivePercent
+	m.agentCfg.SmartRouting = o.SmartRouting
+	m.agentCfg.SmartRoutingModel = o.SmartRoutingModel
+	m.agentCfg.SteeringMode = o.SteeringMode
+	m.agentCfg.PersistThinking = o.PersistThinking
+	m.agentCfg.Thinking = o.Thinking
+	m.agentCfg.ThinkingBudget = o.ThinkingBudget
 }

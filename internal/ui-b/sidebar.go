@@ -16,11 +16,12 @@ const (
 
 // sidebarModel renders session stats, modified files, config, and flags.
 type sidebarModel struct {
-	theme         Theme
-	modifiedFiles map[string]int
-	toolEvents    []ToolEvent
-	agentCfg      config.AgentConfig
-	show          bool
+	theme           Theme
+	modifiedFiles   map[string]int
+	toolEvents      []ToolEvent
+	agentCfg        config.AgentConfig
+	steerAggressive bool // true when agent steering mode is "aggressive"
+	show            bool
 }
 
 func newSidebarModel(theme Theme, cfg config.AgentConfig) sidebarModel {
@@ -90,6 +91,7 @@ func (s sidebarModel) View(height int) string {
 	lines = append(lines, flagStr(s.theme, "Zones", s.agentCfg.ZoneBudgeting))
 	compact := s.agentCfg.Compaction != "" && s.agentCfg.Compaction != "none"
 	lines = append(lines, flagStr(s.theme, "Compact", compact))
+	lines = append(lines, flagStr(s.theme, "Steer+", s.steerAggressive))
 
 	if len(lines) > innerH {
 		lines = lines[:innerH]

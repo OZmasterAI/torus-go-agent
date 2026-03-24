@@ -101,6 +101,8 @@ func (c *chatModel) Rebuild() {
 		sb.WriteString(c.thinking.RenderCard(card, chatW))
 	}
 
+	verbosity := c.thinking.Verbosity
+
 	for i := range c.messages {
 		dm := &c.messages[i]
 		switch dm.Role {
@@ -135,9 +137,15 @@ func (c *chatModel) Rebuild() {
 
 		case "tool":
 			if dm.Tool != nil {
-				ts := fmtTimestamp(dm.Ts)
-				sb.WriteString(c.theme.Timestamp.Render(ts) + " ")
-				sb.WriteString(c.toolCards.Render(dm.Tool, chatW-10))
+				if verbosity == shared.VerbosityCompact {
+					// Compact: no timestamp prefix, tool renders its own indent.
+					sb.WriteString(c.toolCards.Render(dm.Tool, chatW, verbosity))
+				} else {
+					// Verbose/Full: timestamp + full card with header/footer.
+					ts := fmtTimestamp(dm.Ts)
+					sb.WriteString(c.theme.Timestamp.Render(ts) + " ")
+					sb.WriteString(c.toolCards.Render(dm.Tool, chatW-10, verbosity))
+				}
 				sb.WriteByte('\n')
 			}
 

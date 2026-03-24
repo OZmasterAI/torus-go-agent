@@ -117,26 +117,120 @@ func (s statusModel) renderProcessingOrCompletion(width int) string {
 	return ""
 }
 
-// renderStatusBar renders the bottom status line.
-func (s statusModel) renderStatusBar(width int, modelName string, tokIn, tokOut int, cost float64, atBottom bool) string {
-	var parts []string
-	parts = append(parts, fmt.Sprintf("[%s]", modelName))
+// StatusBarData holds all the data needed to render the status bar.
+// Using a struct avoids a long parameter list and keeps the interface clean.
+type StatusBarData struct {
+	Width           int
+	ModelName       string
+	TokIn           int
+	TokOut          int
+	Cost            float64
+	AtBottom        bool
+	LastInputTokens int           // From most recent agent run (for CTX%).
+	ContextWindow   int           // Model's context window size.
+	TurnCount       int           // Number of user submissions.
+	SessionStart    time.Time     // When the session started.
+	Processing      bool          // Whether agent is currently running.
+	NextEstimate    int           // Estimated tokens for next prompt (0 = unavailable).
+	Verbosity       int           // Thinking verbosity level (0=compact, 1=verbose, 2=full).
+	VerbosityLabel  string        // Human-readable verbosity label.
+}
 
-	totalTok := tokIn + tokOut
+// renderCtxBar renders a 12-character gradient progress bar for context window usage.
+// Matches the original TUI's orange gradient (#ff4d01 -> #ff8c00).
+func (s statusModel) renderCtxBar(pct float64) string {
+	const barWidth = 12
+	filled := int(pct / 100.0 * float64(barWidth))
+	if filled > barWidth {
+		filled = barWidth
+	}
+	if filled < 0 {
+		filled = 0
+	}
+
+	var bar strings.Builder
+	for i := 0; i < barWidth; i++ {
+		if i < filled {
+			// Gradient from #ff4d01 (left) to #ff8c00 (right).
+			t := float64(i) / float64(barWidth)
+			r := 0xff
+			g := int(float64(0x4d) + t*float64(0x8c-0x4d))
+			b := int(float64(0x01) + t*float64(0x00-0x01))
+			color := fmt.Sprintf("#%02x%02x%02x", r, g, b)
+			bar.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color(color)).Render("\u2588"))
+		} else {
+			bar.WriteString(s.theme.CtxBarEmpty.Render("\u2591"))
+		}
+	}
+	return bar.String()
+}
+
+// renderStatusBar renders the bottom status line with all status features:
+// [model] | CTX:<bar> NN% | Nk tok (T turns) | Xm | $N.NN | next: ~Ntok | verbose | PgDn
+func (s statusModel) renderStatusBar(data StatusBarData) string {
+	var parts []string
+	parts = append(parts, fmt.Sprintf("[%s]", data.ModelName))
+
+	// CTX% progress bar.
+	ctxWin := float64(data.ContextWindow)
+	if ctxWin <= 0 {
+		ctxWin = 128000
+	}
+	ctxPct := 0.0
+	if data.LastInputTokens > 0 {
+		ctxPct = float64(data.LastInputTokens) / ctxWin * 100
+	}
+	if ctxPct > 0 || data.LastInputTokens > 0 {
+		parts = append(parts, "CTX:"+s.renderCtxBar(ctxPct)+fmt.Sprintf(" %.0f%%", ctxPct))
+	}
+
+	// Token count with turn count.
+	totalTok := data.TokIn + data.TokOut
 	if totalTok > 0 {
-		parts = append(parts, fmt.Sprintf("%s tok", fmtTok(totalTok)))
+		if data.TurnCount > 0 {
+			parts = append(parts, fmt.Sprintf("%s tok (%d turns)", fmtTok(totalTok), data.TurnCount))
+		} else {
+			parts = append(parts, fmt.Sprintf("%s tok", fmtTok(totalTok)))
+		}
 	}
-	if cost > 0 {
-		parts = append(parts, fmt.Sprintf("$%.2f", cost))
+
+	// Session elapsed time.
+	if !data.SessionStart.IsZero() {
+		sessionElapsed := time.Since(data.SessionStart)
+		if sessionElapsed > time.Second {
+			mins := int(sessionElapsed.Minutes())
+			if mins > 0 {
+				parts = append(parts, fmt.Sprintf("%dm", mins))
+			} else {
+				parts = append(parts, fmt.Sprintf("%.0fs", sessionElapsed.Seconds()))
+			}
+		}
 	}
-	if !atBottom {
+
+	// Cost.
+	if data.Cost > 0 {
+		parts = append(parts, fmt.Sprintf("$%.2f", data.Cost))
+	}
+
+	// Next-prompt cost estimate (only when idle).
+	if !data.Processing && data.NextEstimate > 0 {
+		parts = append(parts, fmt.Sprintf("next: ~%s tok", fmtTok(data.NextEstimate)))
+	}
+
+	// Thinking verbosity indicator (only when not compact/default).
+	if data.Verbosity > 0 && data.VerbosityLabel != "" {
+		parts = append(parts, data.VerbosityLabel)
+	}
+
+	// Scroll hint.
+	if !data.AtBottom {
 		parts = append(parts, s.theme.ScrollHint.Render("PgDn \u2193"))
 	}
 
 	line := strings.Join(parts, " | ")
 	padded := line
-	if width > 0 && len(line) < width {
-		padded = line + strings.Repeat(" ", width-len(line))
+	if data.Width > 0 && len(line) < data.Width {
+		padded = line + strings.Repeat(" ", data.Width-len(line))
 	}
 	return s.theme.Status.Render(padded)
 }

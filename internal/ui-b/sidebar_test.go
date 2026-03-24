@@ -39,3 +39,42 @@ func TestSidebarEmpty(t *testing.T) {
 		t.Fatal("sidebar should show (none) for empty files")
 	}
 }
+
+func TestSidebarSteerPlusFlag(t *testing.T) {
+	s := newSidebarModel(DefaultTheme(), config.AgentConfig{})
+	// With steerAggressive = false, Steer+ should show with hollow dot.
+	s.steerAggressive = false
+	view := s.View(30)
+	if !strings.Contains(view, "Steer+") {
+		t.Fatal("sidebar should show Steer+ flag")
+	}
+
+	// With steerAggressive = true, Steer+ should show with filled dot.
+	s.steerAggressive = true
+	view = s.View(30)
+	if !strings.Contains(view, "Steer+") {
+		t.Fatal("sidebar should show Steer+ flag when aggressive")
+	}
+	// The filled dot (U+25CF) should appear for aggressive mode.
+	if !strings.Contains(view, "\u25cf") {
+		t.Fatal("sidebar should show filled dot for aggressive Steer+")
+	}
+}
+
+func TestSidebarFiveFlags(t *testing.T) {
+	s := newSidebarModel(DefaultTheme(), config.AgentConfig{
+		SmartRouting:          true,
+		ContinuousCompression: true,
+		ZoneBudgeting:         true,
+		Compaction:             "llm",
+	})
+	s.steerAggressive = true
+	view := s.View(30)
+
+	flags := []string{"Smart", "Compress", "Zones", "Compact", "Steer+"}
+	for _, flag := range flags {
+		if !strings.Contains(view, flag) {
+			t.Fatalf("sidebar should show %s flag", flag)
+		}
+	}
+}

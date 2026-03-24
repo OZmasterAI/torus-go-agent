@@ -14,3 +14,4 @@ trigger_compact.py
 .pi/
 skills/
 skills-lock.json
+config/models.json

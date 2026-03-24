@@ -32,6 +32,11 @@ type Theme struct {
 	Status     lipgloss.Style
 	ScrollHint lipgloss.Style
 
+	// CTX progress bar (orange gradient, 12-char mini bar).
+	CtxBarFilled lipgloss.Style // Filled portion of CTX bar (#ff4d01).
+	CtxBarEmpty  lipgloss.Style // Empty portion of CTX bar (dim track).
+	CtxLabel     lipgloss.Style // "CTX: 42%" label next to the bar.
+
 	// Tool cards.
 	ToolHeader lipgloss.Style
 	ToolDim    lipgloss.Style
@@ -103,6 +108,11 @@ func DefaultTheme() Theme {
 		ScrollHint: lipgloss.NewStyle().
 			Foreground(lipgloss.Color("243")).
 			Italic(true),
+
+		// CTX progress bar.
+		CtxBarFilled: lipgloss.NewStyle().Foreground(lipgloss.Color("#ff8c00")).Background(lipgloss.Color("#ff4d01")),
+		CtxBarEmpty:  lipgloss.NewStyle().Foreground(lipgloss.Color("#331100")),
+		CtxLabel:     lipgloss.NewStyle().Foreground(lipgloss.Color("#ff8c00")),
 
 		// Tool cards.
 		ToolHeader: lipgloss.NewStyle().Foreground(lipgloss.Color("166")).Bold(true),
