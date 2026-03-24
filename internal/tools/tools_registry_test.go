@@ -301,7 +301,8 @@ func TestGrepToolSchema(t *testing.T) {
 }
 
 // TestGFHelperFunction tests the GF (GetFloat) helper function.
-func TestGFHelperFunction(t *testing.T) {
+// TestGetFloatHelperFunction tests the GetFloat map extraction helper.
+func TestGetFloatHelperFunction(t *testing.T) {
 	tests := []struct {
 		name     string
 		m        map[string]any
@@ -348,7 +349,7 @@ func TestGFHelperFunction(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := GF(tt.m, tt.key, tt.def)
+			result := GetFloat(tt.m, tt.key, tt.def)
 			if result != tt.expected {
 				t.Fatalf("expected %f, got %f", tt.expected, result)
 			}

@@ -74,8 +74,8 @@ func readTool() t.Tool {
 				return &t.ToolResult{Content: "Error: " + err.Error(), IsError: true}, nil
 			}
 			lines := strings.Split(string(data), "\n")
-			off := int(GF(args, "offset", 0))
-			lim := int(GF(args, "limit", float64(len(lines))))
+			off := int(GetFloat(args, "offset", 0))
+			lim := int(GetFloat(args, "limit", float64(len(lines))))
 			end := off + lim
 			if end > len(lines) {
 				end = len(lines)
@@ -215,8 +215,8 @@ func grepTool() t.Tool {
 	}
 }
 
-// GF extracts a float64 from a map with a default value.
-func GF(m map[string]any, key string, def float64) float64 {
+// GetFloat extracts a float64 from a map with a default value.
+func GetFloat(m map[string]any, key string, def float64) float64 {
 	v, ok := m[key].(float64)
 	if !ok {
 		return def
