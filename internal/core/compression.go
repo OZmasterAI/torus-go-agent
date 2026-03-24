@@ -269,13 +269,9 @@ func compressText(text string, maxChars int) string {
 	return head + "\n[...truncated]\n" + tail
 }
 
-// ContinuousCompress applies gradual compression to a message list based on
-// message age and importance score. Recent messages stay verbatim; older messages
-// get progressively shorter. Returns a new slice — does not modify the originals.
-//
-// The keepLast parameter controls how many recent messages are always kept verbatim.
-// The minMessages parameter sets the minimum message count before compression activates (0 = use keepLast).
-func ContinuousCompress(messages []t.Message, keepLast, minMessages int) []t.Message {
+// continuousCompress is the V1 implementation — kept as internal fallback.
+// Production uses ContinuousCompressV2. Unexported to prevent external use.
+func continuousCompress(messages []t.Message, keepLast, minMessages int) []t.Message {
 	if keepLast <= 0 {
 		keepLast = 10
 	}
@@ -331,23 +327,16 @@ func ContinuousCompress(messages []t.Message, keepLast, minMessages int) []t.Mes
 }
 
 // ZoneBudget configures the token allocation for zone-based context assembly.
-type ZoneBudget struct {
-	ContextWindow  int // total token budget
-	ArchivePercent int // percentage of usable budget for archive zone (default 30)
-	OutputReserve  int // tokens reserved for model output (default 4096)
+// zoneBudget is the V1 budget struct — kept as internal fallback.
+type zoneBudget struct {
+	ContextWindow  int
+	ArchivePercent int
+	OutputReserve  int
 }
 
-// ApplyZoneBudget splits messages into archive (old, capped) and history (recent, flexible)
-// zones, trimming each to fit within its token budget. The current turn's message (last in
-// the slice) is always preserved in full.
-//
-// Zone layout:
-//
-//	[archive messages — capped at ArchivePercent of usable budget]
-//	[history messages — fills remaining budget]
-//
-// Messages should already be compressed via ContinuousCompress before calling this.
-func ApplyZoneBudget(messages []t.Message, budget ZoneBudget) []t.Message {
+// applyZoneBudget is the V1 implementation — kept as internal fallback.
+// Production uses ApplyZoneBudgetV2. Unexported to prevent external use.
+func applyZoneBudget(messages []t.Message, budget zoneBudget) []t.Message {
 	if budget.ContextWindow <= 0 {
 		return messages
 	}

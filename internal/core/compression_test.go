@@ -270,7 +270,7 @@ func TestContinuousCompress_BelowThreshold(t *testing.T) {
 		newTextMessage(types.RoleAssistant, "msg2"),
 		newTextMessage(types.RoleUser, "msg3"),
 	}
-	result := ContinuousCompressV2(messages, 10, 0)
+	result := continuousCompress(messages, 10, 0)
 
 	if len(result) != len(messages) {
 		t.Errorf("result length: got %d, want %d", len(result), len(messages))
@@ -290,7 +290,7 @@ func TestContinuousCompress_MinMessages(t *testing.T) {
 		newTextMessage(types.RoleUser, "msg3"),
 		newTextMessage(types.RoleAssistant, "msg4"),
 	}
-	result := ContinuousCompressV2(messages, 2, 10)
+	result := continuousCompress(messages, 2, 10)
 
 	if len(result) != len(messages) {
 		t.Errorf("minMessages threshold not respected: got %d messages, want no compression", len(result))
@@ -306,7 +306,7 @@ func TestContinuousCompress_CompressesOlderMessages(t *testing.T) {
 		newTextMessage(types.RoleAssistant, strings.Repeat("z", 500)),
 		newTextMessage(types.RoleUser, strings.Repeat("a", 500)),
 	}
-	result := ContinuousCompressV2(messages, 1, 0)
+	result := continuousCompress(messages, 1, 0)
 
 	// First message (schema) should be unchanged
 	if len(result[0].Content) != len(messages[0].Content) {
@@ -332,7 +332,7 @@ func TestContinuousCompress_DefaultKeepLast(t *testing.T) {
 	for i := 0; i < 20; i++ {
 		messages[i] = newTextMessage(types.RoleUser, "msg")
 	}
-	result := ContinuousCompressV2(messages, 0, 0) // keepLast=0 should use default of 10
+	result := continuousCompress(messages, 0, 0) // keepLast=0 should use default of 10
 
 	if len(result) != len(messages) {
 		t.Errorf("result length: got %d, want %d", len(result), len(messages))
@@ -347,7 +347,7 @@ func TestContinuousCompress_ScoreBasedCompression(t *testing.T) {
 		newTextMessage(types.RoleUser, "What is the best way to structure this? "+strings.Repeat("x", 150)), // ScoreHigh
 		newTextMessage(types.RoleUser, "recent"),
 	}
-	result := ContinuousCompressV2(messages, 1, 0)
+	result := continuousCompress(messages, 1, 0)
 
 	// The high-score message should be better preserved than low-score ones
 	origHigh := len(messages[2].Content[0].Text)
@@ -359,7 +359,7 @@ func TestContinuousCompress_ScoreBasedCompression(t *testing.T) {
 
 // TestApplyZoneBudget_NoMessages returns empty
 func TestApplyZoneBudget_NoMessages(t *testing.T) {
-	result := ApplyZoneBudgetV2([]types.Message{}, ZoneBudgetV2{ContextWindow: 10000}, nil)
+	result := applyZoneBudget([]types.Message{}, zoneBudget{ContextWindow: 10000})
 	if len(result) != 0 {
 		t.Errorf("empty input should return empty output, got %d", len(result))
 	}
@@ -368,7 +368,7 @@ func TestApplyZoneBudget_NoMessages(t *testing.T) {
 // TestApplyZoneBudget_InvalidContextWindow returns messages unchanged
 func TestApplyZoneBudget_InvalidContextWindow(t *testing.T) {
 	messages := []types.Message{newTextMessage(types.RoleUser, "msg")}
-	result := ApplyZoneBudgetV2(messages, ZoneBudgetV2{ContextWindow: 0}, nil)
+	result := applyZoneBudget(messages, zoneBudget{ContextWindow: 0})
 	if len(result) != len(messages) {
 		t.Error("zero context window should return messages unchanged")
 	}
@@ -381,12 +381,12 @@ func TestApplyZoneBudget_DefaultValues(t *testing.T) {
 		newTextMessage(types.RoleAssistant, "msg1"),
 		newTextMessage(types.RoleUser, "msg2"),
 	}
-	budget := ZoneBudgetV2{
+	budget := zoneBudget{
 		ContextWindow:  100000,
-		SystemArchivePct: 0, // should default to 30
+		ArchivePercent: 0, // should default to 30
 		OutputReserve:  0, // should default to 4096
 	}
-	result := ApplyZoneBudgetV2(messages, budget, nil)
+	result := applyZoneBudget(messages, budget)
 	if len(result) == 0 {
 		t.Error("should apply defaults and return messages")
 	}
@@ -401,12 +401,12 @@ func TestApplyZoneBudget_PreservesLastMessage(t *testing.T) {
 		newTextMessage(types.RoleUser, strings.Repeat("y", 1000)),
 		lastMsg,
 	}
-	budget := ZoneBudgetV2{
+	budget := zoneBudget{
 		ContextWindow:  10000,
-		SystemArchivePct: 30,
+		ArchivePercent: 30,
 		OutputReserve:  4000,
 	}
-	result := ApplyZoneBudgetV2(messages, budget, nil)
+	result := applyZoneBudget(messages, budget)
 
 	// Last message should be preserved in full
 	if len(result) > 0 && result[len(result)-1].Content[0].Text != lastMsg.Content[0].Text {
@@ -423,12 +423,12 @@ func TestApplyZoneBudget_IncludesSchemaMessage(t *testing.T) {
 		newTextMessage(types.RoleUser, strings.Repeat("y", 1000)),
 		newTextMessage(types.RoleAssistant, "current"),
 	}
-	budget := ZoneBudgetV2{
+	budget := zoneBudget{
 		ContextWindow:  10000,
-		SystemArchivePct: 30,
+		ArchivePercent: 30,
 		OutputReserve:  4000,
 	}
-	result := ApplyZoneBudgetV2(messages, budget, nil)
+	result := applyZoneBudget(messages, budget)
 
 	if len(result) == 0 || result[0].Content[0].Text != "system schema" {
 		t.Error("schema message (index 0) should always be included")
@@ -444,12 +444,12 @@ func TestApplyZoneBudget_ZoneSplit(t *testing.T) {
 		newTextMessage(types.RoleAssistant, "msg3"),
 		newTextMessage(types.RoleUser, "current"),
 	}
-	budget := ZoneBudgetV2{
+	budget := zoneBudget{
 		ContextWindow:  20000,
-		SystemArchivePct: 40,
+		ArchivePercent: 40,
 		OutputReserve:  4000,
 	}
-	result := ApplyZoneBudgetV2(messages, budget, nil)
+	result := applyZoneBudget(messages, budget)
 
 	// Should have schema + some messages
 	if len(result) < 2 {
@@ -460,8 +460,8 @@ func TestApplyZoneBudget_ZoneSplit(t *testing.T) {
 // TestApplyZoneBudget_SingleMessage returns it
 func TestApplyZoneBudget_SingleMessage(t *testing.T) {
 	msg := newTextMessage(types.RoleUser, "only message")
-	budget := ZoneBudgetV2{ContextWindow: 10000}
-	result := ApplyZoneBudgetV2([]types.Message{msg}, budget, nil)
+	budget := zoneBudget{ContextWindow: 10000}
+	result := applyZoneBudget([]types.Message{msg}, budget)
 
 	if len(result) != 1 || result[0].Content[0].Text != msg.Content[0].Text {
 		t.Error("single message should be returned unchanged")
@@ -512,7 +512,7 @@ func TestCompressMessage_ZeroMaxChars(t *testing.T) {
 
 // TestContinuousCompress_EmptyMessages returns empty
 func TestContinuousCompress_EmptyMessages(t *testing.T) {
-	result := ContinuousCompressV2([]types.Message{}, 10, 0)
+	result := continuousCompress([]types.Message{}, 10, 0)
 	if len(result) != 0 {
 		t.Errorf("empty input should return empty output, got %d", len(result))
 	}
@@ -558,12 +558,12 @@ func TestApplyZoneBudget_HighArchivePercent(t *testing.T) {
 		messages = append(messages, newTextMessage(types.RoleUser, "msg"+string(rune(i))))
 	}
 
-	budget := ZoneBudgetV2{
+	budget := zoneBudget{
 		ContextWindow:  50000,
-		SystemArchivePct: 80, // high archive percentage
+		ArchivePercent: 80, // high archive percentage
 		OutputReserve:  4000,
 	}
-	result := ApplyZoneBudgetV2(messages, budget, nil)
+	result := applyZoneBudget(messages, budget)
 
 	if len(result) == 0 {
 		t.Error("should return at least some messages")
@@ -677,31 +677,31 @@ func BenchmarkCompressMessage(b *testing.B) {
 }
 
 // BenchmarkContinuousCompress benchmarks continuous compression
-func BenchmarkContinuousCompressV2(b *testing.B) {
+func BenchmarkContinuousCompressV1(b *testing.B) {
 	messages := make([]types.Message, 50)
 	for i := 0; i < 50; i++ {
 		messages[i] = newTextMessage(types.RoleUser, "msg"+string(rune(i))+" "+strings.Repeat("x", 100))
 	}
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		ContinuousCompressV2(messages, 10, 0)
+		continuousCompress(messages, 10, 0)
 	}
 }
 
 // BenchmarkApplyZoneBudget benchmarks zone budgeting
-func BenchmarkApplyZoneBudgetV2(b *testing.B) {
+func BenchmarkApplyZoneBudgetV1(b *testing.B) {
 	messages := make([]types.Message, 50)
 	for i := 0; i < 50; i++ {
 		messages[i] = newTextMessage(types.RoleUser, strings.Repeat("x", 200))
 	}
-	budget := ZoneBudgetV2{
+	budget := zoneBudget{
 		ContextWindow:  100000,
-		SystemArchivePct: 30,
+		ArchivePercent: 30,
 		OutputReserve:  4096,
 	}
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		ApplyZoneBudgetV2(messages, budget, nil)
+		applyZoneBudget(messages, budget)
 	}
 }
 
