@@ -49,7 +49,7 @@ func GroupOperations(messages []t.Message) []Operation {
 		msg := messages[i]
 
 		// Only user messages with text can start new operations
-		if msg.Role != t.RoleUser || !hasTextBlock(msg) {
+		if msg.Role != t.RoleUser || !hasTextContent(msg) {
 			continue
 		}
 
@@ -192,15 +192,6 @@ func hasMutationTool(tools []string) bool {
 	return false
 }
 
-// hasTextBlock returns true if the message has at least one content block with type "text".
-func hasTextBlock(m t.Message) bool {
-	for _, b := range m.Content {
-		if b.Type == "text" {
-			return true
-		}
-	}
-	return false
-}
 
 // extractText returns the concatenated text from all "text" blocks in a message.
 func extractText(m t.Message) string {
