@@ -206,22 +206,19 @@ type openaiStreamToolCall struct {
 	Function openaiToolCallFunc `json:"function"`
 }
 
-// Complete sends a request to the OpenRouter (OpenAI-compatible) API.
-func (p *OpenRouterProvider) Complete(ctx context.Context, systemPrompt string, messages []t.Message, tools []t.Tool, maxTokens int) (*t.AssistantMessage, error) {
+// buildMessages converts our message types to OpenAI-format messages.
+func buildMessages(systemPrompt string, messages []t.Message) []openaiMsg {
 	var apiMsgs []openaiMsg
 
-	// System prompt as first message
 	if systemPrompt != "" {
 		apiMsgs = append(apiMsgs, openaiMsg{Role: "system", Content: systemPrompt})
 	}
 
-	// Convert messages
 	for _, m := range messages {
 		if m.Role == t.RoleSystem {
 			continue
 		}
 		if m.Role == t.RoleTool {
-			// Tool results in OpenAI format
 			for _, b := range m.Content {
 				if b.Type == "tool_result" {
 					apiMsgs = append(apiMsgs, openaiMsg{
@@ -233,7 +230,6 @@ func (p *OpenRouterProvider) Complete(ctx context.Context, systemPrompt string, 
 			}
 			continue
 		}
-		// Check if assistant message contains tool_use blocks
 		if m.Role == t.RoleAssistant {
 			var textParts []string
 			var toolCalls []openaiToolCall
@@ -274,8 +270,11 @@ func (p *OpenRouterProvider) Complete(ctx context.Context, systemPrompt string, 
 			})
 		}
 	}
+	return apiMsgs
+}
 
-	// Convert tools
+// buildTools converts our tool types to OpenAI-format tool declarations.
+func buildTools(tools []t.Tool) []openaiTool {
 	var apiTools []openaiTool
 	for _, tl := range tools {
 		apiTools = append(apiTools, openaiTool{
@@ -287,11 +286,15 @@ func (p *OpenRouterProvider) Complete(ctx context.Context, systemPrompt string, 
 			},
 		})
 	}
+	return apiTools
+}
 
+// Complete sends a request to the OpenRouter (OpenAI-compatible) API.
+func (p *OpenRouterProvider) Complete(ctx context.Context, systemPrompt string, messages []t.Message, tools []t.Tool, maxTokens int) (*t.AssistantMessage, error) {
 	req := openaiRequest{
 		Model:     p.Model,
-		Messages:  apiMsgs,
-		Tools:     apiTools,
+		Messages:  buildMessages(systemPrompt, messages),
+		Tools:     buildTools(tools),
 		MaxTokens: maxTokens,
 	}
 
@@ -387,82 +390,10 @@ func (p *OpenRouterProvider) ModelID() string { return p.Model }
 
 // StreamComplete sends a streaming request to the OpenRouter (OpenAI-compatible) API.
 func (p *OpenRouterProvider) StreamComplete(ctx context.Context, systemPrompt string, messages []t.Message, tools []t.Tool, maxTokens int) (<-chan t.StreamEvent, error) {
-	var apiMsgs []openaiMsg
-
-	if systemPrompt != "" {
-		apiMsgs = append(apiMsgs, openaiMsg{Role: "system", Content: systemPrompt})
-	}
-
-	for _, m := range messages {
-		if m.Role == t.RoleSystem {
-			continue
-		}
-		if m.Role == t.RoleTool {
-			for _, b := range m.Content {
-				if b.Type == "tool_result" {
-					apiMsgs = append(apiMsgs, openaiMsg{
-						Role:       "tool",
-						Content:    b.Content,
-						ToolCallID: b.ToolUseID,
-					})
-				}
-			}
-			continue
-		}
-		if m.Role == t.RoleAssistant {
-			var textParts []string
-			var toolCalls []openaiToolCall
-			for _, b := range m.Content {
-				if b.Type == "text" && b.Text != "" {
-					textParts = append(textParts, b.Text)
-				}
-				if b.Type == "tool_use" {
-					argsJSON, _ := json.Marshal(b.Input)
-					toolCalls = append(toolCalls, openaiToolCall{
-						ID:   b.ID,
-						Type: "function",
-						Function: openaiToolCallFunc{
-							Name:      b.Name,
-							Arguments: string(argsJSON),
-						},
-					})
-				}
-			}
-			msg := openaiMsg{Role: "assistant"}
-			if len(textParts) > 0 {
-				msg.Content = strings.Join(textParts, "")
-			}
-			if len(toolCalls) > 0 {
-				msg.ToolCalls = toolCalls
-			}
-			apiMsgs = append(apiMsgs, msg)
-		} else {
-			var content any
-			if len(m.Content) == 1 && m.Content[0].Type == "text" {
-				content = m.Content[0].Text
-			} else {
-				content = m.Content
-			}
-			apiMsgs = append(apiMsgs, openaiMsg{Role: string(m.Role), Content: content})
-		}
-	}
-
-	var apiTools []openaiTool
-	for _, tl := range tools {
-		apiTools = append(apiTools, openaiTool{
-			Type: "function",
-			Function: openaiFunction{
-				Name:        tl.Name,
-				Description: tl.Description,
-				Parameters:  tl.InputSchema,
-			},
-		})
-	}
-
 	req := openaiRequest{
 		Model:     p.Model,
-		Messages:  apiMsgs,
-		Tools:     apiTools,
+		Messages:  buildMessages(systemPrompt, messages),
+		Tools:     buildTools(tools),
 		MaxTokens: maxTokens,
 		Stream:    true,
 	}
