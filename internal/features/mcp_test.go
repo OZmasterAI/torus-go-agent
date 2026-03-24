@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"strings"
+	"sync"
 	"testing"
 
 	"torus_go_agent/internal/types"
@@ -755,10 +756,13 @@ func TestMCPToolFields(t *testing.T) {
 func TestMCPClientConcurrentAccess(t *testing.T) {
 	client := NewMCPClient(false)
 
-	// Add some tools
+	// Add some tools concurrently, wait for all writers to finish
+	var wg sync.WaitGroup
 	for i := 0; i < 5; i++ {
 		idx := i
+		wg.Add(1)
 		go func() {
+			defer wg.Done()
 			client.mu.Lock()
 			client.tools[fmt.Sprintf("tool%d", idx)] = &MCPTool{
 				Name:        fmt.Sprintf("tool%d", idx),
@@ -768,6 +772,7 @@ func TestMCPClientConcurrentAccess(t *testing.T) {
 			client.mu.Unlock()
 		}()
 	}
+	wg.Wait()
 
 	// Read tools concurrently
 	done := make(chan bool, 5)
