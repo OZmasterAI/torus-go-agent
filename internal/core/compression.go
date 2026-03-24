@@ -561,7 +561,7 @@ func hasTextContent(m t.Message) bool {
 	return false
 }
 
-// ContinuousCompressV2 applies operation-aware compression with operation grouping,
+// ContinuousCompressV2 applies operation-aware compression with grouping,
 // template summaries, scoring, and working memory. Returns a new slice.
 //
 // Pipeline:

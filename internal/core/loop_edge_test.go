@@ -820,3 +820,43 @@ func TestLoopEdge_LargeContextWindow(t *testing.T) {
 		t.Error("expected EventAgentDone with large context window")
 	}
 }
+
+func TestLoopEdge_CompressionBeforeCompaction(t *testing.T) {
+	mp := &mockProvider{
+		name:       "mock",
+		modelID:    "mock-model-1",
+		cannedText: "response",
+	}
+	agent, _ := newTestAgent(t, mp)
+	agent.SetCompaction(CompactionConfig{
+		Mode:          CompactionSliding,
+		Threshold:     80,
+		KeepLastN:     5,
+		ContextWindow: 100000,
+	})
+
+	// Track hook firing order
+	var order []string
+	agent.Hooks().RegisterPriority(HookBeforeContextBuild, "track-compress", func(ctx context.Context, d *HookData) error {
+		order = append(order, "before_context_build")
+		return nil
+	}, 50)
+	agent.Hooks().Register(HookPreCompact, "track-compact", func(ctx context.Context, d *HookData) error {
+		order = append(order, "pre_compact")
+		return nil
+	})
+
+	agent.Run(context.Background(), "hello")
+
+	// before_context_build must appear before pre_compact (if compaction fires)
+	for i, name := range order {
+		if name == "pre_compact" {
+			for j := 0; j < i; j++ {
+				if order[j] == "before_context_build" {
+					return // correct order
+				}
+			}
+			t.Error("pre_compact fired before before_context_build — compression must run first")
+		}
+	}
+}

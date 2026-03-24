@@ -125,6 +125,16 @@ func (a *Agent) runLoop(ctx context.Context, userMessage string, ch chan<- Agent
 		}
 		messages = sanitizeMessages(messages)
 
+		// Compression hooks fire first (squeeze before compaction)
+		ctxData := &HookData{AgentID: "main", Messages: messages}
+		a.hooks.Fire(ctx, HookBeforeContextBuild, ctxData)
+		emit(AgentEvent{Type: EventStatusUpdate, StatusHook: "before_context_build"})
+		messages = ctxData.Messages
+		afterCtx := &HookData{AgentID: "main", Messages: messages}
+		a.hooks.Fire(ctx, HookAfterContextBuild, afterCtx)
+		messages = afterCtx.Messages
+
+		// Compaction: emergency fallback if still over threshold after compression
 		if a.compaction.Mode != CompactionOff && NeedsCompaction(messages, a.compaction, a.lastInputTokens) {
 			preCount := len(messages)
 			a.hooks.Fire(ctx, HookPreCompact, &HookData{
@@ -159,14 +169,6 @@ func (a *Agent) runLoop(ctx context.Context, userMessage string, ch chan<- Agent
 			})
 			emit(AgentEvent{Type: EventStatusUpdate, StatusHook: "post_compact"})
 		}
-
-		ctxData := &HookData{AgentID: "main", Messages: messages}
-		a.hooks.Fire(ctx, HookBeforeContextBuild, ctxData)
-		emit(AgentEvent{Type: EventStatusUpdate, StatusHook: "before_context_build"})
-		messages = ctxData.Messages
-		afterCtx := &HookData{AgentID: "main", Messages: messages}
-		a.hooks.Fire(ctx, HookAfterContextBuild, afterCtx)
-		messages = afterCtx.Messages
 
 		tokenEst := EstimateTokens(messages)
 		a.hooks.Fire(ctx, HookOnTokenCount, &HookData{AgentID: "main", TokensIn: tokenEst, Meta: map[string]any{"estimated": true}})
