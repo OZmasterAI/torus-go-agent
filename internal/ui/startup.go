@@ -836,11 +836,22 @@ var (
 			Foreground(lipgloss.Color("242")).
 			Italic(true)
 
-	// Torus character luminance styles (neon orange gradient).
-	torusDimStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("#993300")) // dim ember
-	torusMidStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("#cc4400")) // warm orange
-	torusBrightStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#ff4d01")) // neon orange
-	torusMaxStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("#ff6600")) // hot orange
+	// Torus depth gradient — expanded orange palette for 3D illusion.
+	// Indexed by continuous brightness value (0.0–1.0+).
+	torusDepthGradient = []lipgloss.Color{
+		lipgloss.Color("#331100"), // deep shadow
+		lipgloss.Color("#552200"), // dark ember
+		lipgloss.Color("#7a2e00"), // brown-orange
+		lipgloss.Color("#993300"), // dim ember
+		lipgloss.Color("#bb3a00"), // warm dark
+		lipgloss.Color("#cc4400"), // warm orange
+		lipgloss.Color("#dd5500"), // medium orange
+		lipgloss.Color("#ff4d01"), // neon orange
+		lipgloss.Color("#ff6600"), // hot orange
+		lipgloss.Color("#ff8800"), // bright orange
+		lipgloss.Color("#ffaa00"), // gold
+		lipgloss.Color("#ffcc44"), // bright gold highlight
+	}
 
 	textInputStyle = lipgloss.NewStyle().
 			Foreground(colorBrightAmber).
@@ -1760,7 +1771,7 @@ func (m setupModel) View() string {
 	if m.showSplash {
 		torusPanel := lipgloss.PlaceHorizontal(m.width, lipgloss.Center, m.torusFrame)
 		b.WriteString(torusPanel)
-		subtitle := torusBrightStyle.Render("press enter to continue")
+		subtitle := lipgloss.NewStyle().Foreground(lipgloss.Color("#ff4d01")).Render("press enter to continue")
 		b.WriteString(lipgloss.PlaceHorizontal(m.width, lipgloss.Center, subtitle))
 		return b.String()
 	}
@@ -2231,19 +2242,15 @@ func renderParticleTorus(particles []torusParticle, _ float64, t float64) string
 				style := lipgloss.NewStyle().Foreground(titleGradient[gIdx]).Bold(true)
 				sb.WriteString(style.Render(string(cell.ch)))
 			} else if cell.settled {
-				// Settled torus particle — orange gradient
-				switch cell.ch {
-				case '.':
-					sb.WriteString(torusDimStyle.Render(string(cell.ch)))
-				case ':':
-					sb.WriteString(torusMidStyle.Render(string(cell.ch)))
-				case '~':
-					sb.WriteString(torusBrightStyle.Render(string(cell.ch)))
-				case '*':
-					sb.WriteString(torusMaxStyle.Render(string(cell.ch)))
-				default:
-					sb.WriteString(torusMaxStyle.Render(string(cell.ch)))
+				// Settled torus particle — continuous depth gradient
+				gi := int(cell.brightness * float64(len(torusDepthGradient)-1))
+				if gi < 0 {
+					gi = 0
+				} else if gi >= len(torusDepthGradient) {
+					gi = len(torusDepthGradient) - 1
 				}
+				style := lipgloss.NewStyle().Foreground(torusDepthGradient[gi])
+				sb.WriteString(style.Render(string(cell.ch)))
 			} else {
 				// Flowing particle — colorful palette
 				idx := cell.colorI % len(flowParticleStyles)
