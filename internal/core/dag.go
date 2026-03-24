@@ -174,7 +174,9 @@ func scanNode(row *sql.Row) (*Node, error) {
 	if pid.Valid {
 		n.ParentID = pid.String
 	}
-	json.Unmarshal([]byte(cj), &n.Content)
+	if err := json.Unmarshal([]byte(cj), &n.Content); err != nil {
+		return nil, fmt.Errorf("unmarshal node content: %w", err)
+	}
 	return &n, nil
 }
 
@@ -254,8 +256,14 @@ func (d *DAG) RemoveNode(nodeID string) error {
 	if err != nil {
 		return fmt.Errorf("begin tx: %w", err)
 	}
-	tx.Exec("DELETE FROM nodes WHERE id = ?", nodeID)
-	tx.Exec("UPDATE branches SET head_node_id = ? WHERE id = ?", newHead, d.branchID)
+	if _, err := tx.Exec("DELETE FROM nodes WHERE id = ?", nodeID); err != nil {
+		tx.Rollback()
+		return fmt.Errorf("remove node: delete: %w", err)
+	}
+	if _, err := tx.Exec("UPDATE branches SET head_node_id = ? WHERE id = ?", newHead, d.branchID); err != nil {
+		tx.Rollback()
+		return fmt.Errorf("remove node: update head: %w", err)
+	}
 	if err := tx.Commit(); err != nil {
 		tx.Rollback()
 		return fmt.Errorf("remove node: %w", err)
@@ -321,7 +329,9 @@ func (d *DAG) ListBranches() ([]BranchInfo, error) {
 	var bs []BranchInfo
 	for rows.Next() {
 		var b BranchInfo
-		rows.Scan(&b.ID, &b.Name, &b.HeadNodeID, &b.ForkedFrom)
+		if err := rows.Scan(&b.ID, &b.Name, &b.HeadNodeID, &b.ForkedFrom); err != nil {
+			return nil, err
+		}
 		bs = append(bs, b)
 	}
 	return bs, nil
@@ -366,7 +376,9 @@ func (d *DAG) SearchAll(query string, maxResults int) (string, error) {
 	var results []string
 	for rows.Next() {
 		var role, content, branch string
-		rows.Scan(&role, &content, &branch)
+		if err := rows.Scan(&role, &content, &branch); err != nil {
+			return "", err
+		}
 		// Truncate long content
 		if len(content) > 300 {
 			content = content[:300] + "..."
@@ -419,7 +431,9 @@ func (d *DAG) GetAliases(nodeID string) ([]string, error) {
 	var aliases []string
 	for rows.Next() {
 		var a string
-		rows.Scan(&a)
+		if err := rows.Scan(&a); err != nil {
+			return nil, err
+		}
 		aliases = append(aliases, a)
 	}
 	return aliases, nil
@@ -475,7 +489,9 @@ func (d *DAG) GetSubtree(nodeID string) ([]Node, error) {
 		if pid.Valid {
 			n.ParentID = pid.String
 		}
-		json.Unmarshal([]byte(cj), &n.Content)
+		if err := json.Unmarshal([]byte(cj), &n.Content); err != nil {
+			return nil, fmt.Errorf("unmarshal node content: %w", err)
+		}
 		nodes = append(nodes, n)
 	}
 	return nodes, nil
