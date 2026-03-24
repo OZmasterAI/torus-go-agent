@@ -946,6 +946,9 @@ type setupModel struct {
 	width, height int
 	ready         bool
 
+	// Splash screen
+	showSplash bool
+
 	// Torus animation
 	torusA, torusB float64
 	torusFrame     string
@@ -1013,7 +1016,7 @@ func newSetupModel() setupModel {
 		}
 	}
 
-	m := setupModel{groups: groups}
+	m := setupModel{groups: groups, showSplash: true}
 	m.particles = initTorusParticles()
 	m.torusFrame = renderParticleTorus(m.particles, m.torusB, m.torusA)
 	return m
@@ -1049,6 +1052,18 @@ func (m setupModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m setupModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	// ── Splash screen: enter to continue ─────────────────────────
+	if m.showSplash {
+		switch msg.String() {
+		case "enter", " ":
+			m.showSplash = false
+		case "ctrl+c", "q":
+			m.done = true
+			return m, tea.Quit
+		}
+		return m, nil
+	}
+
 	// ── Config editing mode (phase 5 inline edit) ────────────────
 	if m.editingConfig {
 		return m.handleConfigEdit(msg)
@@ -1741,20 +1756,25 @@ func (m setupModel) View() string {
 
 	var b strings.Builder
 
-	// Title is overlaid inside the torus animation
+	// ── Splash vs Setup ────────────────────────────────────────────
+	if m.showSplash {
+		torusPanel := lipgloss.PlaceHorizontal(m.width, lipgloss.Center, m.torusFrame)
+		b.WriteString(torusPanel)
+		subtitle := torusBrightStyle.Render("press enter to continue")
+		b.WriteString(lipgloss.PlaceHorizontal(m.width, lipgloss.Center, subtitle))
+		return b.String()
+	}
 
-	// ── Menu panel ────────────────────────────────────────────────
+	// ── Setup menu page ─────────────────────────────────────────────
+	titleRendered := renderAnimatedTitle(asciiTitle, m.torusA)
+	titleBlock := lipgloss.PlaceHorizontal(m.width, lipgloss.Center, titleRendered)
+	b.WriteString(titleBlock)
+	b.WriteString("\n\n")
+
 	menuContent := m.renderMenu()
 	menuPanel := menuPanelStyle.Render(menuContent)
-
-	// torus above menu
-	torusPanel := lipgloss.PlaceHorizontal(m.width, lipgloss.Center, m.torusFrame)
-	b.WriteString(torusPanel)
-	b.WriteString("\n")
 	centered := lipgloss.PlaceHorizontal(m.width, lipgloss.Center, menuPanel)
 	b.WriteString(centered)
-
-	b.WriteString("\n\n")
 
 	// ── Footer hints ──────────────────────────────────────────────
 	var hint string
@@ -2166,7 +2186,7 @@ func renderParticleTorus(particles []torusParticle, _ float64, t float64) string
 			gx := offsetX + ci
 			if gy >= 0 && gy < torusHeight && gx >= 0 && gx < torusWidth {
 				// Wave effect: shift color index by column + phase
-				gIdx := (ci + int(t*3*float64(gradLen))) % gradLen
+				gIdx := (ci + int(t*10)) % gradLen
 				if gIdx < 0 {
 					gIdx += gradLen
 				}
@@ -2179,6 +2199,24 @@ func renderParticleTorus(particles []torusParticle, _ float64, t float64) string
 		}
 	}
 
+
+	// Stamp pulsing "press enter" subtitle below the torus
+	pressEnter := "▸ press enter to continue ◂"
+	peX := (torusWidth - len([]rune(pressEnter))) / 2
+	peY := torusHeight - 4
+	gradLen = len(titleGradient)
+	pulseIdx := int(t*8) % gradLen
+	if pulseIdx < 0 { pulseIdx += gradLen }
+	for ci, ch := range pressEnter {
+		gx := peX + ci
+		if gx >= 0 && gx < torusWidth && peY >= 0 && peY < torusHeight {
+			grid[peY][gx] = torusCell{
+				ch:     ch,
+				depth:  math.Inf(1),
+				colorI: -(pulseIdx + 1),
+			}
+		}
+	}
 	// Render grid to string with colors
 	var sb strings.Builder
 	for _, row := range grid {
