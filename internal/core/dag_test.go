@@ -761,3 +761,44 @@ func TestGetSubtree(tt *testing.T) {
 		tt.Error("subtree should not include the root node itself")
 	}
 }
+
+// ---- Fork ----
+
+func TestFork_IndependentBranch(tt *testing.T) {
+	d := newTestDAG(tt)
+
+	// Add a node on main branch
+	mainNodeID, _ := d.AddNode("", "user", textContent("hello"), "", "", 0)
+
+	// Create a sub-branch and fork
+	subBranchID, err := d.Branch(mainNodeID, "sub")
+	if err != nil {
+		tt.Fatalf("Branch: %v", err)
+	}
+
+	// Fork shares DB but has its own branchID
+	forked := d.Fork(subBranchID)
+
+	// Parent DAG is now on sub branch (Branch switches it); switch back
+	d.SwitchBranch(d.CurrentBranchID()) // stays on sub, that's fine
+
+	// Forked DAG should be on sub branch
+	if forked.CurrentBranchID() != subBranchID {
+		tt.Errorf("forked branch = %s, want %s", forked.CurrentBranchID(), subBranchID)
+	}
+
+	// Append on forked DAG should not affect parent's branchID
+	originalBranch := d.CurrentBranchID()
+	forked.AddNode("", "assistant", textContent("world"), "", "", 0)
+
+	if d.CurrentBranchID() != originalBranch {
+		tt.Errorf("parent branchID changed: got %s, want %s", d.CurrentBranchID(), originalBranch)
+	}
+
+	// Both should see the same branches (shared DB)
+	parentBranches, _ := d.ListBranches()
+	forkedBranches, _ := forked.ListBranches()
+	if len(parentBranches) != len(forkedBranches) {
+		tt.Errorf("branch counts differ: parent=%d, forked=%d", len(parentBranches), len(forkedBranches))
+	}
+}

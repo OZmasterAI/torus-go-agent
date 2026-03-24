@@ -41,6 +41,12 @@ type DAG struct {
 // SetHooks attaches a hook registry to the DAG for mutation events.
 func (d *DAG) SetHooks(h *HookRegistry) { d.hooks = h }
 
+// Fork returns a new DAG that shares the same database but has its own
+// independent branchID. Safe for concurrent use by sub-agents.
+func (d *DAG) Fork(branchID string) *DAG {
+	return &DAG{db: d.db, branchID: branchID, hooks: d.hooks}
+}
+
 func genID() string {
 	b := make([]byte, 8)
 	_, _ = rand.Read(b)

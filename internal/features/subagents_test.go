@@ -570,3 +570,33 @@ func TestSubAgentResult_ZeroValue(t *testing.T) {
 		t.Errorf("zero-value ToolCalls should be 0, got %d", result.ToolCalls)
 	}
 }
+
+func TestSpawnWithProvider_ParentBranchUnchanged(t *testing.T) {
+	m := NewSubAgentManager()
+	mp := &subagentMockProvider{
+		name:       "test",
+		modelID:    "test-model",
+		cannedText: "sub result",
+	}
+	parentAgent, dag := newSubagentTestAgent(t, mp)
+	parentBranch := dag.CurrentBranchID()
+
+	id, err := m.SpawnWithProvider(parentAgent, mp, "system prompt", SubAgentConfig{
+		Task:      "test task",
+		AgentType: "builder",
+	})
+	if err != nil {
+		t.Fatalf("SpawnWithProvider failed: %v", err)
+	}
+
+	// Wait for sub-agent to complete
+	res := m.Wait(id)
+	if res.Error != nil {
+		t.Fatalf("sub-agent error: %v", res.Error)
+	}
+
+	// Parent DAG branch should be unchanged after sub-agent ran
+	if dag.CurrentBranchID() != parentBranch {
+		t.Errorf("parent branchID changed: got %s, want %s", dag.CurrentBranchID(), parentBranch)
+	}
+}

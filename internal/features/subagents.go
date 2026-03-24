@@ -83,22 +83,17 @@ func (m *SubAgentManager) SpawnWithProvider(
 		return "", fmt.Errorf("subagents: get parent head: %w", err)
 	}
 
+	// Save parent branch, create sub-branch (Branch switches branchID), then restore.
+	parentBranchID := parentDAG.CurrentBranchID()
 	branchName := fmt.Sprintf("subagent_%s", id)
 	subBranchID, err := parentDAG.Branch(parentHead, branchName)
 	if err != nil {
 		return "", fmt.Errorf("subagents: create branch: %w", err)
 	}
+	_ = parentDAG.SwitchBranch(parentBranchID)
 
-	// Restore parent to its pre-Branch() branch.
-	branches, listErr := parentDAG.ListBranches()
-	if listErr == nil {
-		for _, b := range branches {
-			if b.ID != subBranchID && b.HeadNodeID == parentHead {
-				_ = parentDAG.SwitchBranch(b.ID)
-				break
-			}
-		}
-	}
+	// Fork an independent DAG for the sub-agent (shares DB, own branchID).
+	subDAG := parentDAG.Fork(subBranchID)
 
 	state := &subAgentState{result: make(chan *SubAgentResult, 1)}
 	m.running.Store(id, state)
@@ -124,13 +119,6 @@ func (m *SubAgentManager) SpawnWithProvider(
 			Meta:    map[string]any{"agent_type": cfg.AgentType, "task": cfg.Task, "branch": subBranchID},
 		})
 
-		// Switch the shared DAG to the sub-branch.
-		if err := parentDAG.SwitchBranch(subBranchID); err != nil {
-			res := &SubAgentResult{Error: fmt.Errorf("subagents: switch branch: %w", err), Duration: time.Since(start)}
-			m.finalize(id, state, res)
-			return
-		}
-
 		// Count tool calls.
 		toolCallCount := 0
 		hooks := core.NewHookRegistry()
@@ -146,7 +134,7 @@ func (m *SubAgentManager) SpawnWithProvider(
 			MaxTurns:     maxTurns,
 		}
 
-		agent := core.NewAgent(subAgentCfg, provider, hooks, parentDAG)
+		agent := core.NewAgent(subAgentCfg, provider, hooks, subDAG)
 
 		text, runErr := agent.Run(context.Background(), cfg.Task)
 
