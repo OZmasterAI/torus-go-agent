@@ -60,9 +60,6 @@ func defaultCompactionConfig(cfg CompactionConfig) CompactionConfig {
 	return cfg
 }
 
-// estimateTokens is an alias for EstimateTokens (tokenizer.go).
-// Kept as a package-private shorthand used by context.go and compression.go.
-var estimateTokens = EstimateTokens
 
 // NeedsCompaction returns true when compaction should trigger based on the
 // configured trigger mode: "tokens" (default), "messages", or "both".
@@ -85,7 +82,7 @@ func NeedsCompaction(messages []t.Message, cfg CompactionConfig, actualInputToke
 	if len(actualInputTokens) > 0 && actualInputTokens[0] > 0 {
 		tokens = actualInputTokens[0]
 	} else {
-		tokens = estimateTokens(messages)
+		tokens = EstimateTokens(messages)
 	}
 	limit := cfg.ContextWindow * cfg.Threshold / 100
 	tokenHit = tokens >= limit
@@ -330,7 +327,7 @@ func CompactDAG(dag *DAG, cfg CompactionConfig, summarize func(string) (string, 
 		Type: "text",
 		Text: summaryText,
 	}}
-	summaryNodeID, err := dag.AddNode(rootNode.ID, t.RoleAssistant, summaryContent, "", "", estimateTokens([]t.Message{{Role: t.RoleAssistant, Content: summaryContent}}))
+	summaryNodeID, err := dag.AddNode(rootNode.ID, t.RoleAssistant, summaryContent, "", "", EstimateTokens([]t.Message{{Role: t.RoleAssistant, Content: summaryContent}}))
 	if err != nil {
 		return fmt.Errorf("compactDAG add summary node: %w", err)
 	}
@@ -339,7 +336,7 @@ func CompactDAG(dag *DAG, cfg CompactionConfig, summarize func(string) (string, 
 	tail := messages[len(messages)-keepN:]
 	parentID := summaryNodeID
 	for _, msg := range tail {
-		nodeID, err := dag.AddNode(parentID, msg.Role, msg.Content, "", "", estimateTokens([]t.Message{msg}))
+		nodeID, err := dag.AddNode(parentID, msg.Role, msg.Content, "", "", EstimateTokens([]t.Message{msg}))
 		if err != nil {
 			return fmt.Errorf("compactDAG re-add tail node: %w", err)
 		}

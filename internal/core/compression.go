@@ -361,7 +361,7 @@ func applyZoneBudget(messages []t.Message, budget zoneBudget) []t.Message {
 	}
 
 	// Current message (last) is always kept — subtract its cost from history budget
-	currentTokens := estimateTokens(messages[n-1:])
+	currentTokens := EstimateTokens(messages[n-1:])
 	historyBudget -= currentTokens
 	if historyBudget < 0 {
 		historyBudget = 0
@@ -372,7 +372,7 @@ func applyZoneBudget(messages []t.Message, budget zoneBudget) []t.Message {
 	historyStart := n - 1 // start with just the current message
 	historyTokens := 0
 	for i := n - 2; i >= 0; i-- {
-		msgTokens := estimateTokens(messages[i : i+1])
+		msgTokens := EstimateTokens(messages[i : i+1])
 		if historyTokens+msgTokens > historyBudget {
 			break
 		}
@@ -386,10 +386,10 @@ func applyZoneBudget(messages []t.Message, budget zoneBudget) []t.Message {
 	archiveTokens := 0
 	if historyStart > 0 {
 		archive = append(archive, messages[0])
-		archiveTokens += estimateTokens(messages[0:1])
+		archiveTokens += EstimateTokens(messages[0:1])
 	}
 	for i := 1; i < historyStart; i++ {
-		msgTokens := estimateTokens(messages[i : i+1])
+		msgTokens := EstimateTokens(messages[i : i+1])
 		if archiveTokens+msgTokens > archiveBudget {
 			break
 		}
@@ -457,7 +457,7 @@ func ApplyZoneBudgetV2(messages []t.Message, budget ZoneBudgetV2, activeFiles []
 	zone2Budget := usable * budget.ActiveOpsPct / 100
 
 	// --- Zone 1: system prompt (messages[0]) ---
-	zone1Tokens := estimateTokens(messages[0:1])
+	zone1Tokens := EstimateTokens(messages[0:1])
 	zone1Unused := zone1Budget - zone1Tokens
 	if zone1Unused < 0 {
 		zone1Unused = 0
@@ -485,7 +485,7 @@ func ApplyZoneBudgetV2(messages []t.Message, budget ZoneBudgetV2, activeFiles []
 
 	for i := n - 1; i >= 1; i-- {
 		msg := messages[i]
-		msgTokens := estimateTokens(messages[i : i+1])
+		msgTokens := EstimateTokens(messages[i : i+1])
 
 		// Detect operation boundary: a user message with text starts a new op
 		isOpStart := msg.Role == t.RoleUser && hasTextContent(msg)
@@ -533,7 +533,7 @@ func ApplyZoneBudgetV2(messages []t.Message, budget ZoneBudgetV2, activeFiles []
 		// Recalculate zone2Tokens from zone2Start
 		zone2Tokens = 0
 		for j := zone2Start; j < n; j++ {
-			zone2Tokens += estimateTokens(messages[j : j+1])
+			zone2Tokens += EstimateTokens(messages[j : j+1])
 		}
 	}
 
