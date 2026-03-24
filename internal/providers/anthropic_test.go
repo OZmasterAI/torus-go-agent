@@ -101,16 +101,16 @@ func TestSetHeadersWithOAuthToken(t *testing.T) {
 	if beta == "" {
 		t.Fatal("anthropic-beta header should be set for OAuth")
 	}
-	if !contains(beta, "claude-code-20250219") {
-		t.Fatalf("anthropic-beta = %q, should contain 'claude-code-20250219'", beta)
+	if !contains(beta, "files-api-2025-04-14") {
+		t.Fatalf("anthropic-beta = %q, should contain 'files-api-2025-04-14'", beta)
 	}
 	if !contains(beta, "oauth-2025-04-20") {
 		t.Fatalf("anthropic-beta = %q, should contain 'oauth-2025-04-20'", beta)
 	}
 
 	// Check user-agent is set for OAuth
-	if ua := req.Header.Get("user-agent"); ua != "claude-cli/1.0.0" {
-		t.Fatalf("user-agent = %q, want %q", ua, "claude-cli/1.0.0")
+	if ua := req.Header.Get("user-agent"); ua != "claude-cli/2.1.78" {
+		t.Fatalf("user-agent = %q, want %q", ua, "claude-cli/2.1.78")
 	}
 
 	// Check x-app is set for OAuth
