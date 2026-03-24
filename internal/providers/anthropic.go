@@ -130,22 +130,13 @@ type anthropicUsage struct {
 	CacheReadInputTokens     int `json:"cache_read_input_tokens,omitempty"`
 }
 
-// Complete sends a non-streaming request to the Anthropic Messages API.
-func (p *AnthropicProvider) Complete(ctx context.Context, systemPrompt string, messages []t.Message, tools []t.Tool, maxTokens int) (*t.AssistantMessage, error) {
-	// Cap maxTokens per model (Sonnet: 64k, Opus: 32k, Haiku: 8k)
-	if maxTokens > 64000 {
-		maxTokens = 64000
-	}
-	if maxTokens <= 0 {
-		maxTokens = 8192
-	}
-	// Convert messages
+// buildAnthropicMessages converts our message types to Anthropic-format messages.
+func buildAnthropicMessages(messages []t.Message) []anthropicMsg {
 	var apiMsgs []anthropicMsg
 	for _, m := range messages {
 		if m.Role == t.RoleSystem {
 			continue
 		}
-		// Tool results: Anthropic wants role:"user" with tool_result content blocks
 		if m.Role == t.RoleTool {
 			var results []map[string]any
 			for _, b := range m.Content {
@@ -177,18 +168,24 @@ func (p *AnthropicProvider) Complete(ctx context.Context, systemPrompt string, m
 			Content: content,
 		})
 	}
+	return apiMsgs
+}
 
-	// Convert tools
+// buildAnthropicTools converts our tool types to Anthropic-format tool declarations.
+func buildAnthropicTools(tools []t.Tool) []anthropicTool {
 	var apiTools []anthropicTool
-	for _, t := range tools {
+	for _, tl := range tools {
 		apiTools = append(apiTools, anthropicTool{
-			Name:        t.Name,
-			Description: t.Description,
-			InputSchema: t.InputSchema,
+			Name:        tl.Name,
+			Description: tl.Description,
+			InputSchema: tl.InputSchema,
 		})
 	}
+	return apiTools
+}
 
-	// Build system prompt — OAuth requires Claude Code identity prefix
+// buildAnthropicSystem builds the system prompt with OAuth identity prefix and cache control.
+func (p *AnthropicProvider) buildAnthropicSystem(systemPrompt string) any {
 	var systemBlocks []systemBlock
 	if IsOAuthToken(p.APIKey) {
 		systemBlocks = append(systemBlocks, systemBlock{
@@ -204,12 +201,14 @@ func (p *AnthropicProvider) Complete(ctx context.Context, systemPrompt string, m
 			CacheControl: &cacheControl{Type: "ephemeral"},
 		})
 	}
-	var system any
 	if len(systemBlocks) > 0 {
-		system = systemBlocks
+		return systemBlocks
 	}
+	return nil
+}
 
-	// Prompt caching: mark last 2 messages with cache_control (max 4 total; system uses up to 2)
+// applyCacheControl marks the last 2 messages with cache_control for prompt caching.
+func applyCacheControl(apiMsgs []anthropicMsg) {
 	cacheStart := len(apiMsgs) - 2
 	if cacheStart < 0 {
 		cacheStart = 0
@@ -222,13 +221,26 @@ func (p *AnthropicProvider) Complete(ctx context.Context, systemPrompt string, m
 			}}
 		}
 	}
+}
+
+// Complete sends a non-streaming request to the Anthropic Messages API.
+func (p *AnthropicProvider) Complete(ctx context.Context, systemPrompt string, messages []t.Message, tools []t.Tool, maxTokens int) (*t.AssistantMessage, error) {
+	if maxTokens > 64000 {
+		maxTokens = 64000
+	}
+	if maxTokens <= 0 {
+		maxTokens = 8192
+	}
+
+	apiMsgs := buildAnthropicMessages(messages)
+	applyCacheControl(apiMsgs)
 
 	req := anthropicRequest{
 		Model:     p.Model,
 		MaxTokens: maxTokens,
-		System:    system,
+		System:    p.buildAnthropicSystem(systemPrompt),
 		Messages:  apiMsgs,
-		Tools:     apiTools,
+		Tools:     buildAnthropicTools(tools),
 	}
 	if p.ThinkingBudget > 0 {
 		req.Thinking = &anthropicThinking{Type: "enabled", BudgetTokens: p.ThinkingBudget}
@@ -368,87 +380,15 @@ func (p *AnthropicProvider) StreamComplete(ctx context.Context, systemPrompt str
 		maxTokens = 8192
 	}
 
-	// Convert messages (same logic as Complete)
-	var apiMsgs []anthropicMsg
-	for _, m := range messages {
-		if m.Role == t.RoleSystem {
-			continue
-		}
-		if m.Role == t.RoleTool {
-			var results []map[string]any
-			for _, b := range m.Content {
-				if b.Type == "tool_result" {
-					tr := map[string]any{
-						"type":        "tool_result",
-						"tool_use_id": b.ToolUseID,
-						"content":     b.Content,
-					}
-					if b.IsError {
-						tr["is_error"] = true
-					}
-					results = append(results, tr)
-				}
-			}
-			if len(results) > 0 {
-				apiMsgs = append(apiMsgs, anthropicMsg{Role: "user", Content: results})
-			}
-			continue
-		}
-		var content any
-		if len(m.Content) == 1 && m.Content[0].Type == "text" {
-			content = m.Content[0].Text
-		} else {
-			content = m.Content
-		}
-		apiMsgs = append(apiMsgs, anthropicMsg{Role: string(m.Role), Content: content})
-	}
-
-	var apiTools []anthropicTool
-	for _, tl := range tools {
-		apiTools = append(apiTools, anthropicTool{
-			Name:        tl.Name,
-			Description: tl.Description,
-			InputSchema: tl.InputSchema,
-		})
-	}
-
-	var systemBlocks []systemBlock
-	if IsOAuthToken(p.APIKey) {
-		systemBlocks = append(systemBlocks, systemBlock{
-			Type: "text", Text: "You are Claude Code, Anthropic's official CLI for Claude.",
-			CacheControl: &cacheControl{Type: "ephemeral"},
-		})
-	}
-	if systemPrompt != "" {
-		systemBlocks = append(systemBlocks, systemBlock{
-			Type: "text", Text: systemPrompt,
-			CacheControl: &cacheControl{Type: "ephemeral"},
-		})
-	}
-	var system any
-	if len(systemBlocks) > 0 {
-		system = systemBlocks
-	}
-
-	cacheStart := len(apiMsgs) - 2
-	if cacheStart < 0 {
-		cacheStart = 0
-	}
-	for i := cacheStart; i < len(apiMsgs); i++ {
-		if textStr, ok := apiMsgs[i].Content.(string); ok {
-			apiMsgs[i].Content = []contentBlockWithCache{{
-				Type: "text", Text: textStr,
-				CacheControl: &cacheControl{Type: "ephemeral"},
-			}}
-		}
-	}
+	apiMsgs := buildAnthropicMessages(messages)
+	applyCacheControl(apiMsgs)
 
 	req := anthropicRequest{
 		Model:     p.Model,
 		MaxTokens: maxTokens,
-		System:    system,
+		System:    p.buildAnthropicSystem(systemPrompt),
 		Messages:  apiMsgs,
-		Tools:     apiTools,
+		Tools:     buildAnthropicTools(tools),
 		Stream:    true,
 	}
 	if p.ThinkingBudget > 0 {
