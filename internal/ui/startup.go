@@ -919,7 +919,7 @@ func renderAnimatedTitle(title string, phase float64) string {
 				continue
 			}
 			// Wave: shift color index by column + phase
-			idx := (col + int(phase*3)) % gradLen
+			idx := (col + int(phase*10)) % gradLen
 			if idx < 0 {
 				idx += gradLen
 			}
