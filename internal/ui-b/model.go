@@ -1,6 +1,8 @@
 package uib
 
 import (
+	"time"
+
 	tea "github.com/charmbracelet/bubbletea"
 
 	"torus_go_agent/internal/config"
@@ -31,6 +33,10 @@ type Model struct {
 	sidebar sidebarModel
 	status  statusModel
 
+	// Startup screen (shown before main chat when enabled).
+	startup      startupModel
+	startupPhase bool // true while the startup screen is active
+
 	// Dependencies.
 	agent     *core.Agent
 	modelName string
@@ -42,6 +48,11 @@ type Model struct {
 
 	// Streaming.
 	eventCh chan StreamEventMsg
+
+	// Session tracking.
+	sessionStart    time.Time // When the TUI was created (for elapsed time display).
+	turnCount       int       // Number of user submissions sent to the agent.
+	lastInputTokens int       // Input tokens from most recent agent run (for CTX%).
 
 	// Terminal.
 	width  int
@@ -75,7 +86,8 @@ func NewModel(agent *core.Agent, modelName string, cfg config.AgentConfig, skill
 		skills:    skills,
 		telemetry: tel,
 		subMgr:    sub,
-		mcpClient: mcp,
+		mcpClient:    mcp,
+		sessionStart: time.Now(),
 	}
 
 	// Load existing branch history from DAG.
@@ -89,6 +101,18 @@ func NewModel(agent *core.Agent, modelName string, cfg config.AgentConfig, skill
 		}
 	}
 
+	return m
+}
+
+// NewModelWithStartup creates a new Model that shows the startup screen first.
+// The startup screen will be shown before the main chat. When the user finishes
+// setup, the StartupDoneMsg is sent and the main chat begins.
+func NewModelWithStartup(agent *core.Agent, modelName string, cfg config.AgentConfig, skills *features.SkillRegistry, extras *TUIExtras) Model {
+	m := NewModel(agent, modelName, cfg, skills, extras)
+	su := newStartupModel()
+	su.savedConfig = &cfg
+	m.startup = su
+	m.startupPhase = true
 	return m
 }
 
@@ -113,12 +137,17 @@ func (m *Model) loadHistory() {
 		if text == "" {
 			continue
 		}
-		m.chat.messages = append(m.chat.messages, DisplayMsg{Role: node.Role, Text: text})
+		m.chat.messages = append(m.chat.messages, DisplayMsg{Role: node.Role, Text: text, Ts: time.UnixMilli(node.Timestamp)})
 	}
 }
 
 // Init satisfies tea.Model.
-func (m Model) Init() tea.Cmd { return nil }
+func (m Model) Init() tea.Cmd {
+	if m.startupPhase {
+		return startupTickCmd()
+	}
+	return nil
+}
 
 // chatDimensions returns the chat viewport size accounting for sidebar.
 func (m Model) chatDimensions() (int, int) {

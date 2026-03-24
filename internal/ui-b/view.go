@@ -4,10 +4,17 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
+
+	"torus_go_agent/internal/core"
 )
 
 // View renders the complete TUI.
 func (m Model) View() string {
+	// Startup phase renders the startup screen instead of the main chat.
+	if m.startupPhase {
+		return m.startup.View()
+	}
+
 	if !m.ready {
 		return "Loading...\n"
 	}
@@ -24,6 +31,10 @@ func (m Model) View() string {
 	// Chat viewport + optional sidebar.
 	chatView := m.chat.View()
 	if m.sidebar.show {
+		// Sync steering state from agent into sidebar sub-model.
+		if m.agent != nil {
+			m.sidebar.steerAggressive = m.agent.GetSteeringMode() == "aggressive"
+		}
 		sidebar := m.sidebar.View(m.chatHeight())
 		chatView = lipgloss.JoinHorizontal(lipgloss.Top, chatView, " ", sidebar)
 	}
@@ -55,14 +66,36 @@ func (m Model) View() string {
 	}
 
 	// Status bar.
-	sb.WriteString(m.status.renderStatusBar(
-		m.width,
-		m.modelName,
-		m.status.totalTokensIn,
-		m.status.totalTokensOut,
-		m.status.totalCost,
-		m.chat.viewport.AtBottom(),
-	))
+	data := StatusBarData{
+		Width:           m.width,
+		ModelName:       m.modelName,
+		TokIn:           m.status.totalTokensIn,
+		TokOut:          m.status.totalTokensOut,
+		Cost:            m.status.totalCost,
+		AtBottom:        m.chat.viewport.AtBottom(),
+		LastInputTokens: m.lastInputTokens,
+		ContextWindow:   m.agentCfg.ContextWindow,
+		TurnCount:       m.turnCount,
+		SessionStart:    m.sessionStart,
+		Processing:      m.status.processing,
+		Verbosity:       m.chat.thinking.Verbosity,
+		VerbosityLabel:  m.chat.thinking.VerbosityLabel(),
+	}
+
+	// Compute next-prompt cost estimate when idle and DAG head is available.
+	if !m.status.processing && m.agent != nil {
+		head, _ := m.agent.DAG().GetHead()
+		if head != "" {
+			msgs, _ := m.agent.DAG().PromptFrom(head)
+			preEst := core.EstimatePromptCost("", msgs, nil)
+			if m.input.Value() != "" {
+				preEst += core.EstimateTokensForText(m.input.Value())
+			}
+			data.NextEstimate = preEst
+		}
+	}
+
+	sb.WriteString(m.status.renderStatusBar(data))
 
 	return sb.String()
 }
