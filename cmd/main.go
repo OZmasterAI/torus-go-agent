@@ -71,6 +71,11 @@ func main() {
 	if setup.Provider != "" {
 		cfg.Agent.Provider = setup.Provider
 		cfg.Agent.Model = setup.Model
+		// Persist so user doesn't re-pick next run
+		cfgPath := filepath.Join(cfgDir, "config.json")
+		if err := config.SaveConfig(cfgPath, cfg); err != nil {
+			log.Printf("[main] warning: could not save config: %v", err)
+		}
 	}
 	// Require provider and model
 	if cfg.Agent.Provider == "" || cfg.Agent.Model == "" {

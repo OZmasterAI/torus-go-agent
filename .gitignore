@@ -1,4 +1,8 @@
 torus_go_agent
+main
+tmp/
+PRPs/
+docs/plans/
 data/
 .env
 *.db

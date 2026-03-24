@@ -93,11 +93,24 @@ func DefaultAgentConfig() AgentConfig {
 	}
 }
 
+// SaveConfig writes the config to a JSON file.
+func SaveConfig(path string, cfg *Config) error {
+	data, err := json.MarshalIndent(cfg, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(path, append(data, '\n'), 0644)
+}
+
 // LoadConfig reads and parses a JSON config file with env var overrides.
 // Defaults are pre-filled so JSON only overwrites fields it contains.
+// Returns defaults if the file does not exist.
 func LoadConfig(path string) (*Config, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
+		if os.IsNotExist(err) {
+			return &Config{Agent: DefaultAgentConfig()}, nil
+		}
 		return nil, err
 	}
 	cfg := Config{Agent: DefaultAgentConfig()}

@@ -217,11 +217,43 @@ func TestLoadConfig_EnvOverride_TelegramToken(t *testing.T) {
 	}
 }
 
-// TestLoadConfig_FileNotFound tests error handling for missing config file.
+// TestLoadConfig_FileNotFound returns defaults when config file is missing.
 func TestLoadConfig_FileNotFound(t *testing.T) {
-	_, err := LoadConfig("/nonexistent/path/config.json")
-	if err == nil {
-		t.Errorf("LoadConfig should fail for missing file")
+	cfg, err := LoadConfig("/nonexistent/path/config.json")
+	if err != nil {
+		t.Fatalf("LoadConfig should return defaults for missing file, got error: %v", err)
+	}
+	defaults := DefaultAgentConfig()
+	if cfg.Agent.MaxTokens != defaults.MaxTokens {
+		t.Errorf("MaxTokens = %d, want default %d", cfg.Agent.MaxTokens, defaults.MaxTokens)
+	}
+	if cfg.Agent.Compaction != defaults.Compaction {
+		t.Errorf("Compaction = %q, want default %q", cfg.Agent.Compaction, defaults.Compaction)
+	}
+}
+
+// TestSaveConfig_RoundTrip tests that SaveConfig writes a file LoadConfig can read back.
+func TestSaveConfig_RoundTrip(t *testing.T) {
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "config.json")
+	original := &Config{Agent: DefaultAgentConfig()}
+	original.Agent.Provider = "openrouter"
+	original.Agent.Model = "claude-sonnet-4-6"
+	if err := SaveConfig(path, original); err != nil {
+		t.Fatalf("SaveConfig failed: %v", err)
+	}
+	loaded, err := LoadConfig(path)
+	if err != nil {
+		t.Fatalf("LoadConfig failed: %v", err)
+	}
+	if loaded.Agent.Provider != "openrouter" {
+		t.Errorf("Provider = %q, want %q", loaded.Agent.Provider, "openrouter")
+	}
+	if loaded.Agent.Model != "claude-sonnet-4-6" {
+		t.Errorf("Model = %q, want %q", loaded.Agent.Model, "claude-sonnet-4-6")
+	}
+	if loaded.Agent.MaxTokens != original.Agent.MaxTokens {
+		t.Errorf("MaxTokens = %d, want %d", loaded.Agent.MaxTokens, original.Agent.MaxTokens)
 	}
 }
 
