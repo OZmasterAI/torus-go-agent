@@ -135,7 +135,9 @@ func main() {
 			if loginErr != nil {
 				log.Fatalf("OAuth failed: %v", loginErr)
 			}
-			_ = providers.SaveCredentials(creds)
+			if err := providers.SaveCredentials(creds); err != nil {
+				log.Printf("[oauth] warning: could not persist credentials: %v", err)
+			}
 			key = creds.Access
 			fmt.Println("Login successful.")
 		} else {

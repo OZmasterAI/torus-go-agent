@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"net/url"
 	"os"
@@ -61,7 +62,9 @@ func GetAnthropicKey() (string, error) {
 			return "", fmt.Errorf("token refresh failed: %w", err)
 		}
 		creds = refreshed
-		saveCredentials(creds)
+		if err := saveCredentials(creds); err != nil {
+			log.Printf("[oauth] warning: could not persist refreshed credentials: %v", err)
+		}
 	}
 	return creds.Access, nil
 }
