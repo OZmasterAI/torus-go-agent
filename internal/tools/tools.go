@@ -145,7 +145,9 @@ func editTool() t.Tool {
 			} else {
 				c = strings.Replace(c, old, nw, 1)
 			}
-			os.WriteFile(fp, []byte(c), 0644)
+			if err := os.WriteFile(fp, []byte(c), 0644); err != nil {
+				return &t.ToolResult{Content: "Error: " + err.Error(), IsError: true}, nil
+			}
 			return &t.ToolResult{Content: "Edited " + fp}, nil
 		},
 	}
