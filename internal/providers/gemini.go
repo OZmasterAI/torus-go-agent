@@ -69,13 +69,14 @@ func (p *GeminiProvider) ModelID() string { return p.Model }
 // generateURL builds the endpoint URL for a given action (generateContent or streamGenerateContent).
 func (p *GeminiProvider) generateURL(action string) string {
 	url := fmt.Sprintf("%s/%s%s:%s", p.baseURL, p.modelPrefix, p.Model, action)
-	if p.auth == geminiAuthAPIKey {
+	if action == "streamGenerateContent" {
+		if p.auth == geminiAuthAPIKey {
+			url += "?alt=sse&key=" + p.APIKey
+		} else {
+			url += "?alt=sse"
+		}
+	} else if p.auth == geminiAuthAPIKey {
 		url += "?key=" + p.APIKey
-	}
-	if action == "streamGenerateContent" && p.auth == geminiAuthAPIKey {
-		url = fmt.Sprintf("%s/%s%s:%s?alt=sse&key=%s", p.baseURL, p.modelPrefix, p.Model, action, p.APIKey)
-	} else if action == "streamGenerateContent" {
-		url += "?alt=sse"
 	}
 	return url
 }
