@@ -1,0 +1,30 @@
+{
+  "claude-opus-4-6": {
+    "contextWindow": 1000000,
+    "maxTokens": 128000
+  },
+  "claude-sonnet-4-6": {
+    "contextWindow": 1000000,
+    "maxTokens": 128000
+  },
+  "claude-haiku-4-5-20251001": {
+    "contextWindow": 200000,
+    "maxTokens": 64000
+  },
+  "minimax/minimax-m2.5:free": {
+    "contextWindow": 196608,
+    "maxTokens": 196608
+  },
+  "qwen/qwen3.5-122b-a10b": {
+    "contextWindow": 262144,
+    "maxTokens": 65536
+  },
+  "z-ai/glm4.7": {
+    "contextWindow": 202752,
+    "maxTokens": 65535
+  },
+  "z-ai/glm5": {
+    "contextWindow": 202752,
+    "maxTokens": 199000
+  }
+}
