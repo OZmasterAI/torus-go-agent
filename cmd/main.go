@@ -707,6 +707,9 @@ func makeProvider(providerName, apiKey, model string, agentCfg *config.AgentConf
 	case "anthropic":
 		p := providers.NewAnthropicProvider(apiKey, model)
 		if agentCfg != nil {
+			if agentCfg.BaseURL != "" {
+				p.BaseURL = agentCfg.BaseURL
+			}
 			if agentCfg.ThinkingBudget > 0 {
 				p.ThinkingBudget = agentCfg.ThinkingBudget
 			} else if agentCfg.Thinking != "" {
@@ -715,11 +718,23 @@ func makeProvider(providerName, apiKey, model string, agentCfg *config.AgentConf
 		}
 		return p
 	case "nvidia":
-		return providers.NewNvidiaProvider(apiKey, model)
+		p := providers.NewNvidiaProvider(apiKey, model)
+		if agentCfg != nil && agentCfg.BaseURL != "" {
+			p.BaseURL = agentCfg.BaseURL
+		}
+		return p
 	case "openai":
-		return providers.NewOpenAIProvider(apiKey, model)
+		p := providers.NewOpenAIProvider(apiKey, model)
+		if agentCfg != nil && agentCfg.BaseURL != "" {
+			p.BaseURL = agentCfg.BaseURL
+		}
+		return p
 	case "grok":
-		return providers.NewGrokProvider(apiKey, model)
+		p := providers.NewGrokProvider(apiKey, model)
+		if agentCfg != nil && agentCfg.BaseURL != "" {
+			p.BaseURL = agentCfg.BaseURL
+		}
+		return p
 	case "gemini":
 		return providers.NewGeminiProvider(apiKey, model)
 	case "azure":
@@ -735,6 +750,10 @@ func makeProvider(providerName, apiKey, model string, agentCfg *config.AgentConf
 		}
 		return providers.NewVertexAIProvider(apiKey, project, region, model)
 	default:
-		return providers.NewOpenRouterProvider(apiKey, model)
+		p := providers.NewOpenRouterProvider(apiKey, model)
+		if agentCfg != nil && agentCfg.BaseURL != "" {
+			p.BaseURL = agentCfg.BaseURL
+		}
+		return p
 	}
 }

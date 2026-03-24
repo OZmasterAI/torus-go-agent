@@ -41,6 +41,7 @@ type RoutingEntry struct {
 type AgentConfig struct {
 	Provider          string         `json:"provider"`
 	Model             string         `json:"model"`
+	BaseURL           string         `json:"baseURL,omitempty"`
 	Routing           []RoutingEntry `json:"routing,omitempty"`       // weighted multi-provider routing
 	FallbackOrder     []string       `json:"fallbackOrder,omitempty"` // "provider:model" keys in fallback order
 	MaxTokens         int    `json:"maxTokens"`     // max output tokens per response
