@@ -74,6 +74,12 @@ func (r *Router) SetFallbackOrder(keys []string) {
 	r.fallbackOrder = keys
 }
 
+// Name returns the active provider's name (satisfies types.Provider).
+func (r *Router) Name() string { return r.Active().Name() }
+
+// ModelID returns the active provider's model ID (satisfies types.Provider).
+func (r *Router) ModelID() string { return r.Active().ModelID() }
+
 // Active returns the current provider.
 func (r *Router) Active() t.Provider {
 	r.mu.RLock()

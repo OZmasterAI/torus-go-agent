@@ -335,7 +335,7 @@ func main() {
 		SmartRouting:      cfg.Agent.SmartRouting,
 		SmartRoutingModel: cfg.Agent.SmartRoutingModel,
 		PersistThinking:   cfg.Agent.PersistThinking,
-	}, prov, hooks, dag)
+	}, router, hooks, dag)
 
 	// Wire smart routing if configured
 	if cfg.Agent.SmartRouting && cfg.Agent.SmartRoutingModel != "" {
