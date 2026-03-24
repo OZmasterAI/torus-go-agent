@@ -197,6 +197,50 @@ func TestBuildModelPickerItems(t *testing.T) {
 	}
 }
 
+func TestInitTorusParticles(t *testing.T) {
+	particles := initTorusParticles()
+	if len(particles) != numTorusParticles {
+		t.Fatalf("expected %d particles, got %d", numTorusParticles, len(particles))
+	}
+	// All particles should start unsettled
+	for i, p := range particles {
+		if p.settled {
+			t.Errorf("particle %d should start unsettled", i)
+		}
+	}
+}
+
+func TestRenderParticleTorus(t *testing.T) {
+	particles := initTorusParticles()
+	frame := renderParticleTorus(particles, 0, 0)
+	if frame == "" {
+		t.Fatal("renderParticleTorus returned empty string")
+	}
+	lines := strings.Split(frame, "\n")
+	// Should produce at least torusHeight lines (trimmed trailing newlines may reduce by 1)
+	if len(lines) < torusHeight-1 {
+		t.Errorf("expected at least %d lines, got %d", torusHeight-1, len(lines))
+	}
+}
+
+func TestUpdateTorusParticles(t *testing.T) {
+	particles := initTorusParticles()
+	// Run several update cycles -- should not panic
+	for i := 0; i < 100; i++ {
+		updateTorusParticles(particles, float64(i)*0.032)
+	}
+	// After many updates, some particles should have settled
+	settled := 0
+	for _, p := range particles {
+		if p.settled {
+			settled++
+		}
+	}
+	if settled == 0 {
+		t.Error("after 100 updates, expected some settled particles")
+	}
+}
+
 func TestFormatProviderModel(t *testing.T) {
 	tests := []struct{ input, want string }{
 		{"anthropic:claude-haiku-4-5", "claude-haiku-4-5 (anthropic)"},

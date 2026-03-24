@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"math/rand"
 	"net/http"
 	"sort"
 	"strconv"
@@ -934,7 +935,7 @@ func renderAnimatedTitle(title string, phase float64) string {
 // tickMsg is declared in tui.go as `type tickMsg time.Time` (same package).
 
 func startupTickCmd() tea.Cmd {
-	return tea.Tick(50*time.Millisecond, func(t time.Time) tea.Msg {
+	return tea.Tick(time.Second/60, func(t time.Time) tea.Msg {
 		return tickMsg(t)
 	})
 }
@@ -948,6 +949,7 @@ type setupModel struct {
 	// Torus animation
 	torusA, torusB float64
 	torusFrame     string
+	particles      []torusParticle
 
 	// Menu phases:
 	// 0=main, 1=pick provider, 2=pick auth, 3=pick category (if any), 4=pick model,
@@ -1012,7 +1014,8 @@ func newSetupModel() setupModel {
 	}
 
 	m := setupModel{groups: groups}
-	m.torusFrame = renderTorus(m.torusA, m.torusB)
+	m.particles = initTorusParticles()
+	m.torusFrame = renderParticleTorus(m.particles, m.torusB, m.torusA)
 	return m
 }
 
@@ -1032,9 +1035,10 @@ func (m setupModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case tickMsg:
-		m.torusA += 0.04
+		m.torusA += 0.032
 		m.torusB += 0.02
-		m.torusFrame = renderTorus(m.torusA, m.torusB)
+		updateTorusParticles(m.particles, m.torusA)
+		m.torusFrame = renderParticleTorus(m.particles, m.torusB, m.torusA)
 		return m, startupTickCmd()
 
 	case tea.KeyMsg:
@@ -1737,34 +1741,18 @@ func (m setupModel) View() string {
 
 	var b strings.Builder
 
-	// ── Title block (animated neon gradient) ─────────────────────
-	titleRendered := renderAnimatedTitle(asciiTitle, m.torusA)
-	titleBlock := lipgloss.PlaceHorizontal(m.width, lipgloss.Center, titleRendered)
-	b.WriteString(titleBlock)
-	b.WriteString("\n\n")
+	// Title is overlaid inside the torus animation
 
 	// ── Menu panel ────────────────────────────────────────────────
 	menuContent := m.renderMenu()
 	menuPanel := menuPanelStyle.Render(menuContent)
 
-	// ── Layout: torus left, menu right (or menu only if narrow) ──
-	narrow := m.width < 80
-	if narrow {
-		// Center the menu panel only
-		centered := lipgloss.PlaceHorizontal(m.width, lipgloss.Center, menuPanel)
-		b.WriteString(centered)
-	} else {
-		// Color the torus frame
-		coloredTorus := colorTorus(m.torusFrame)
-
-		torusPanel := lipgloss.NewStyle().
-			Width(38).
-			Render(coloredTorus)
-
-		joined := lipgloss.JoinHorizontal(lipgloss.Top, torusPanel, "  ", menuPanel)
-		centered := lipgloss.PlaceHorizontal(m.width, lipgloss.Center, joined)
-		b.WriteString(centered)
-	}
+	// torus above menu
+	torusPanel := lipgloss.PlaceHorizontal(m.width, lipgloss.Center, m.torusFrame)
+	b.WriteString(torusPanel)
+	b.WriteString("\n")
+	centered := lipgloss.PlaceHorizontal(m.width, lipgloss.Center, menuPanel)
+	b.WriteString(centered)
 
 	b.WriteString("\n\n")
 
@@ -1929,101 +1917,298 @@ func (m setupModel) renderMenu() string {
 	return b.String()
 }
 
-// ── Torus rendering (horn torus from horntorus.com) ────────────────────────────
+// ── Particle-based torus rendering ─────────────────────────────────────────────
 
-func renderTorus(a, b float64) string {
-	const (
-		width  = 36
-		height = 18
+const torusWidth = 120
+const torusHeight = 50
+const numTorusParticles = 450
 
-		// Canonical donut parameters (a1k0n.net)
-		r1      = 1.0  // tube (minor) radius
-		r2      = 2.0  // torus (major) radius
-		k2      = 5.0  // distance from viewer
-		thetaSp = 0.03 // theta step — finer = denser
-		phiSp   = 0.01 // phi step — finer = denser
-	)
-	k1 := float64(width) * k2 * 3.0 / (8.0 * (r1 + r2))
+// flowParticleStyles for flowing (unsettled) particles — dim palette.
+var flowParticleStyles = []lipgloss.Style{
+	lipgloss.NewStyle().Foreground(lipgloss.Color("#552200")),
+	lipgloss.NewStyle().Foreground(lipgloss.Color("#663300")),
+	lipgloss.NewStyle().Foreground(lipgloss.Color("#774400")),
+	lipgloss.NewStyle().Foreground(lipgloss.Color("#885500")),
+	lipgloss.NewStyle().Foreground(lipgloss.Color("#996600")),
+	lipgloss.NewStyle().Foreground(lipgloss.Color("#aa7700")),
+}
 
-	output := make([][]byte, height)
-	zbuf := make([][]float64, height)
-	for i := range output {
-		output[i] = make([]byte, width)
-		zbuf[i] = make([]float64, width)
-		for j := range output[i] {
-			output[i][j] = ' '
+type torusParticle struct {
+	x, y, z       float64
+	speed         float64
+	phase         float64
+	flowDirection float64
+	targetAngle   float64
+	spiralRadius  float64
+	settled       bool
+	torusAngle    float64
+	torusProgress float64
+	brightness    float64
+}
+
+type torusVector3 struct {
+	x, y, z float64
+}
+
+func resetTorusParticle(p *torusParticle) {
+	angle := rand.Float64() * math.Pi * 2
+	radius := rand.Float64()*15 + 10
+	fromAbove := rand.Float64() > 0.5
+
+	p.x = math.Cos(angle) * radius
+	if fromAbove {
+		p.y = rand.Float64()*30 + 25
+	} else {
+		p.y = -(rand.Float64()*30 + 25)
+	}
+	p.z = math.Sin(angle) * radius
+
+	p.speed = rand.Float64()*0.3 + 0.2
+	p.phase = rand.Float64() * math.Pi * 2
+	if fromAbove {
+		p.flowDirection = -1
+	} else {
+		p.flowDirection = 1
+	}
+	p.targetAngle = angle
+	p.spiralRadius = radius * 0.9
+	p.settled = false
+	p.torusAngle = rand.Float64() * math.Pi * 2
+	p.torusProgress = 0
+	p.brightness = 0
+}
+
+func initTorusParticles() []torusParticle {
+	particles := make([]torusParticle, numTorusParticles)
+	for i := range particles {
+		resetTorusParticle(&particles[i])
+	}
+	return particles
+}
+
+func getTorusPosition(p *torusParticle, t float64) torusVector3 {
+	radius := 6.0
+	tube := 6.0
+
+	revolutionSpeed := t * 1.5
+	revolvedAngle := p.torusAngle + revolutionSpeed
+
+	overallRotation := t * 0.5
+
+	torusY := math.Sin(revolvedAngle) * tube
+	torusRadius := radius + math.Cos(revolvedAngle)*tube
+
+	return torusVector3{
+		x: math.Cos(p.torusProgress+overallRotation) * torusRadius,
+		y: torusY,
+		z: math.Sin(p.torusProgress+overallRotation) * torusRadius,
+	}
+}
+
+func updateTorusParticles(particles []torusParticle, t float64) {
+	for i := range particles {
+		p := &particles[i]
+		if !p.settled {
+			distanceToCenter := math.Abs(p.y)
+
+			if distanceToCenter < 20 {
+				spiralIntensity := 1 - (distanceToCenter / 20)
+				p.phase += 0.08
+
+				currentRadius := p.spiralRadius * (1 - spiralIntensity*0.85)
+				p.x = math.Cos(p.targetAngle+p.phase) * currentRadius
+				p.z = math.Sin(p.targetAngle+p.phase) * currentRadius
+				p.y += p.speed * p.flowDirection
+
+				p.brightness = math.Min(p.brightness+0.1, 1)
+			} else {
+				p.y += p.speed * p.flowDirection
+				p.brightness = math.Min(p.brightness+0.05, 0.6)
+			}
+
+			if distanceToCenter < 8 && rand.Float64() < 0.4 {
+				p.settled = true
+				p.torusProgress = rand.Float64() * math.Pi * 2
+			}
+
+			if math.Abs(p.y) > 50 {
+				resetTorusParticle(p)
+			}
+		} else {
+			p.phase += 0.02
+			pos := getTorusPosition(p, t)
+
+			p.x += (pos.x - p.x) * 0.15
+			p.y += (pos.y - p.y) * 0.15
+			p.z += (pos.z - p.z) * 0.15
+
+			p.brightness = 0.7 + math.Sin(t*8+p.phase*10)*0.3
+
+			if rand.Float64() < 0.0002 {
+				resetTorusParticle(p)
+			}
+		}
+	}
+}
+
+type torusProjectedPoint struct {
+	x, y       int
+	z          float64
+	brightness float64
+}
+
+func project3DTo2D(x, y, z, rotationAngle, timeValue float64) torusProjectedPoint {
+	cosAngle := math.Cos(rotationAngle)
+	sinAngle := math.Sin(rotationAngle)
+
+	rotatedX := x*cosAngle - z*sinAngle
+	rotatedZ := x*sinAngle + z*cosAngle
+
+	tiltAngle := math.Sin(timeValue*0.3) * 0.2
+	cosTilt := math.Cos(tiltAngle)
+	sinTilt := math.Sin(tiltAngle)
+
+	tiltedY := y*cosTilt - rotatedZ*sinTilt
+	tiltedZ := y*sinTilt + rotatedZ*cosTilt
+
+	scale := 200 / (200 + tiltedZ)
+
+	return torusProjectedPoint{
+		x:          int(rotatedX*scale*2.5 + torusWidth/2),
+		y:          int(tiltedY*scale*1.2+torusHeight/2) + 7,
+		z:          tiltedZ,
+		brightness: scale,
+	}
+}
+
+type torusCell struct {
+	ch         rune
+	depth      float64
+	brightness float64
+	colorI     int // >=0 = particle color index, <0 = title char (-(gIdx+1))
+}
+
+func renderParticleTorus(particles []torusParticle, _ float64, t float64) string {
+	// Build grid
+	grid := make([][]torusCell, torusHeight)
+	for i := range grid {
+		grid[i] = make([]torusCell, torusWidth)
+		for j := range grid[i] {
+			grid[i][j] = torusCell{ch: ' ', depth: math.Inf(-1)}
 		}
 	}
 
-	chars := ".,-~:;=!*#$@"
+	rotationAngle := t * 0.15
 
-	cosA, sinA := math.Cos(a), math.Sin(a)
-	cosB, sinB := math.Cos(b), math.Sin(b)
+	// Project particles into grid
+	for pi, p := range particles {
+		proj := project3DTo2D(p.x, p.y, p.z, rotationAngle, t)
 
-	for theta := 0.0; theta < 6.28; theta += thetaSp {
-		cosT, sinT := math.Cos(theta), math.Sin(theta)
-		for phi := 0.0; phi < 6.28; phi += phiSp {
-			cosP, sinP := math.Cos(phi), math.Sin(phi)
+		if proj.x >= 0 && proj.x < torusWidth && proj.y >= 0 && proj.y < torusHeight {
+			if proj.z > grid[proj.y][proj.x].depth {
+				brightness := p.brightness * proj.brightness
 
-			cx := r2 + r1*cosT
-			cy := r1 * sinT
-
-			x3 := cx*(cosB*cosP+sinA*sinB*sinP) - cy*cosA*sinB
-			y3 := cx*(sinB*cosP-sinA*cosB*sinP) + cy*cosA*cosB
-			z := k2 + cosA*cx*sinP + cy*sinA
-			ooz := 1.0 / z
-
-			xp := int(float64(width)/2.0 + k1*ooz*x3)
-			yp := int(float64(height)/2.0 - k1*ooz*y3*0.5)
-
-			lum := cosP*cosT*sinB - cosA*cosT*sinP - sinA*sinT +
-				cosB*(cosA*sinT-cosT*sinA*sinP)
-
-			if yp >= 0 && yp < height && xp >= 0 && xp < width && ooz > zbuf[yp][xp] {
-				zbuf[yp][xp] = ooz
-				idx := int(lum * 8)
-				if idx < 0 {
-					idx = 0
+				var ch rune
+				colorIdx := pi % len(flowParticleStyles)
+				if p.settled {
+					// Brightness-based small symbols for settled particles
+					if brightness > 0.8 {
+						ch = '*'
+					} else if brightness > 0.6 {
+						ch = '~'
+					} else if brightness > 0.4 {
+						ch = ':'
+					} else {
+						ch = '.'
+					}
+				} else {
+					if brightness > 0.7 {
+						ch = '*'
+					} else if brightness > 0.4 {
+						ch = 'o'
+					} else {
+						ch = '.'
+					}
 				}
-				if idx >= len(chars) {
-					idx = len(chars) - 1
+
+				grid[proj.y][proj.x] = torusCell{
+					ch:         ch,
+					depth:      proj.z,
+					brightness: brightness,
+					colorI:     colorIdx,
 				}
-				output[yp][xp] = chars[idx]
 			}
 		}
 	}
 
-	var sb strings.Builder
-	for _, row := range output {
-		sb.WriteString(string(row))
-		sb.WriteByte('\n')
-	}
-	return sb.String()
-}
-
-// colorTorus applies amber-shade lipgloss styles to each character based on
-// its luminance bucket in the donut.c character ramp.
-func colorTorus(frame string) string {
-	var sb strings.Builder
-	for _, ch := range frame {
-		switch {
-		case ch == '\n':
-			sb.WriteByte('\n')
-		case ch == ' ':
-			sb.WriteByte(' ')
-		case ch == '.' || ch == ',' || ch == '-':
-			sb.WriteString(torusDimStyle.Render(string(ch)))
-		case ch == '~' || ch == ':' || ch == ';':
-			sb.WriteString(torusMidStyle.Render(string(ch)))
-		case ch == '=' || ch == '!' || ch == '*':
-			sb.WriteString(torusBrightStyle.Render(string(ch)))
-		case ch == '#' || ch == '$' || ch == '@':
-			sb.WriteString(torusMaxStyle.Render(string(ch)))
-		default:
-			sb.WriteRune(ch)
+	// Stamp title overlay into the grid
+	titleLines := strings.Split(asciiTitle, "\n")
+	// Find max title width
+	maxTW := 0
+	for _, line := range titleLines {
+		if w := len([]rune(line)); w > maxTW {
+			maxTW = w
 		}
 	}
-	return sb.String()
+	ty := 0 // title starts at top
+	offsetY := ty + 4
+	offsetX := (torusWidth - maxTW) / 2
+	gradLen := len(titleGradient)
+	for li, line := range titleLines {
+		runes := []rune(line)
+		for ci, ch := range runes {
+			if ch == ' ' {
+				continue
+			}
+			gy := offsetY + li
+			gx := offsetX + ci
+			if gy >= 0 && gy < torusHeight && gx >= 0 && gx < torusWidth {
+				// Wave effect: shift color index by column + phase
+				gIdx := (ci + int(t*3)) % gradLen
+				if gIdx < 0 {
+					gIdx += gradLen
+				}
+				grid[gy][gx] = torusCell{
+					ch:     ch,
+					depth:  math.Inf(1), // title always on top
+					colorI: -(gIdx + 1), // negative = title char
+				}
+			}
+		}
+	}
+
+	// Render grid to string with colors
+	var sb strings.Builder
+	for _, row := range grid {
+		for _, cell := range row {
+			if cell.ch == ' ' {
+				sb.WriteByte(' ')
+				continue
+			}
+			if cell.colorI < 0 {
+				// Title character — use titleGradient
+				gIdx := -(cell.colorI + 1)
+				style := lipgloss.NewStyle().Foreground(titleGradient[gIdx]).Bold(true)
+				sb.WriteString(style.Render(string(cell.ch)))
+			} else {
+				// Particle character
+				if cell.brightness > 0.8 {
+					sb.WriteString(torusMaxStyle.Render(string(cell.ch)))
+				} else if cell.brightness > 0.6 {
+					sb.WriteString(torusBrightStyle.Render(string(cell.ch)))
+				} else if cell.brightness > 0.4 {
+					sb.WriteString(torusMidStyle.Render(string(cell.ch)))
+				} else if cell.brightness > 0.2 {
+					sb.WriteString(torusDimStyle.Render(string(cell.ch)))
+				} else {
+					idx := cell.colorI % len(flowParticleStyles)
+					sb.WriteString(flowParticleStyles[idx].Render(string(cell.ch)))
+				}
+			}
+		}
+		sb.WriteByte('\n')
+	}
+	return strings.TrimRight(sb.String(), "\n")
 }
 
 // ── Public entry point ────────────────────────────────────────────────────────
