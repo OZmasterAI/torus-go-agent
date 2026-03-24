@@ -36,8 +36,8 @@ func authDir() string {
 	return filepath.Join(home, ".torus", "auth.json")
 }
 
-// HasAuth checks if OAuth credentials or ANTHROPIC_API_KEY exist.
-func HasAuth() bool {
+// hasAuth checks if OAuth credentials or ANTHROPIC_API_KEY exist.
+func hasAuth() bool {
 	if os.Getenv("ANTHROPIC_API_KEY") != "" {
 		return true
 	}

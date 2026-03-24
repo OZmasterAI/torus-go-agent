@@ -79,19 +79,19 @@ func TestBase64URLEncode(t *testing.T) {
 	}
 }
 
-// ── Tests for HasAuth ──
+// ── Tests for hasAuth ──
 
-// TestHasAuthWithEnvVar tests HasAuth returns true when ANTHROPIC_API_KEY is set.
+// TesthasAuthWithEnvVar tests hasAuth returns true when ANTHROPIC_API_KEY is set.
 func TestHasAuthWithEnvVar(t *testing.T) {
 	t.Setenv("ANTHROPIC_API_KEY", "test-key")
 
-	if !HasAuth() {
-		t.Fatal("HasAuth should return true when ANTHROPIC_API_KEY is set")
+	if !hasAuth() {
+		t.Fatal("hasAuth should return true when ANTHROPIC_API_KEY is set")
 	}
 }
 
-// Note: TestHasAuthNoAuth would test absence of auth but requires file system state
-// that is environment-dependent. The other HasAuth tests cover the env var path.
+// Note: TesthasAuthNoAuth would test absence of auth but requires file system state
+// that is environment-dependent. The other hasAuth tests cover the env var path.
 
 // Note: TestIsOAuthToken exists in anthropic_test.go and covers the IsOAuthToken function
 

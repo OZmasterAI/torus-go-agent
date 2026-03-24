@@ -258,7 +258,7 @@ func main() {
 	if compressionKeepLast <= 0 {
 		compressionKeepLast = 10
 	}
-	compressionMinMessages := cfg.Agent.CompressionMinMessages
+	compressionMinMessages := cfg.Agent.CompressionMinMessages // 0 = compress from keepLast+1
 	if cfg.Agent.ContinuousCompression {
 		hooks.RegisterPriority(core.HookBeforeContextBuild, "continuous-compression", func(ctx context.Context, d *core.HookData) error {
 			d.Messages = core.ContinuousCompressV2(d.Messages, compressionKeepLast, compressionMinMessages)
