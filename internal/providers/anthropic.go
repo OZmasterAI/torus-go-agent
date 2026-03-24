@@ -321,8 +321,8 @@ func (p *AnthropicProvider) setHeaders(req *http.Request) {
 	req.Header.Set("Content-Type", "application/json")
 	if IsOAuthToken(p.APIKey) {
 		req.Header.Set("Authorization", "Bearer "+p.APIKey)
-		req.Header.Set("anthropic-beta", "claude-code-20250219,oauth-2025-04-20")
-		req.Header.Set("user-agent", "claude-cli/1.0.0")
+		req.Header.Set("anthropic-beta", "files-api-2025-04-14,oauth-2025-04-20")
+		req.Header.Set("user-agent", "claude-cli/2.1.78")
 		req.Header.Set("x-app", "cli")
 	} else {
 		req.Header.Set("x-api-key", p.APIKey)
