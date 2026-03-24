@@ -1923,14 +1923,14 @@ const torusWidth = 120
 const torusHeight = 50
 const numTorusParticles = 450
 
-// flowParticleStyles for flowing (unsettled) particles — dim palette.
+// Flowing particle color palette (dim, atmospheric — converge to orange).
 var flowParticleStyles = []lipgloss.Style{
-	lipgloss.NewStyle().Foreground(lipgloss.Color("#552200")),
-	lipgloss.NewStyle().Foreground(lipgloss.Color("#663300")),
-	lipgloss.NewStyle().Foreground(lipgloss.Color("#774400")),
-	lipgloss.NewStyle().Foreground(lipgloss.Color("#885500")),
-	lipgloss.NewStyle().Foreground(lipgloss.Color("#996600")),
-	lipgloss.NewStyle().Foreground(lipgloss.Color("#aa7700")),
+	lipgloss.NewStyle().Foreground(lipgloss.Color("#336699")), // blue
+	lipgloss.NewStyle().Foreground(lipgloss.Color("#339966")), // green
+	lipgloss.NewStyle().Foreground(lipgloss.Color("#993366")), // magenta
+	lipgloss.NewStyle().Foreground(lipgloss.Color("#996633")), // amber
+	lipgloss.NewStyle().Foreground(lipgloss.Color("#339999")), // cyan
+	lipgloss.NewStyle().Foreground(lipgloss.Color("#663399")), // purple
 }
 
 type torusParticle struct {
@@ -2085,6 +2085,7 @@ type torusCell struct {
 	ch         rune
 	depth      float64
 	brightness float64
+	settled    bool
 	colorI     int // >=0 = particle color index, <0 = title char (-(gIdx+1))
 }
 
@@ -2135,6 +2136,7 @@ func renderParticleTorus(particles []torusParticle, _ float64, t float64) string
 					ch:         ch,
 					depth:      proj.z,
 					brightness: brightness,
+					settled:    p.settled,
 					colorI:     colorIdx,
 				}
 			}
@@ -2164,7 +2166,7 @@ func renderParticleTorus(particles []torusParticle, _ float64, t float64) string
 			gx := offsetX + ci
 			if gy >= 0 && gy < torusHeight && gx >= 0 && gx < torusWidth {
 				// Wave effect: shift color index by column + phase
-				gIdx := (ci + int(t*3)) % gradLen
+				gIdx := (ci + int(t*3*float64(gradLen))) % gradLen
 				if gIdx < 0 {
 					gIdx += gradLen
 				}
@@ -2190,20 +2192,24 @@ func renderParticleTorus(particles []torusParticle, _ float64, t float64) string
 				gIdx := -(cell.colorI + 1)
 				style := lipgloss.NewStyle().Foreground(titleGradient[gIdx]).Bold(true)
 				sb.WriteString(style.Render(string(cell.ch)))
-			} else {
-				// Particle character
-				if cell.brightness > 0.8 {
-					sb.WriteString(torusMaxStyle.Render(string(cell.ch)))
-				} else if cell.brightness > 0.6 {
-					sb.WriteString(torusBrightStyle.Render(string(cell.ch)))
-				} else if cell.brightness > 0.4 {
-					sb.WriteString(torusMidStyle.Render(string(cell.ch)))
-				} else if cell.brightness > 0.2 {
+			} else if cell.settled {
+				// Settled torus particle — orange gradient
+				switch cell.ch {
+				case '.':
 					sb.WriteString(torusDimStyle.Render(string(cell.ch)))
-				} else {
-					idx := cell.colorI % len(flowParticleStyles)
-					sb.WriteString(flowParticleStyles[idx].Render(string(cell.ch)))
+				case ':':
+					sb.WriteString(torusMidStyle.Render(string(cell.ch)))
+				case '~':
+					sb.WriteString(torusBrightStyle.Render(string(cell.ch)))
+				case '*':
+					sb.WriteString(torusMaxStyle.Render(string(cell.ch)))
+				default:
+					sb.WriteString(torusMaxStyle.Render(string(cell.ch)))
 				}
+			} else {
+				// Flowing particle — colorful palette
+				idx := cell.colorI % len(flowParticleStyles)
+				sb.WriteString(flowParticleStyles[idx].Render(string(cell.ch)))
 			}
 		}
 		sb.WriteByte('\n')
