@@ -389,8 +389,9 @@ func TestContextEdge_SanitizeMessagesWithConsecutiveSameRole(t *testing.T) {
 
 	result := sanitizeMessages(messages)
 
-	if len(result) != 2 {
-		t.Errorf("expected 2 merged messages, got %d", len(result))
+	// 2 merged + 1 "Continue." appended by Pass 5 (last was assistant)
+	if len(result) != 3 {
+		t.Errorf("expected 3 messages (2 merged + Continue), got %d", len(result))
 	}
 
 	// Check roles
@@ -399,6 +400,9 @@ func TestContextEdge_SanitizeMessagesWithConsecutiveSameRole(t *testing.T) {
 	}
 	if result[1].Role != typ.RoleAssistant {
 		t.Errorf("expected second to be Assistant, got %v", result[1].Role)
+	}
+	if result[2].Role != typ.RoleUser {
+		t.Errorf("expected third to be User (Continue), got %v", result[2].Role)
 	}
 
 	// Check content block count (should be 2 merged in first, 2 merged in second)
@@ -711,6 +715,52 @@ func TestContextEdge_SanitizeMessagesTrimsTrailingAssistantWhitespace(t *testing
 						}
 					}
 				}
+			}
+		})
+	}
+}
+
+// TestContextEdge_SanitizeMessagesAppendsUserWhenEndsWithAssistant tests that
+// sanitizeMessages appends a "Continue." user message when the conversation ends
+// with an assistant message, preventing "does not support assistant message prefill" errors.
+func TestContextEdge_SanitizeMessagesAppendsUserWhenEndsWithAssistant(t *testing.T) {
+	tests := []struct {
+		name        string
+		messages    []typ.Message
+		wantLastRole typ.Role
+	}{
+		{
+			name: "ends with assistant gets user appended",
+			messages: []typ.Message{
+				{Role: typ.RoleUser, Content: []typ.ContentBlock{{Type: "text", Text: "hi"}}},
+				{Role: typ.RoleAssistant, Content: []typ.ContentBlock{{Type: "text", Text: "hello"}}},
+			},
+			wantLastRole: typ.RoleUser,
+		},
+		{
+			name: "ends with user stays unchanged",
+			messages: []typ.Message{
+				{Role: typ.RoleAssistant, Content: []typ.ContentBlock{{Type: "text", Text: "hello"}}},
+				{Role: typ.RoleUser, Content: []typ.ContentBlock{{Type: "text", Text: "hi"}}},
+			},
+			wantLastRole: typ.RoleUser,
+		},
+		{
+			name: "ends with tool stays unchanged",
+			messages: []typ.Message{
+				{Role: typ.RoleUser, Content: []typ.ContentBlock{{Type: "text", Text: "hi"}}},
+				{Role: typ.RoleAssistant, Content: []typ.ContentBlock{{Type: "tool_use", ToolUseID: "t1", Text: "bash"}}},
+				{Role: typ.RoleTool, Content: []typ.ContentBlock{{Type: "tool_result", ToolUseID: "t1", Content: "ok"}}},
+			},
+			wantLastRole: typ.RoleTool,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := sanitizeMessages(tt.messages)
+			last := result[len(result)-1]
+			if last.Role != tt.wantLastRole {
+				t.Errorf("last message role = %q, want %q", last.Role, tt.wantLastRole)
 			}
 		})
 	}

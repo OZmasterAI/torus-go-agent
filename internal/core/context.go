@@ -424,5 +424,16 @@ func sanitizeMessages(messages []t.Message) []t.Message {
 		}
 	}
 
+	// Pass 5: ensure the conversation doesn't end with an assistant message.
+	// Some models reject this as "unsupported prefill". If the last message is
+	// assistant (e.g. tool result was dropped or hooks removed it), append a
+	// minimal user nudge so the model can continue.
+	if n := len(merged); n > 0 && merged[n-1].Role == t.RoleAssistant {
+		merged = append(merged, t.Message{
+			Role:    t.RoleUser,
+			Content: []t.ContentBlock{{Type: "text", Text: "Continue."}},
+		})
+	}
+
 	return merged
 }
