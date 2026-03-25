@@ -388,7 +388,18 @@ func sanitizeMessages(messages []t.Message) []t.Message {
 		messages[i].Content = cleaned
 	}
 
-	// Pass 2: merge consecutive same-role messages (skip tool messages — they must stay separate)
+	// Pass 2: drop thinking-role messages — the DAG persists them for display
+	// but the API only accepts "user" and "assistant" roles in outbound requests.
+	var allowed []t.Message
+	for _, m := range messages {
+		if m.Role == "thinking" {
+			continue
+		}
+		allowed = append(allowed, m)
+	}
+	messages = allowed
+
+	// Pass 3: merge consecutive same-role messages (skip tool messages — they must stay separate)
 	var merged []t.Message
 	for _, m := range messages {
 		if len(m.Content) == 0 {
@@ -400,7 +411,7 @@ func sanitizeMessages(messages []t.Message) []t.Message {
 			merged = append(merged, m)
 		}
 	}
-	// Pass 3: trim trailing whitespace from the final assistant message.
+	// Pass 4: trim trailing whitespace from the final assistant message.
 	// Anthropic's API rejects requests where the last assistant content ends
 	// with trailing whitespace (error: "final assistant content cannot end
 	// with trailing whitespace").

@@ -626,6 +626,28 @@ func TestContextEdge_ExtractKeyContentWithMixedEmptyBlocks(t *testing.T) {
 	}
 }
 
+// TestContextEdge_SanitizeMessagesDropsThinkingRole tests that thinking-role
+// messages are filtered out before sending to the API.
+func TestContextEdge_SanitizeMessagesDropsThinkingRole(t *testing.T) {
+	messages := []typ.Message{
+		{Role: typ.RoleUser, Content: []typ.ContentBlock{{Type: "text", Text: "hi"}}},
+		{Role: typ.RoleAssistant, Content: []typ.ContentBlock{{Type: "text", Text: "hello"}}},
+		{Role: "thinking", Content: []typ.ContentBlock{{Type: "text", Text: "internal reasoning"}}},
+		{Role: typ.RoleUser, Content: []typ.ContentBlock{{Type: "text", Text: "follow up"}}},
+	}
+
+	result := sanitizeMessages(messages)
+
+	for _, m := range result {
+		if m.Role == "thinking" {
+			t.Fatal("thinking-role message should have been filtered out")
+		}
+	}
+	if len(result) != 3 {
+		t.Errorf("expected 3 messages, got %d", len(result))
+	}
+}
+
 // TestContextEdge_SanitizeMessagesTrimsTrailingAssistantWhitespace tests that
 // trailing whitespace on the final assistant message is trimmed (Anthropic API
 // rejects "final assistant content cannot end with trailing whitespace").
