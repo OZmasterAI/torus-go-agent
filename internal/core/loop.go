@@ -189,9 +189,27 @@ func (a *Agent) runLoop(ctx context.Context, userMessage string, ch chan<- Agent
 			activeProvider = a.RouteProvider(userMessage)
 		}
 
+		// Compute dynamic max_tokens: leave room for input instead of blindly
+		// sending the configured max. This prevents 400 errors on models where
+		// max_completion_tokens == context_window (common with free OpenRouter models).
+		maxTokens := a.config.Provider.MaxTokens
+		if a.config.ContextWindow > 0 {
+			inputCost := EstimatePromptCost(a.config.SystemPrompt, messages, toolDefs)
+			available := a.config.ContextWindow - inputCost
+			if available < 1024 {
+				available = 1024 // absolute floor so we always get some output
+			}
+			if maxTokens <= 0 || maxTokens > available {
+				maxTokens = available
+			}
+		}
+		if maxTokens <= 0 {
+			maxTokens = 8192
+		}
+
 		var resp *t.AssistantMessage
 		var llmErr error
-		streamCh, streamErr := activeProvider.StreamComplete(ctx, a.config.SystemPrompt, messages, toolDefs, a.config.Provider.MaxTokens)
+		streamCh, streamErr := activeProvider.StreamComplete(ctx, a.config.SystemPrompt, messages, toolDefs, maxTokens)
 		if streamErr != nil {
 			llmErr = streamErr
 		} else {

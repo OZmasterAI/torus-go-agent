@@ -9,6 +9,67 @@ import (
 	typ "torus_go_agent/internal/types"
 )
 
+// captureMockProvider records the maxTokens value passed to StreamComplete.
+type captureMockProvider struct {
+	mockProvider
+	capturedMaxTokens int
+}
+
+func (c *captureMockProvider) StreamComplete(ctx context.Context, sys string, msgs []typ.Message, tools []typ.Tool, maxTokens int) (<-chan typ.StreamEvent, error) {
+	c.capturedMaxTokens = maxTokens
+	return c.mockProvider.StreamComplete(ctx, sys, msgs, tools, maxTokens)
+}
+
+// TestLoopEdge_DynamicMaxTokens verifies that the loop computes max_tokens
+// dynamically as (contextWindow - inputCost) instead of blindly sending the
+// configured value. This prevents 400 errors on models where max_completion_tokens
+// equals the full context window.
+func TestLoopEdge_DynamicMaxTokens(t *testing.T) {
+	tests := []struct {
+		name          string
+		contextWindow int
+		configMax     int
+		wantCapped    bool // true = expect maxTokens < configMax
+	}{
+		{"large config capped by context", 10000, 256000, true},
+		{"small config fits in context", 10000, 1024, false},
+		{"zero context uses config as-is", 0, 8192, false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			cp := &captureMockProvider{
+				mockProvider: mockProvider{
+					name:       "mock",
+					modelID:    "mock-model-1",
+					cannedText: "hi",
+				},
+			}
+			dag := helperNewTestDAG(t)
+			cfg := typ.AgentConfig{
+				Provider:      typ.ProviderConfig{Name: "mock", Model: "mock-model-1", MaxTokens: tc.configMax},
+				MaxTurns:      1,
+				ContextWindow: tc.contextWindow,
+			}
+			agent := NewAgent(cfg, cp, NewHookRegistry(), dag)
+			agent.SetCompaction(CompactionConfig{Mode: CompactionOff})
+
+			ch := agent.RunStream(context.Background(), "hello")
+			for range ch {
+			}
+
+			if tc.wantCapped && cp.capturedMaxTokens >= tc.configMax {
+				t.Errorf("expected maxTokens < %d (config), got %d", tc.configMax, cp.capturedMaxTokens)
+			}
+			if !tc.wantCapped && cp.capturedMaxTokens != tc.configMax {
+				t.Errorf("expected maxTokens = %d (config), got %d", tc.configMax, cp.capturedMaxTokens)
+			}
+			if cp.capturedMaxTokens <= 0 {
+				t.Errorf("maxTokens should be > 0, got %d", cp.capturedMaxTokens)
+			}
+		})
+	}
+}
+
 // helperNewTestDAG creates a temporary SQLite DAG for use in tests (avoids naming collision).
 func helperNewTestDAG(t *testing.T) *DAG {
 	t.Helper()
