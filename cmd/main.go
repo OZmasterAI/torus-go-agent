@@ -122,6 +122,9 @@ func main() {
 
 	soul := config.LoadTorus(cfgDir)
 	soul = strings.ReplaceAll(soul, "{{MODEL}}", cfg.Agent.Provider+"/"+cfg.Agent.Model)
+	if cwd, err := os.Getwd(); err == nil {
+		soul = strings.ReplaceAll(soul, "{{CWD}}", cwd)
+	}
 	schema := config.LoadSchema(cfgDir)
 	key := cfg.APIKey()
 	if key == "" && cfg.Agent.Provider == "anthropic" {
