@@ -159,9 +159,30 @@ func buildAnthropicMessages(messages []t.Message) []anthropicMsg {
 		}
 		var content any
 		if len(m.Content) == 1 && m.Content[0].Type == "text" {
-			content = m.Content[0].Text
+			text := m.Content[0].Text
+			// Anthropic rejects "final assistant content cannot end with trailing
+			// whitespace" — trim here at the provider boundary as a last defense,
+			// since hooks can modify messages after sanitizeMessages runs.
+			if m.Role == t.RoleAssistant {
+				text = strings.TrimRight(text, " \t\n\r")
+			}
+			content = text
 		} else {
-			content = m.Content
+			// Multi-block: trim trailing whitespace from the last text block
+			// of assistant messages for the same reason.
+			if m.Role == t.RoleAssistant {
+				blocks := make([]t.ContentBlock, len(m.Content))
+				copy(blocks, m.Content)
+				for i := len(blocks) - 1; i >= 0; i-- {
+					if blocks[i].Type == "text" {
+						blocks[i].Text = strings.TrimRight(blocks[i].Text, " \t\n\r")
+						break
+					}
+				}
+				content = blocks
+			} else {
+				content = m.Content
+			}
 		}
 		apiMsgs = append(apiMsgs, anthropicMsg{
 			Role:    string(m.Role),

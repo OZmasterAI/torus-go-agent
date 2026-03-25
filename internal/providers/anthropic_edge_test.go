@@ -328,6 +328,42 @@ func TestAnthropicEdge_MaxTokensCapping(t *testing.T) {
 	}
 }
 
+// TestAnthropicEdge_TrailingWhitespaceTrimmedAtProviderBoundary tests that
+// trailing whitespace on assistant messages is trimmed in buildAnthropicMessages,
+// preventing "final assistant content cannot end with trailing whitespace" errors
+// even when hooks modify messages after sanitizeMessages runs.
+func TestAnthropicEdge_TrailingWhitespaceTrimmedAtProviderBoundary(t *testing.T) {
+	tests := []struct {
+		name     string
+		text     string
+		wantText string
+	}{
+		{"trailing spaces", "hello   ", "hello"},
+		{"trailing newline", "hello\n", "hello"},
+		{"trailing mixed", "hello \t\n\r", "hello"},
+		{"no trailing", "hello", "hello"},
+		{"only whitespace", "   ", ""},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			msgs := []types.Message{
+				{Role: types.RoleUser, Content: []types.ContentBlock{{Type: "text", Text: "hi"}}},
+				{Role: types.RoleAssistant, Content: []types.ContentBlock{{Type: "text", Text: tc.text}}},
+			}
+			result := buildAnthropicMessages(msgs)
+			// Last message should be assistant with trimmed text
+			last := result[len(result)-1]
+			if s, ok := last.Content.(string); ok {
+				if s != tc.wantText {
+					t.Errorf("got %q, want %q", s, tc.wantText)
+				}
+			} else {
+				t.Fatalf("expected string content, got %T", last.Content)
+			}
+		})
+	}
+}
+
 // TestAnthropicEdge_EmptyMessages tests handling of empty message lists.
 func TestAnthropicEdge_EmptyMessages(t *testing.T) {
 	p := NewAnthropicProvider("sk-ant-test123", "claude-3-5-sonnet-20241022")
