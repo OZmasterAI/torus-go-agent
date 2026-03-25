@@ -400,5 +400,18 @@ func sanitizeMessages(messages []t.Message) []t.Message {
 			merged = append(merged, m)
 		}
 	}
+	// Pass 3: trim trailing whitespace from the final assistant message.
+	// Anthropic's API rejects requests where the last assistant content ends
+	// with trailing whitespace (error: "final assistant content cannot end
+	// with trailing whitespace").
+	if n := len(merged); n > 0 && merged[n-1].Role == t.RoleAssistant {
+		for i := len(merged[n-1].Content) - 1; i >= 0; i-- {
+			if merged[n-1].Content[i].Type == "text" {
+				merged[n-1].Content[i].Text = strings.TrimRight(merged[n-1].Content[i].Text, " \t\n\r")
+				break
+			}
+		}
+	}
+
 	return merged
 }

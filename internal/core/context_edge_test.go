@@ -626,4 +626,72 @@ func TestContextEdge_ExtractKeyContentWithMixedEmptyBlocks(t *testing.T) {
 	}
 }
 
+// TestContextEdge_SanitizeMessagesTrimsTrailingAssistantWhitespace tests that
+// trailing whitespace on the final assistant message is trimmed (Anthropic API
+// rejects "final assistant content cannot end with trailing whitespace").
+func TestContextEdge_SanitizeMessagesTrimsTrailingAssistantWhitespace(t *testing.T) {
+	tests := []struct {
+		name     string
+		messages []typ.Message
+		wantText string
+	}{
+		{
+			name: "trailing spaces",
+			messages: []typ.Message{
+				{Role: typ.RoleUser, Content: []typ.ContentBlock{{Type: "text", Text: "hi"}}},
+				{Role: typ.RoleAssistant, Content: []typ.ContentBlock{{Type: "text", Text: "hello   "}}},
+			},
+			wantText: "hello",
+		},
+		{
+			name: "trailing newlines",
+			messages: []typ.Message{
+				{Role: typ.RoleUser, Content: []typ.ContentBlock{{Type: "text", Text: "hi"}}},
+				{Role: typ.RoleAssistant, Content: []typ.ContentBlock{{Type: "text", Text: "hello\n\n"}}},
+			},
+			wantText: "hello",
+		},
+		{
+			name: "trailing tabs and mixed",
+			messages: []typ.Message{
+				{Role: typ.RoleUser, Content: []typ.ContentBlock{{Type: "text", Text: "hi"}}},
+				{Role: typ.RoleAssistant, Content: []typ.ContentBlock{{Type: "text", Text: "hello \t\n\r"}}},
+			},
+			wantText: "hello",
+		},
+		{
+			name: "no trailing whitespace unchanged",
+			messages: []typ.Message{
+				{Role: typ.RoleUser, Content: []typ.ContentBlock{{Type: "text", Text: "hi"}}},
+				{Role: typ.RoleAssistant, Content: []typ.ContentBlock{{Type: "text", Text: "hello"}}},
+			},
+			wantText: "hello",
+		},
+		{
+			name: "final message is user not trimmed",
+			messages: []typ.Message{
+				{Role: typ.RoleAssistant, Content: []typ.ContentBlock{{Type: "text", Text: "hello   "}}},
+				{Role: typ.RoleUser, Content: []typ.ContentBlock{{Type: "text", Text: "hi   "}}},
+			},
+			wantText: "hello   ", // assistant not final, so not trimmed
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := sanitizeMessages(tt.messages)
+			// Find the assistant message and check its text
+			for _, m := range result {
+				if m.Role == typ.RoleAssistant {
+					for _, b := range m.Content {
+						if b.Type == "text" && b.Text != tt.wantText {
+							t.Errorf("got %q, want %q", b.Text, tt.wantText)
+						}
+					}
+				}
+			}
+		})
+	}
+}
+
 // Note: textContent and newTestDAG helpers are defined in dag_test.go and loop_test.go respectively
