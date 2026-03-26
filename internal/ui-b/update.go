@@ -449,6 +449,7 @@ func (m *Model) applyStartupOverrides(o *StartupConfigOverrides) {
 	m.agentCfg.CompactionKeepLastN = o.CompactionKeepLastN
 	m.agentCfg.CompactionModel = o.CompactionModel
 	m.agentCfg.ContinuousCompression = o.ContinuousCompression
+	m.agentCfg.CompressionKeepFirst = o.CompressionKeepFirst
 	m.agentCfg.CompressionKeepLast = o.CompressionKeepLast
 	m.agentCfg.CompressionMinMessages = o.CompressionMinMessages
 	m.agentCfg.ZoneBudgeting = o.ZoneBudgeting

@@ -415,18 +415,19 @@ var configFields = []configField{
 	{"CompactionKeepLastN", "int", nil},    // 4
 	{"CompactionModel", "string", nil},     // 5
 	{"ContinuousCompression", "bool", nil}, // 6
-	{"CompressionKeepLast", "int", nil},    // 7
-	{"CompressionMinMessages", "int", nil}, // 8
-	{"ZoneBudgeting", "bool", nil},         // 9
-	{"ZoneArchivePercent", "int", nil},     // 10
-	{"SmartRouting", "bool", nil},          // 11
-	{"SmartRoutingModel", "string", nil},   // 12
-	{"SteeringMode", "cycle", []string{"mild", "aggressive"}}, // 13
-	{"PersistThinking", "bool", nil},       // 14
-	{"Thinking", "cycle", []string{"", "low", "mid", "high", "max", "ultra"}}, // 15
-	{"ThinkingBudget", "int", nil},         // 16
-	{"MaxTokens", "int", nil},              // 17
-	{"ContextWindow", "int", nil},          // 18
+	{"CompressionKeepFirst", "int", nil},   // 7
+	{"CompressionKeepLast", "int", nil},    // 8
+	{"CompressionMinMessages", "int", nil}, // 9
+	{"ZoneBudgeting", "bool", nil},         // 10
+	{"ZoneArchivePercent", "int", nil},     // 11
+	{"SmartRouting", "bool", nil},          // 12
+	{"SmartRoutingModel", "string", nil},   // 13
+	{"SteeringMode", "cycle", []string{"mild", "aggressive"}}, // 14
+	{"PersistThinking", "bool", nil},       // 15
+	{"Thinking", "cycle", []string{"", "low", "mid", "high", "max", "ultra"}}, // 16
+	{"ThinkingBudget", "int", nil},         // 17
+	{"MaxTokens", "int", nil},              // 18
+	{"ContextWindow", "int", nil},          // 19
 }
 
 func (o *AgentConfigOverrides) getValue(idx int) string {
@@ -452,49 +453,51 @@ func (o *AgentConfigOverrides) getValue(idx int) string {
 		}
 		return "false"
 	case 7:
-		return fmt.Sprintf("%d", o.CompressionKeepLast)
+		return fmt.Sprintf("%d", o.CompressionKeepFirst)
 	case 8:
-		return fmt.Sprintf("%d", o.CompressionMinMessages)
+		return fmt.Sprintf("%d", o.CompressionKeepLast)
 	case 9:
+		return fmt.Sprintf("%d", o.CompressionMinMessages)
+	case 10:
 		if o.ZoneBudgeting {
 			return "true"
 		}
 		return "false"
-	case 10:
-		return fmt.Sprintf("%d", o.ZoneArchivePercent)
 	case 11:
+		return fmt.Sprintf("%d", o.ZoneArchivePercent)
+	case 12:
 		if o.SmartRouting {
 			return "true"
 		}
 		return "false"
-	case 12:
+	case 13:
 		if o.SmartRoutingModel == "" {
 			return "(none)"
 		}
 		return formatProviderModel(o.SmartRoutingModel)
-	case 13:
-		return o.SteeringMode
 	case 14:
+		return o.SteeringMode
+	case 15:
 		if o.PersistThinking {
 			return "true"
 		}
 		return "false"
-	case 15:
+	case 16:
 		if o.Thinking == "" {
 			return "off"
 		}
 		return o.Thinking
-	case 16:
+	case 17:
 		if o.ThinkingBudget == 0 {
 			return "auto"
 		}
 		return fmt.Sprintf("%d", o.ThinkingBudget)
-	case 17:
+	case 18:
 		if o.MaxTokens == 0 {
 			return "default"
 		}
 		return fmt.Sprintf("%d", o.MaxTokens)
-	case 18:
+	case 19:
 		if o.ContextWindow == 0 {
 			return "default"
 		}
@@ -521,28 +524,30 @@ func (o *AgentConfigOverrides) setValue(idx int, val string) {
 	case 6:
 		o.ContinuousCompression = val == "true"
 	case 7:
-		o.CompressionKeepLast = n
+		o.CompressionKeepFirst = n
 	case 8:
-		o.CompressionMinMessages = n
+		o.CompressionKeepLast = n
 	case 9:
-		o.ZoneBudgeting = val == "true"
+		o.CompressionMinMessages = n
 	case 10:
-		o.ZoneArchivePercent = n
+		o.ZoneBudgeting = val == "true"
 	case 11:
-		o.SmartRouting = val == "true"
+		o.ZoneArchivePercent = n
 	case 12:
-		o.SmartRoutingModel = val
+		o.SmartRouting = val == "true"
 	case 13:
-		o.SteeringMode = val
+		o.SmartRoutingModel = val
 	case 14:
-		o.PersistThinking = val == "true"
+		o.SteeringMode = val
 	case 15:
-		o.Thinking = val
+		o.PersistThinking = val == "true"
 	case 16:
-		o.ThinkingBudget = n
+		o.Thinking = val
 	case 17:
-		o.MaxTokens = n
+		o.ThinkingBudget = n
 	case 18:
+		o.MaxTokens = n
+	case 19:
 		o.ContextWindow = n
 	}
 }
@@ -551,11 +556,11 @@ func (o *AgentConfigOverrides) toggleBool(idx int) {
 	switch idx {
 	case 6:
 		o.ContinuousCompression = !o.ContinuousCompression
-	case 9:
+	case 10:
 		o.ZoneBudgeting = !o.ZoneBudgeting
-	case 11:
+	case 12:
 		o.SmartRouting = !o.SmartRouting
-	case 14:
+	case 15:
 		o.PersistThinking = !o.PersistThinking
 	}
 }

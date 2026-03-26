@@ -224,18 +224,18 @@ func TestStartupConfigOverrides_GetSetValue(t *testing.T) {
 		t.Errorf("toggleBool should change value, got %q both times", orig)
 	}
 
-	// MaxTokens (idx 17) - int with "default" display
-	if got := o.getValue(17); got != "default" {
+	// MaxTokens (idx 18) - int with "default" display
+	if got := o.getValue(18); got != "default" {
 		t.Errorf("MaxTokens: got %q, want 'default'", got)
 	}
-	o.setValue(17, "4096")
-	if got := o.getValue(17); got != "4096" {
+	o.setValue(18, "4096")
+	if got := o.getValue(18); got != "4096" {
 		t.Errorf("MaxTokens after set: got %q, want '4096'", got)
 	}
 
-	// Thinking (idx 15) - cycle
-	o.cycleOption(15, 1)
-	if got := o.getValue(15); got == "" {
+	// Thinking (idx 16) - cycle
+	o.cycleOption(16, 1)
+	if got := o.getValue(16); got == "" {
 		t.Error("Thinking should have cycled from default")
 	}
 }
