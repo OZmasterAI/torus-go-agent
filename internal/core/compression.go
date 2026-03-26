@@ -561,40 +561,6 @@ func hasTextContent(m t.Message) bool {
 	return false
 }
 
-// isTurn returns true if the message represents an actual conversation turn:
-// a user message with text, or an assistant message with text content (not
-// just tool_use blocks). Tool results, thinking nodes, and tool-only assistant
-// messages are implementation noise and don't count as turns.
-func isTurn(m t.Message) bool {
-	if m.Role == t.RoleUser {
-		return hasTextContent(m)
-	}
-	if m.Role == t.RoleAssistant {
-		for _, b := range m.Content {
-			if b.Type == "text" && b.Text != "" {
-				return true
-			}
-		}
-	}
-	return false
-}
-
-// countTurnBoundary walks messages backwards and returns the index at which
-// the keepLast-th turn is found. Only user-with-text and assistant-with-text
-// messages count as turns; tool results and thinking are skipped.
-func countTurnBoundary(messages []t.Message, keepLast int) int {
-	turns := 0
-	for i := len(messages) - 1; i >= 1; i-- {
-		if isTurn(messages[i]) {
-			turns++
-			if turns >= keepLast {
-				return i
-			}
-		}
-	}
-	return 1 // not enough turns — keep everything after messages[0]
-}
-
 // ContinuousCompressV2 applies operation-aware compression with grouping,
 // template summaries, scoring, and working memory. Returns a new slice.
 //
@@ -628,13 +594,7 @@ func ContinuousCompressV2(messages []t.Message, keepLast, minMessages int) []t.M
 
 	// Step 2: Identify the verbatim boundary and active files.
 	// Operations whose StartIdx >= verbatimStart are kept verbatim.
-	//
-	// Count "turns" (user messages and assistant text replies) rather than raw
-	// messages. Tool results, thinking nodes, and assistant messages that only
-	// contain tool_use blocks are implementation noise, not conversation turns.
-	// This prevents a single operation with many tool calls from consuming the
-	// entire verbatim window.
-	verbatimStart := countTurnBoundary(messages, keepLast)
+	verbatimStart := n - keepLast
 	if verbatimStart < 1 {
 		verbatimStart = 1 // never compress the system prompt
 	}
