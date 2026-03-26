@@ -269,6 +269,228 @@ func compressText(text string, maxChars int) string {
 	return head + "\n[...truncated]\n" + tail
 }
 
+// UnifiedCompressConfig configures the unified compression pipeline.
+type UnifiedCompressConfig struct {
+	KeepLast      int // recent messages kept verbatim (default 10)
+	MinMessages   int // minimum message count before compression activates (0 = use KeepLast)
+	ContextWindow int // total context window in tokens (default 128000)
+	MaxTokens     int // reserved for model output (default 8192)
+	ArchivePct    int // percentage of usable budget for system+archive zone (default 25)
+}
+
+// UnifiedCompress merges operation-aware compression and zone budgeting into
+// a single pipeline. Scoring + budget make retention decisions together.
+// keepLast operations get a score floor (min 0.3) instead of a hard wall.
+//
+// Pipeline:
+//  1. Group ALL messages into operations
+//  2. Score ALL operations (no keepLast wall — keepLast applies a score floor)
+//  3. Compute zone budgets: Zone1 (system+archive), Zone2 (active ops)
+//  4. Fill Zone2 by score (highest first), with per-op 50% cap for non-active ops
+//  5. Active op always included (truncated, never compacted)
+//  6. Remaining ops: score >= 0.3 → template, score < 0.3 → archive to working memory
+func UnifiedCompress(messages []t.Message, cfg UnifiedCompressConfig) []t.Message {
+	if cfg.KeepLast <= 0 {
+		cfg.KeepLast = 10
+	}
+	if cfg.ContextWindow <= 0 {
+		cfg.ContextWindow = 128000
+	}
+	if cfg.MaxTokens <= 0 {
+		cfg.MaxTokens = 8192
+	}
+	if cfg.ArchivePct <= 0 {
+		cfg.ArchivePct = 25
+	}
+
+	n := len(messages)
+	if n <= cfg.KeepLast {
+		return messages
+	}
+	if cfg.MinMessages > 0 && n < cfg.MinMessages {
+		return messages
+	}
+
+	// Step 1: Group all messages into operations
+	ops := GroupOperations(messages)
+	if len(ops) == 0 {
+		return messages
+	}
+
+	// Step 2: Score ALL operations — no keepLast wall
+	activeOp := ops[len(ops)-1]
+	activeFiles := activeOp.Files
+	totalOps := len(ops)
+
+	type scoredOp struct {
+		op    Operation
+		score float64
+		index int // original position in ops slice
+	}
+	scored := make([]scoredOp, len(ops))
+
+	for i, op := range ops {
+		if i == len(ops)-1 {
+			// Active op always gets score 1.0
+			scored[i] = scoredOp{op: op, score: 1.0, index: i}
+			continue
+		}
+		age := len(ops) - 1 - i
+		var laterSlice []Operation
+		if i+1 < len(ops) {
+			laterSlice = ops[i+1:]
+		}
+		s := ScoreOperation(op, age, totalOps, activeFiles, laterSlice)
+
+		// keepLast score floor: operations in the recent window get min 0.3
+		if op.StartIdx >= n-cfg.KeepLast {
+			if s < 0.3 {
+				s = 0.3
+			}
+		}
+		scored[i] = scoredOp{op: op, score: s, index: i}
+	}
+
+	// Step 3: Compute zone budgets
+	usable := cfg.ContextWindow - cfg.MaxTokens
+	if usable <= 0 {
+		return messages
+	}
+	zone1Budget := usable * cfg.ArchivePct / 100
+	zone2Budget := usable * 25 / 100
+
+	// Zone 1 actual usage: system prompt
+	zone1Tokens := EstimateTokens(messages[0:1])
+	zone1Unused := zone1Budget - zone1Tokens
+	if zone1Unused < 0 {
+		zone1Unused = 0
+	}
+	zone2Effective := zone2Budget + zone1Unused
+
+	// Build ToolUseID→toolName map for per-tool truncation
+	toolNameMap := make(map[string]string)
+	for _, op := range ops {
+		for _, msg := range op.Messages {
+			for _, b := range msg.Content {
+				if b.Type == "tool_use" && b.ID != "" && b.Name != "" {
+					toolNameMap[b.ID] = b.Name
+				}
+			}
+		}
+	}
+
+	// Step 4: Fill Zone 2 by score — active op first, then by score descending
+	// Sort non-active ops by score descending
+	type opBudgetEntry struct {
+		scored scoredOp
+		tokens int
+	}
+
+	// Estimate tokens for each op and pre-truncate tool output
+	activeEntry := opBudgetEntry{scored: scored[len(scored)-1]}
+	var activeMessages []t.Message
+	for _, msg := range activeOp.Messages {
+		compressed := CompressMessage(msg, 2000, toolNameMap)
+		activeMessages = append(activeMessages, compressed)
+	}
+	activeEntry.tokens = EstimateTokens(activeMessages)
+
+	// Collect non-active scored ops with their token costs
+	var candidates []opBudgetEntry
+	for i := 0; i < len(scored)-1; i++ {
+		var opMsgs []t.Message
+		for _, msg := range scored[i].op.Messages {
+			opMsgs = append(opMsgs, CompressMessage(msg, 2000, toolNameMap))
+		}
+		tokens := EstimateTokens(opMsgs)
+		candidates = append(candidates, opBudgetEntry{scored: scored[i], tokens: tokens})
+	}
+
+	// Sort candidates by score descending (stable to preserve order for equal scores)
+	for i := 0; i < len(candidates); i++ {
+		for j := i + 1; j < len(candidates); j++ {
+			if candidates[j].scored.score > candidates[i].scored.score {
+				candidates[i], candidates[j] = candidates[j], candidates[i]
+			}
+		}
+	}
+
+	// Per-op cap: no single non-active op can exceed 50% of zone2
+	perOpCap := zone2Effective / 2
+	if perOpCap <= 0 {
+		perOpCap = 1
+	}
+
+	// Active op always gets in first
+	zone2Used := activeEntry.tokens
+	// Track which ops made it into zone 2
+	type retained struct {
+		index    int // original ops index
+		messages []t.Message
+	}
+	var zone2Ops []retained
+
+	for _, c := range candidates {
+		// 50% cap for non-active ops
+		if c.tokens > perOpCap {
+			continue // will be archived or templated below
+		}
+		if zone2Used+c.tokens > zone2Effective {
+			continue // doesn't fit
+		}
+		zone2Used += c.tokens
+		var opMsgs []t.Message
+		for _, msg := range c.scored.op.Messages {
+			opMsgs = append(opMsgs, CompressMessage(msg, 2000, toolNameMap))
+		}
+		zone2Ops = append(zone2Ops, retained{index: c.scored.index, messages: opMsgs})
+	}
+
+	// Step 5: Build which ops are retained in zone 2
+	retainedSet := make(map[int]bool)
+	retainedSet[len(ops)-1] = true // active op
+	for _, r := range zone2Ops {
+		retainedSet[r.index] = true
+	}
+
+	// Step 6: Classify remaining ops (not retained in zone 2)
+	var archivedOps []Operation
+	var templateMessages []t.Message
+	for i := 0; i < len(ops)-1; i++ {
+		if retainedSet[i] {
+			continue
+		}
+		if scored[i].score >= 0.3 {
+			templateMessages = append(templateMessages, OperationToMessage(ops[i]))
+		} else {
+			archivedOps = append(archivedOps, ops[i])
+		}
+	}
+
+	// Step 7: Assemble result in order: system prompt + templates + zone2 ops (by position) + active op
+	sysMsg := AppendWorkingMemory(messages[0], archivedOps)
+	result := make([]t.Message, 0, 1+len(templateMessages)+len(zone2Ops)*4+len(activeMessages))
+	result = append(result, sysMsg)
+	result = append(result, templateMessages...)
+
+	// Sort zone2Ops by original index to maintain conversation order
+	for i := 0; i < len(zone2Ops); i++ {
+		for j := i + 1; j < len(zone2Ops); j++ {
+			if zone2Ops[j].index < zone2Ops[i].index {
+				zone2Ops[i], zone2Ops[j] = zone2Ops[j], zone2Ops[i]
+			}
+		}
+	}
+	for _, r := range zone2Ops {
+		result = append(result, r.messages...)
+	}
+
+	// Active op always last
+	result = append(result, activeMessages...)
+
+	return result
+}
+
 // continuousCompress is the V1 implementation — kept as internal fallback.
 // Production uses ContinuousCompressV2. Unexported to prevent external use.
 func continuousCompress(messages []t.Message, keepLast, minMessages int) []t.Message {
@@ -413,6 +635,8 @@ type ZoneBudgetV2 struct {
 	OutputReserve    int // minimum tokens reserved for output (default 4096)
 }
 
+// Deprecated: use UnifiedCompress instead. Kept for backward compatibility.
+//
 // ApplyZoneBudgetV2 distributes messages across 3 zones with dynamic rebalancing.
 // Zone 1: system prompt + archived content (SystemArchivePct)
 // Zone 2: active/recent operations (ActiveOpsPct)
@@ -561,6 +785,8 @@ func hasTextContent(m t.Message) bool {
 	return false
 }
 
+// Deprecated: use UnifiedCompress instead. Kept for backward compatibility.
+//
 // ContinuousCompressV2 applies operation-aware compression with grouping,
 // template summaries, scoring, and working memory. Returns a new slice.
 //

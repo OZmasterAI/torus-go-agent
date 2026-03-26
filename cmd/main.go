@@ -261,45 +261,25 @@ func main() {
 		return nil
 	})
 
-	// Register continuous compression hook (optional, config-driven)
-	compressionKeepLast := cfg.Agent.CompressionKeepLast
-	if compressionKeepLast <= 0 {
-		compressionKeepLast = 10
-	}
-	compressionMinMessages := cfg.Agent.CompressionMinMessages // 0 = compress from keepLast+1
+	// Register unified compression pipeline (optional, config-driven)
+	// Replaces both continuous compression and zone budgeting with a single pass.
 	if cfg.Agent.ContinuousCompression {
-		hooks.RegisterPriority(core.HookBeforeContextBuild, "continuous-compression", func(ctx context.Context, d *core.HookData) error {
-			d.Messages = core.ContinuousCompressV2(d.Messages, compressionKeepLast, compressionMinMessages)
+		archivePct := cfg.Agent.ZoneArchivePercent
+		if archivePct <= 0 {
+			archivePct = 25
+		}
+		compressCfg := core.UnifiedCompressConfig{
+			KeepLast:      cfg.Agent.CompressionKeepLast,
+			MinMessages:   cfg.Agent.CompressionMinMessages,
+			ContextWindow: cfg.Agent.ContextWindow,
+			MaxTokens:     cfg.Agent.MaxTokens,
+			ArchivePct:    archivePct,
+		}
+		hooks.RegisterPriority(core.HookBeforeContextBuild, "unified-compression", func(ctx context.Context, d *core.HookData) error {
+			d.Messages = core.UnifiedCompress(d.Messages, compressCfg)
 			return nil
 		}, 50)
-		log.Printf("[main] continuous compression V2 enabled (keepLast: %d)", compressionKeepLast)
-	}
-
-	// Register zone budgeting hook (optional, requires continuousCompression)
-	if cfg.Agent.ZoneBudgeting {
-		if !cfg.Agent.ContinuousCompression {
-			log.Printf("[main] WARNING: zoneBudgeting requires continuousCompression — enabling it")
-			hooks.RegisterPriority(core.HookBeforeContextBuild, "continuous-compression", func(ctx context.Context, d *core.HookData) error {
-				d.Messages = core.ContinuousCompressV2(d.Messages, compressionKeepLast, compressionMinMessages)
-				return nil
-			}, 50)
-		}
-		archivePercent := cfg.Agent.ZoneArchivePercent
-		if archivePercent <= 0 {
-			archivePercent = 25
-		}
-		zoneBudget := core.ZoneBudgetV2{
-			ContextWindow:    cfg.Agent.ContextWindow,
-			SystemArchivePct: archivePercent,
-			ActiveOpsPct:     25,
-			HeadroomPct:      50,
-			OutputReserve:    cfg.Agent.MaxTokens,
-		}
-		hooks.RegisterPriority(core.HookBeforeContextBuild, "zone-budgeting", func(ctx context.Context, d *core.HookData) error {
-			d.Messages = core.ApplyZoneBudgetV2(d.Messages, zoneBudget, nil)
-			return nil
-		}, 60)
-		log.Printf("[main] zone budgeting V2 enabled (system+archive: %d%%, active: 25%%, headroom: 50%%)", archivePercent)
+		log.Printf("[main] unified compression enabled (keepLast: %d, archive: %d%%)", compressCfg.KeepLast, archivePct)
 	}
 
 	// Build tools: default 6 + MCP tools

@@ -55,7 +55,7 @@ type AgentConfig struct {
 	ContinuousCompression  bool   `json:"continuousCompression"`  // enable per-turn gradual message compression
 	CompressionKeepLast    int    `json:"compressionKeepLast"`    // messages always kept verbatim by continuous compression (default 10)
 	CompressionMinMessages int    `json:"compressionMinMessages"` // don't compress until this many messages (0 = compress from keepLast+1)
-	ZoneBudgeting         bool   `json:"zoneBudgeting"`         // enable zone-based token budget allocation
+	ZoneBudgeting         bool   `json:"zoneBudgeting"`         // ignored when continuousCompression is true (unified pipeline handles both)
 	ZoneArchivePercent    int    `json:"zoneArchivePercent"`    // % of usable budget for archive zone (default 30)
 	SmartRouting          bool   `json:"smartRouting"`
 	SmartRoutingModel string `json:"smartRoutingModel"`

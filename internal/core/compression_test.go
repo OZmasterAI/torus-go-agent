@@ -891,6 +891,259 @@ func TestContinuousCompressV2_TemplatesInMessageArray(t *testing.T) {
 	}
 }
 
+// --- UnifiedCompress tests ---
+
+func TestUnifiedCompress_BasicPipeline(t *testing.T) {
+	// Build 5 operations with substantial content so budget forces compression
+	messages := []types.Message{
+		{Role: types.RoleAssistant, Content: []types.ContentBlock{{Type: "text", Text: "You are a helpful agent."}}},
+	}
+	for i := 0; i < 5; i++ {
+		messages = append(messages,
+			types.Message{Role: types.RoleUser, Content: []types.ContentBlock{{Type: "text", Text: fmt.Sprintf("task %d: edit file%d.go %s", i, i, strings.Repeat("context ", 100))}}},
+			types.Message{Role: types.RoleAssistant, Content: []types.ContentBlock{
+				{Type: "text", Text: "On it. " + strings.Repeat("reasoning ", 50)},
+				{Type: "tool_use", ID: fmt.Sprintf("u%d", i), Name: "edit", Input: map[string]any{"file_path": fmt.Sprintf("file%d.go", i)}},
+			}},
+			types.Message{Role: types.RoleUser, Content: []types.ContentBlock{
+				{Type: "tool_result", ToolUseID: fmt.Sprintf("u%d", i), Content: strings.Repeat("output line\n", 100)},
+			}},
+			types.Message{Role: types.RoleAssistant, Content: []types.ContentBlock{{Type: "text", Text: fmt.Sprintf("Completed task %d. %s", i, strings.Repeat("detail ", 50))}}},
+		)
+	}
+
+	cfg := UnifiedCompressConfig{
+		KeepLast:      4,
+		MinMessages:   0,
+		ContextWindow: 10000, // tight budget for ~15k tokens of content
+		MaxTokens:     2000,
+		ArchivePct:    25,
+	}
+	result := UnifiedCompress(messages, cfg)
+
+	// Result should be shorter than input
+	if len(result) >= len(messages) {
+		t.Errorf("expected compression: got %d messages, original %d", len(result), len(messages))
+	}
+	// System prompt should be preserved
+	if !strings.Contains(result[0].Content[0].Text, "You are a helpful agent.") {
+		t.Error("system prompt should be preserved")
+	}
+}
+
+func TestUnifiedCompress_ScoresAllOps(t *testing.T) {
+	// 3 operations: oldest references same files as newest (high overlap → should survive)
+	messages := []types.Message{
+		{Role: types.RoleAssistant, Content: []types.ContentBlock{{Type: "text", Text: "system prompt"}}},
+		// Op 0: works on shared.go (same as op 2 → high file overlap)
+		{Role: types.RoleUser, Content: []types.ContentBlock{{Type: "text", Text: "task 0: fix shared.go"}}},
+		{Role: types.RoleAssistant, Content: []types.ContentBlock{
+			{Type: "tool_use", ID: "t0", Name: "edit", Input: map[string]any{"file_path": "shared.go"}},
+		}},
+		{Role: types.RoleUser, Content: []types.ContentBlock{
+			{Type: "tool_result", ToolUseID: "t0", Content: "applied fix"},
+		}},
+		{Role: types.RoleAssistant, Content: []types.ContentBlock{{Type: "text", Text: "Fixed the error in shared.go"}}},
+		// Op 1: works on unrelated.go (no overlap → low score, should be archived)
+		{Role: types.RoleUser, Content: []types.ContentBlock{{Type: "text", Text: "task 1: update unrelated.go"}}},
+		{Role: types.RoleAssistant, Content: []types.ContentBlock{
+			{Type: "tool_use", ID: "t1", Name: "edit", Input: map[string]any{"file_path": "unrelated.go"}},
+		}},
+		{Role: types.RoleUser, Content: []types.ContentBlock{
+			{Type: "tool_result", ToolUseID: "t1", Content: "ok"},
+		}},
+		{Role: types.RoleAssistant, Content: []types.ContentBlock{{Type: "text", Text: "Done"}}},
+		// Op 2: works on shared.go again (active op)
+		{Role: types.RoleUser, Content: []types.ContentBlock{{Type: "text", Text: "task 2: refactor shared.go"}}},
+		{Role: types.RoleAssistant, Content: []types.ContentBlock{
+			{Type: "tool_use", ID: "t2", Name: "edit", Input: map[string]any{"file_path": "shared.go"}},
+		}},
+		{Role: types.RoleUser, Content: []types.ContentBlock{
+			{Type: "tool_result", ToolUseID: "t2", Content: "refactored"},
+		}},
+		{Role: types.RoleAssistant, Content: []types.ContentBlock{{Type: "text", Text: "Refactored shared.go successfully"}}},
+	}
+
+	cfg := UnifiedCompressConfig{
+		KeepLast:      4, // only covers op 2's messages
+		MinMessages:   0,
+		ContextWindow: 128000,
+		MaxTokens:     8192,
+		ArchivePct:    25,
+	}
+	result := UnifiedCompress(messages, cfg)
+
+	// Op 0 (shared.go) should survive as template or verbatim due to file overlap with active op
+	foundOp0 := false
+	for _, m := range result {
+		for _, b := range m.Content {
+			if strings.Contains(b.Text, "shared.go") && strings.Contains(b.Text, "task 0") {
+				foundOp0 = true
+			}
+			if strings.Contains(b.Text, "fix shared.go") {
+				foundOp0 = true
+			}
+		}
+	}
+	if !foundOp0 {
+		t.Error("op 0 (high file overlap with active) should survive in result as template or verbatim")
+	}
+}
+
+func TestUnifiedCompress_BudgetFillsByScore(t *testing.T) {
+	// Build 6 operations totaling a lot of content, with tight budget
+	messages := []types.Message{
+		{Role: types.RoleAssistant, Content: []types.ContentBlock{{Type: "text", Text: "system"}}},
+	}
+	for i := 0; i < 6; i++ {
+		messages = append(messages,
+			types.Message{Role: types.RoleUser, Content: []types.ContentBlock{{Type: "text", Text: fmt.Sprintf("task %d: work on file%d.go with %s", i, i, strings.Repeat("detail ", 200))}}},
+			types.Message{Role: types.RoleAssistant, Content: []types.ContentBlock{
+				{Type: "tool_use", ID: fmt.Sprintf("t%d", i), Name: "edit", Input: map[string]any{"file_path": fmt.Sprintf("file%d.go", i)}},
+			}},
+			types.Message{Role: types.RoleUser, Content: []types.ContentBlock{
+				{Type: "tool_result", ToolUseID: fmt.Sprintf("t%d", i), Content: strings.Repeat("output line\n", 200)},
+			}},
+			types.Message{Role: types.RoleAssistant, Content: []types.ContentBlock{{Type: "text", Text: fmt.Sprintf("Completed task %d. %s", i, strings.Repeat("result ", 100))}}},
+		)
+	}
+
+	cfg := UnifiedCompressConfig{
+		KeepLast:      4,
+		MinMessages:   0,
+		ContextWindow: 8000,  // tight: ~8682 raw tokens, usable only ~5500
+		MaxTokens:     2500,
+		ArchivePct:    25,
+	}
+	result := UnifiedCompress(messages, cfg)
+
+	// Result should fit within budget
+	resultTokens := EstimateTokens(result)
+	usableBudget := cfg.ContextWindow - cfg.MaxTokens
+	if resultTokens > usableBudget {
+		t.Errorf("result (%d tokens) exceeds usable budget (%d tokens)", resultTokens, usableBudget)
+	}
+	// Result should be shorter than input
+	if len(result) >= len(messages) {
+		t.Errorf("expected compression: got %d, original %d", len(result), len(messages))
+	}
+}
+
+func TestUnifiedCompress_ActiveOpNeverCompacted(t *testing.T) {
+	// Last operation is very large — should be truncated but present, never replaced with template
+	messages := []types.Message{
+		{Role: types.RoleAssistant, Content: []types.ContentBlock{{Type: "text", Text: "system"}}},
+	}
+	// Small early op
+	messages = append(messages,
+		types.Message{Role: types.RoleUser, Content: []types.ContentBlock{{Type: "text", Text: "task 0: small thing"}}},
+		types.Message{Role: types.RoleAssistant, Content: []types.ContentBlock{{Type: "text", Text: "ok"}}},
+	)
+	// Large active op (10 tool calls)
+	messages = append(messages,
+		types.Message{Role: types.RoleUser, Content: []types.ContentBlock{{Type: "text", Text: "task 1: big refactor"}}},
+	)
+	for j := 0; j < 10; j++ {
+		messages = append(messages,
+			types.Message{Role: types.RoleAssistant, Content: []types.ContentBlock{
+				{Type: "tool_use", ID: fmt.Sprintf("big%d", j), Name: "edit", Input: map[string]any{"file_path": fmt.Sprintf("big%d.go", j)}},
+			}},
+			types.Message{Role: types.RoleUser, Content: []types.ContentBlock{
+				{Type: "tool_result", ToolUseID: fmt.Sprintf("big%d", j), Content: strings.Repeat("large output ", 500)},
+			}},
+		)
+	}
+	messages = append(messages,
+		types.Message{Role: types.RoleAssistant, Content: []types.ContentBlock{{Type: "text", Text: "Refactor complete"}}},
+	)
+
+	cfg := UnifiedCompressConfig{
+		KeepLast:      4,
+		MinMessages:   0,
+		ContextWindow: 30000,
+		MaxTokens:     8192,
+		ArchivePct:    25,
+	}
+	result := UnifiedCompress(messages, cfg)
+
+	// Active op's messages should appear (truncated but not templated)
+	foundActiveOp := false
+	for _, m := range result {
+		for _, b := range m.Content {
+			if strings.Contains(b.Text, "big refactor") || strings.Contains(b.Text, "Refactor complete") {
+				foundActiveOp = true
+			}
+		}
+	}
+	if !foundActiveOp {
+		t.Error("active operation should be present in result (truncated, not compacted)")
+	}
+}
+
+func TestUnifiedCompress_LargeOpArchived(t *testing.T) {
+	// One massive non-active op + two small ops — massive should be archived
+	messages := []types.Message{
+		{Role: types.RoleAssistant, Content: []types.ContentBlock{{Type: "text", Text: "system"}}},
+		// Massive op
+		{Role: types.RoleUser, Content: []types.ContentBlock{{Type: "text", Text: "task 0: huge analysis"}}},
+		{Role: types.RoleAssistant, Content: []types.ContentBlock{
+			{Type: "tool_use", ID: "h0", Name: "read", Input: map[string]any{"file_path": "huge.go"}},
+		}},
+		{Role: types.RoleUser, Content: []types.ContentBlock{
+			{Type: "tool_result", ToolUseID: "h0", Content: strings.Repeat("massive content line\n", 3000)},
+		}},
+		{Role: types.RoleAssistant, Content: []types.ContentBlock{{Type: "text", Text: "Analyzed the massive file. " + strings.Repeat("analysis ", 500)}}},
+		// Small op 1
+		{Role: types.RoleUser, Content: []types.ContentBlock{{Type: "text", Text: "task 1: small fix on small.go"}}},
+		{Role: types.RoleAssistant, Content: []types.ContentBlock{
+			{Type: "tool_use", ID: "s1", Name: "edit", Input: map[string]any{"file_path": "small.go"}},
+		}},
+		{Role: types.RoleUser, Content: []types.ContentBlock{
+			{Type: "tool_result", ToolUseID: "s1", Content: "fixed"},
+		}},
+		{Role: types.RoleAssistant, Content: []types.ContentBlock{{Type: "text", Text: "Fixed small.go"}}},
+		// Small op 2 (active)
+		{Role: types.RoleUser, Content: []types.ContentBlock{{Type: "text", Text: "task 2: tiny tweak on tiny.go"}}},
+		{Role: types.RoleAssistant, Content: []types.ContentBlock{
+			{Type: "tool_use", ID: "s2", Name: "edit", Input: map[string]any{"file_path": "tiny.go"}},
+		}},
+		{Role: types.RoleUser, Content: []types.ContentBlock{
+			{Type: "tool_result", ToolUseID: "s2", Content: "tweaked"},
+		}},
+		{Role: types.RoleAssistant, Content: []types.ContentBlock{{Type: "text", Text: "Tweaked tiny.go"}}},
+	}
+
+	cfg := UnifiedCompressConfig{
+		KeepLast:      4,
+		MinMessages:   0,
+		ContextWindow: 60000,
+		MaxTokens:     8192,
+		ArchivePct:    25,
+	}
+	result := UnifiedCompress(messages, cfg)
+
+	// Massive op should NOT be verbatim (should be archived or templated)
+	for _, m := range result {
+		for _, b := range m.Content {
+			if strings.Contains(b.Content, "massive content line") && len(b.Content) > 5000 {
+				t.Error("massive non-active op should not survive verbatim")
+			}
+		}
+	}
+	// Small ops should survive
+	foundSmall := false
+	for _, m := range result {
+		for _, b := range m.Content {
+			if strings.Contains(b.Text, "small.go") || strings.Contains(b.Text, "tiny.go") {
+				foundSmall = true
+			}
+		}
+	}
+	if !foundSmall {
+		t.Error("small operations should survive")
+	}
+}
+
 func TestContinuousCompressV2_WorkingMemoryAppended(t *testing.T) {
 	// Build enough operations that oldest ones become working memory one-liners
 	messages := []types.Message{
