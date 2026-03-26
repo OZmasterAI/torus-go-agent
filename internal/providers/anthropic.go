@@ -189,6 +189,13 @@ func buildAnthropicMessages(messages []t.Message) []anthropicMsg {
 			Content: content,
 		})
 	}
+	// Last defense: if the final message is assistant, append a minimal user
+	// nudge. Hooks and compression run after sanitizeMessages (which has its own
+	// Pass 5 check) and can re-introduce an assistant-ending sequence.
+	if len(apiMsgs) > 0 && apiMsgs[len(apiMsgs)-1].Role == "assistant" {
+		apiMsgs = append(apiMsgs, anthropicMsg{Role: "user", Content: "Continue."})
+	}
+
 	return apiMsgs
 }
 

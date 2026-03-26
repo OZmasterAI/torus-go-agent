@@ -918,3 +918,115 @@ func TestContinuousCompressV2_WorkingMemoryAppended(t *testing.T) {
 		t.Errorf("should compress: got %d, original %d", len(result), len(messages))
 	}
 }
+
+func TestCountTurnBoundary(t *testing.T) {
+	user := func(text string) types.Message {
+		return types.Message{Role: types.RoleUser, Content: []types.ContentBlock{{Type: "text", Text: text}}}
+	}
+	assistant := func(text string) types.Message {
+		return types.Message{Role: types.RoleAssistant, Content: []types.ContentBlock{{Type: "text", Text: text}}}
+	}
+	toolUseOnly := func() types.Message {
+		return types.Message{Role: types.RoleAssistant, Content: []types.ContentBlock{{Type: "tool_use", ID: "t1", Name: "bash"}}}
+	}
+	toolResult := func() types.Message {
+		return types.Message{Role: types.RoleTool, Content: []types.ContentBlock{{Type: "tool_result", ToolUseID: "t1", Content: "ok"}}}
+	}
+
+	tests := []struct {
+		name     string
+		messages []types.Message
+		keepLast int
+		want     int
+	}{
+		{
+			name: "simple turns",
+			messages: []types.Message{
+				user("sys"), // messages[0] = system
+				user("q1"), assistant("a1"),
+				user("q2"), assistant("a2"),
+				user("q3"), assistant("a3"),
+			},
+			keepLast: 4, // 4 turns = q2, a2, q3, a3
+			want:     3, // index of user("q2")
+		},
+		{
+			name: "tool results dont count as turns",
+			messages: []types.Message{
+				user("sys"),
+				user("q1"),
+				toolUseOnly(), toolResult(), toolResult(), toolResult(),
+				assistant("done"),
+				user("q2"), assistant("a2"),
+			},
+			keepLast: 4, // 4 turns back: a2, q2, done, q1 → lands at index 1
+			want:     1,
+		},
+		{
+			name: "large single operation with many tool results",
+			messages: []types.Message{
+				user("sys"),
+				user("read 10 files"),
+				toolUseOnly(), toolResult(), toolResult(), toolResult(),
+				toolResult(), toolResult(), toolResult(), toolResult(),
+				assistant("here are the results"),
+			},
+			keepLast: 4,
+			// Only 3 real turns: user("read 10 files"), assistant-tool-only doesn't count,
+			// assistant("here are the results"). Not enough turns for keepLast=4,
+			// so return 1 (keep everything).
+			want: 1,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := countTurnBoundary(tt.messages, tt.keepLast)
+			if got != tt.want {
+				t.Errorf("countTurnBoundary() = %d, want %d", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestContinuousCompressV2_LargeOperationNotSwallowed(t *testing.T) {
+	// Regression: a single operation with many tool calls should NOT cause
+	// verbatimOps to be empty (which would leave only assistant-role templates
+	// and trigger prefill errors).
+	messages := []types.Message{
+		{Role: types.RoleAssistant, Content: []types.ContentBlock{{Type: "text", Text: "system prompt"}}},
+		{Role: types.RoleUser, Content: []types.ContentBlock{{Type: "text", Text: "old task"}}},
+		{Role: types.RoleAssistant, Content: []types.ContentBlock{{Type: "text", Text: "old done"}}},
+		{Role: types.RoleUser, Content: []types.ContentBlock{{Type: "text", Text: "read these 8 files"}}},
+	}
+	// Add 8 tool results (implementation noise)
+	for i := 0; i < 8; i++ {
+		messages = append(messages,
+			types.Message{Role: types.RoleAssistant, Content: []types.ContentBlock{{Type: "tool_use", ID: fmt.Sprintf("t%d", i), Name: "read"}}},
+			types.Message{Role: types.RoleTool, Content: []types.ContentBlock{{Type: "tool_result", ToolUseID: fmt.Sprintf("t%d", i), Content: "file content"}}},
+		)
+	}
+	messages = append(messages,
+		types.Message{Role: types.RoleAssistant, Content: []types.ContentBlock{{Type: "text", Text: "here are all 8 files"}}},
+	)
+
+	result := ContinuousCompressV2(messages, 4, 0)
+
+	// The result must NOT end with an assistant message (which would cause prefill).
+	last := result[len(result)-1]
+	if last.Role == types.RoleAssistant {
+		// Check if it's a template (compressed) — this was the bug.
+		// The verbatim zone should include the large operation's messages,
+		// not compress everything into templates.
+		hasVerbatim := false
+		for _, m := range result[1:] {
+			if m.Role == types.RoleTool || m.Role == types.RoleUser {
+				hasVerbatim = true
+				break
+			}
+		}
+		if !hasVerbatim {
+			t.Error("all messages compressed to assistant templates — verbatim zone is empty (prefill bug)")
+		}
+	}
+}

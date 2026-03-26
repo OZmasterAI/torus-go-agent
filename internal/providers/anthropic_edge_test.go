@@ -351,14 +351,22 @@ func TestAnthropicEdge_TrailingWhitespaceTrimmedAtProviderBoundary(t *testing.T)
 				{Role: types.RoleAssistant, Content: []types.ContentBlock{{Type: "text", Text: tc.text}}},
 			}
 			result := buildAnthropicMessages(msgs)
-			// Last message should be assistant with trimmed text
+			// Messages ending with assistant get a "Continue." user nudge appended.
+			// The assistant message (now second-to-last) should still be trimmed.
+			if len(result) < 2 {
+				t.Fatalf("expected at least 2 messages, got %d", len(result))
+			}
 			last := result[len(result)-1]
-			if s, ok := last.Content.(string); ok {
+			if last.Role != "user" {
+				t.Fatalf("expected last message to be user (prefill defense), got %q", last.Role)
+			}
+			assistant := result[len(result)-2]
+			if s, ok := assistant.Content.(string); ok {
 				if s != tc.wantText {
 					t.Errorf("got %q, want %q", s, tc.wantText)
 				}
 			} else {
-				t.Fatalf("expected string content, got %T", last.Content)
+				t.Fatalf("expected string content, got %T", assistant.Content)
 			}
 		})
 	}

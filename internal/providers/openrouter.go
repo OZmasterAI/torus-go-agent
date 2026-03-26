@@ -270,6 +270,14 @@ func buildMessages(systemPrompt string, messages []t.Message) []openaiMsg {
 			})
 		}
 	}
+
+	// Last defense: if the final message is assistant, append a minimal user
+	// nudge. Hooks and compression run after sanitizeMessages and can
+	// re-introduce an assistant-ending sequence (prefill unsupported on many models).
+	if len(apiMsgs) > 0 && apiMsgs[len(apiMsgs)-1].Role == "assistant" {
+		apiMsgs = append(apiMsgs, openaiMsg{Role: "user", Content: "Continue."})
+	}
+
 	return apiMsgs
 }
 
