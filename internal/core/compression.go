@@ -271,6 +271,7 @@ func compressText(text string, maxChars int) string {
 
 // UnifiedCompressConfig configures the unified compression pipeline.
 type UnifiedCompressConfig struct {
+	KeepFirst     int // messages after system prompt to always keep verbatim (default 0 = off)
 	KeepLast      int // recent messages kept verbatim (default 10)
 	MinMessages   int // minimum message count before compression activates (0 = use KeepLast)
 	ContextWindow int // total context window in tokens (default 128000)
@@ -311,8 +312,30 @@ func UnifiedCompress(messages []t.Message, cfg UnifiedCompressConfig) []t.Messag
 		return messages
 	}
 
-	// Step 1: Group all messages into operations
-	ops := GroupOperations(messages)
+	// Step 0: Extract pinned messages (KeepFirst)
+	// These sit right after messages[0] (system prompt) and are always kept verbatim.
+	var pinnedMessages []t.Message
+	pinnedEnd := 0 // index where pinned messages end (exclusive), 0 = none
+	if cfg.KeepFirst > 0 && n > 1 {
+		pinnedEnd = 1 + cfg.KeepFirst // messages[1..pinnedEnd)
+		if pinnedEnd > n {
+			pinnedEnd = n
+		}
+		pinnedMessages = messages[1:pinnedEnd]
+	}
+
+	// Build compressible slice: messages[0] + messages[pinnedEnd:] (skip pinned)
+	// GroupOperations expects messages[0] to be system prompt, so we reconstruct.
+	var compressible []t.Message
+	if pinnedEnd > 0 {
+		compressible = append(compressible, messages[0])
+		compressible = append(compressible, messages[pinnedEnd:]...)
+	} else {
+		compressible = messages
+	}
+
+	// Step 1: Group compressible messages into operations
+	ops := GroupOperations(compressible)
 	if len(ops) == 0 {
 		return messages
 	}
@@ -321,6 +344,7 @@ func UnifiedCompress(messages []t.Message, cfg UnifiedCompressConfig) []t.Messag
 	activeOp := ops[len(ops)-1]
 	activeFiles := activeOp.Files
 	totalOps := len(ops)
+	cn := len(compressible) // length of compressible slice for keepLast check
 
 	type scoredOp struct {
 		op    Operation
@@ -343,7 +367,7 @@ func UnifiedCompress(messages []t.Message, cfg UnifiedCompressConfig) []t.Messag
 		s := ScoreOperation(op, age, totalOps, activeFiles, laterSlice)
 
 		// keepLast score floor: operations in the recent window get min 0.3
-		if op.StartIdx >= n-cfg.KeepLast {
+		if op.StartIdx >= cn-cfg.KeepLast {
 			if s < 0.3 {
 				s = 0.3
 			}
@@ -359,8 +383,11 @@ func UnifiedCompress(messages []t.Message, cfg UnifiedCompressConfig) []t.Messag
 	zone1Budget := usable * cfg.ArchivePct / 100
 	zone2Budget := usable * 25 / 100
 
-	// Zone 1 actual usage: system prompt
-	zone1Tokens := EstimateTokens(messages[0:1])
+	// Zone 1 actual usage: system prompt + pinned messages
+	zone1Tokens := EstimateTokens(compressible[0:1])
+	if len(pinnedMessages) > 0 {
+		zone1Tokens += EstimateTokens(pinnedMessages)
+	}
 	zone1Unused := zone1Budget - zone1Tokens
 	if zone1Unused < 0 {
 		zone1Unused = 0
@@ -467,10 +494,11 @@ func UnifiedCompress(messages []t.Message, cfg UnifiedCompressConfig) []t.Messag
 		}
 	}
 
-	// Step 7: Assemble result in order: system prompt + templates + zone2 ops (by position) + active op
-	sysMsg := AppendWorkingMemory(messages[0], archivedOps)
-	result := make([]t.Message, 0, 1+len(templateMessages)+len(zone2Ops)*4+len(activeMessages))
+	// Step 7: Assemble result in order: system prompt + pinned + templates + zone2 ops (by position) + active op
+	sysMsg := AppendWorkingMemory(compressible[0], archivedOps)
+	result := make([]t.Message, 0, 1+len(pinnedMessages)+len(templateMessages)+len(zone2Ops)*4+len(activeMessages))
 	result = append(result, sysMsg)
+	result = append(result, pinnedMessages...)
 	result = append(result, templateMessages...)
 
 	// Sort zone2Ops by original index to maintain conversation order

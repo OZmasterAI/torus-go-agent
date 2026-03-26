@@ -1144,6 +1144,93 @@ func TestUnifiedCompress_LargeOpArchived(t *testing.T) {
 	}
 }
 
+func TestUnifiedCompress_KeepFirstPreservesEarlyMessages(t *testing.T) {
+	// Simulate: system prompt + 2 "plan" messages + 6 operations
+	// KeepFirst=2 should always preserve the plan messages verbatim
+	messages := []types.Message{
+		{Role: types.RoleAssistant, Content: []types.ContentBlock{{Type: "text", Text: "system prompt"}}},
+		// Plan messages (should be pinned by KeepFirst=2)
+		{Role: types.RoleUser, Content: []types.ContentBlock{{Type: "text", Text: "Here is my plan: implement feature X with steps A, B, C"}}},
+		{Role: types.RoleAssistant, Content: []types.ContentBlock{{Type: "text", Text: "Got it. I'll follow your plan for feature X."}}},
+	}
+	// 6 operations with substantial content to force compression
+	for i := 0; i < 6; i++ {
+		messages = append(messages,
+			types.Message{Role: types.RoleUser, Content: []types.ContentBlock{{Type: "text", Text: fmt.Sprintf("task %d: work on file%d.go %s", i, i, strings.Repeat("detail ", 100))}}},
+			types.Message{Role: types.RoleAssistant, Content: []types.ContentBlock{
+				{Type: "tool_use", ID: fmt.Sprintf("k%d", i), Name: "edit", Input: map[string]any{"file_path": fmt.Sprintf("file%d.go", i)}},
+			}},
+			types.Message{Role: types.RoleUser, Content: []types.ContentBlock{
+				{Type: "tool_result", ToolUseID: fmt.Sprintf("k%d", i), Content: strings.Repeat("output ", 200)},
+			}},
+			types.Message{Role: types.RoleAssistant, Content: []types.ContentBlock{{Type: "text", Text: fmt.Sprintf("Done task %d. %s", i, strings.Repeat("result ", 50))}}},
+		)
+	}
+
+	cfg := UnifiedCompressConfig{
+		KeepFirst:     2, // pin the plan messages
+		KeepLast:      4,
+		MinMessages:   0,
+		ContextWindow: 10000, // tight to force compression
+		MaxTokens:     2000,
+		ArchivePct:    25,
+	}
+	result := UnifiedCompress(messages, cfg)
+
+	// Result should be compressed
+	if len(result) >= len(messages) {
+		t.Errorf("expected compression: got %d, original %d", len(result), len(messages))
+	}
+	// Plan messages must survive verbatim
+	foundPlan := false
+	foundAck := false
+	for _, m := range result {
+		for _, b := range m.Content {
+			if strings.Contains(b.Text, "Here is my plan: implement feature X") {
+				foundPlan = true
+			}
+			if strings.Contains(b.Text, "I'll follow your plan for feature X") {
+				foundAck = true
+			}
+		}
+	}
+	if !foundPlan {
+		t.Error("user plan message should be preserved by KeepFirst")
+	}
+	if !foundAck {
+		t.Error("assistant plan acknowledgment should be preserved by KeepFirst")
+	}
+}
+
+func TestUnifiedCompress_KeepFirstZeroDisabled(t *testing.T) {
+	// KeepFirst=0 (default) should behave identically to before
+	messages := []types.Message{
+		{Role: types.RoleAssistant, Content: []types.ContentBlock{{Type: "text", Text: "system"}}},
+		{Role: types.RoleUser, Content: []types.ContentBlock{{Type: "text", Text: "early message that may get compressed"}}},
+		{Role: types.RoleAssistant, Content: []types.ContentBlock{{Type: "text", Text: "ack"}}},
+	}
+	for i := 0; i < 5; i++ {
+		messages = append(messages,
+			types.Message{Role: types.RoleUser, Content: []types.ContentBlock{{Type: "text", Text: fmt.Sprintf("task %d %s", i, strings.Repeat("x ", 100))}}},
+			types.Message{Role: types.RoleAssistant, Content: []types.ContentBlock{{Type: "text", Text: fmt.Sprintf("done %d %s", i, strings.Repeat("y ", 100))}}},
+		)
+	}
+
+	cfg := UnifiedCompressConfig{
+		KeepFirst:     0, // disabled
+		KeepLast:      4,
+		ContextWindow: 5000,
+		MaxTokens:     1000,
+		ArchivePct:    25,
+	}
+	result := UnifiedCompress(messages, cfg)
+
+	// Should still compress and system prompt preserved
+	if !strings.Contains(result[0].Content[0].Text, "system") {
+		t.Error("system prompt should be preserved")
+	}
+}
+
 func TestContinuousCompressV2_WorkingMemoryAppended(t *testing.T) {
 	// Build enough operations that oldest ones become working memory one-liners
 	messages := []types.Message{

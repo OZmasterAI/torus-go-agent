@@ -108,6 +108,7 @@ func main() {
 		cfg.Agent.CompactionKeepLastN = setup.Config.CompactionKeepLastN
 		cfg.Agent.CompactionModel = setup.Config.CompactionModel
 		cfg.Agent.ContinuousCompression = setup.Config.ContinuousCompression
+		cfg.Agent.CompressionKeepFirst = setup.Config.CompressionKeepFirst
 		cfg.Agent.CompressionKeepLast = setup.Config.CompressionKeepLast
 		cfg.Agent.CompressionMinMessages = setup.Config.CompressionMinMessages
 		cfg.Agent.ZoneBudgeting = setup.Config.ZoneBudgeting
@@ -269,6 +270,7 @@ func main() {
 			archivePct = 25
 		}
 		compressCfg := core.UnifiedCompressConfig{
+			KeepFirst:     cfg.Agent.CompressionKeepFirst,
 			KeepLast:      cfg.Agent.CompressionKeepLast,
 			MinMessages:   cfg.Agent.CompressionMinMessages,
 			ContextWindow: cfg.Agent.ContextWindow,
@@ -279,7 +281,7 @@ func main() {
 			d.Messages = core.UnifiedCompress(d.Messages, compressCfg)
 			return nil
 		}, 50)
-		log.Printf("[main] unified compression enabled (keepLast: %d, archive: %d%%)", compressCfg.KeepLast, archivePct)
+		log.Printf("[main] unified compression enabled (keepFirst: %d, keepLast: %d, archive: %d%%)", compressCfg.KeepFirst, compressCfg.KeepLast, archivePct)
 	}
 
 	// Build tools: default 6 + MCP tools

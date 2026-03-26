@@ -338,6 +338,7 @@ type AgentConfigOverrides struct {
 	CompactionKeepLastN    int
 	CompactionModel        string
 	ContinuousCompression  bool
+	CompressionKeepFirst   int
 	CompressionKeepLast    int
 	CompressionMinMessages int
 	ZoneBudgeting          bool
@@ -371,6 +372,7 @@ func overridesFromConfig(a config.AgentConfig) *AgentConfigOverrides {
 		CompactionKeepLastN:    a.CompactionKeepLastN,
 		CompactionModel:        a.CompactionModel,
 		ContinuousCompression:  a.ContinuousCompression,
+		CompressionKeepFirst:   a.CompressionKeepFirst,
 		CompressionKeepLast:    a.CompressionKeepLast,
 		CompressionMinMessages: a.CompressionMinMessages,
 		ZoneBudgeting:          a.ZoneBudgeting,

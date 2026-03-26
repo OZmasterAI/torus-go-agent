@@ -53,6 +53,7 @@ type AgentConfig struct {
 	CompactionThreshold   int    `json:"compactionThreshold"`   // % of contextWindow that triggers compaction (default 80)
 	CompactionKeepLastN   int    `json:"compactionKeepLastN"`   // messages kept verbatim after compaction (default 10)
 	ContinuousCompression  bool   `json:"continuousCompression"`  // enable per-turn gradual message compression
+	CompressionKeepFirst   int    `json:"compressionKeepFirst"`   // messages after system prompt to always keep verbatim (default 0 = off)
 	CompressionKeepLast    int    `json:"compressionKeepLast"`    // messages always kept verbatim by continuous compression (default 10)
 	CompressionMinMessages int    `json:"compressionMinMessages"` // don't compress until this many messages (0 = compress from keepLast+1)
 	ZoneBudgeting         bool   `json:"zoneBudgeting"`         // ignored when continuousCompression is true (unified pipeline handles both)
