@@ -710,6 +710,13 @@ func makeProvider(providerName, apiKey, model string, agentCfg *config.AgentConf
 		}
 		return p
 	case "nvidia":
+		if model == "nvidia/free" {
+			router := providers.NewNvidiaFreeRouter(apiKey)
+			if agentCfg != nil && agentCfg.RewardScoring {
+				return providers.NewRewardRouter(router, apiKey)
+			}
+			return router
+		}
 		p := providers.NewNvidiaProvider(apiKey, model)
 		if agentCfg != nil && agentCfg.BaseURL != "" {
 			p.BaseURL = agentCfg.BaseURL

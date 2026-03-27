@@ -65,6 +65,70 @@ func NewNvidiaProvider(apiKey, model string) *OpenRouterProvider {
 	}
 }
 
+// NewNvidiaFreeRouter creates a Router that distributes requests across
+// all free NVIDIA NIM chat models with equal weights and fallback.
+func NewNvidiaFreeRouter(apiKey string) *Router {
+	models := []string{
+		"qwen/qwen3.5-122b-a10b",
+		"z-ai/glm4.7",
+		"z-ai/glm5",
+		"stepfun-ai/step-3.5-flash",
+		"minimaxai/minimax-m2.1",
+		"minimaxai/minimax-m2.5",
+		"deepseek-ai/deepseek-v3.2",
+		"deepseek-ai/deepseek-v3.1",
+		"deepseek-ai/deepseek-v3.1-terminus",
+		"mistralai/devstral-2-123b-instruct-2512",
+		"moonshotai/kimi-k2-thinking",
+		"moonshotai/kimi-k2-instruct",
+		"mistralai/mistral-large-3-675b-instruct-2512",
+		"mistralai/magistral-small-2506",
+		"mistralai/mamba-codestral-7b-v01",
+		"mistralai/mistral-nemo-minitron-8b-8k-instruct",
+		"bytedance/seed-oss-36b-instruct",
+		"qwen/qwen3-coder-480b-a35b-instruct",
+		"openai/gpt-oss-20b",
+		"openai/gpt-oss-120b",
+		"google/gemma-3-27b-it",
+		"google/gemma-2-2b-it",
+		"google/gemma-3n-e4b-it",
+		"igenius/colosseum_355b_instruct_16k",
+		"tiiuae/falcon3-7b-instruct",
+		"igenius/italia_10b_instruct_16k",
+		"qwen/qwen2.5-coder-7b-instruct",
+		"qwen/qwen2-7b-instruct",
+		"abacusai/dracarys-llama-3.1-70b-instruct",
+		"thudm/chatglm3-6b",
+		"baichuan-inc/baichuan2-13b-chat",
+		"nvidia/nemotron-3-super-120b-a12b",
+		"nvidia/nemotron-3-nano-30b-a3b",
+		"nvidia/nvidia-nemotron-nano-9b-v2",
+		"nvidia/llama-3.3-nemotron-super-49b-v1",
+		"nvidia/llama-3.3-nemotron-super-49b-v1.5",
+		"marin/marin-8b-instruct",
+		"nv-mistralai/mistral-nemo-12b-instruct",
+	}
+
+	first := NewNvidiaProvider(apiKey, models[0])
+	router := NewRouter(first)
+
+	var entries []RoutingEntry
+	entries = append(entries, RoutingEntry{Key: "nvidia:" + models[0], Weight: 1})
+	var fallbacks []string
+	fallbacks = append(fallbacks, "nvidia:"+models[0])
+
+	for _, m := range models[1:] {
+		p := NewNvidiaProvider(apiKey, m)
+		router.AddProvider(p)
+		entries = append(entries, RoutingEntry{Key: "nvidia:" + m, Weight: 1})
+		fallbacks = append(fallbacks, "nvidia:"+m)
+	}
+
+	router.SetWeights(entries)
+	router.SetFallbackOrder(fallbacks)
+	return router
+}
+
 // NewOpenAIProvider creates a native provider for OpenAI models (gpt-4o, o1, etc).
 func NewOpenAIProvider(apiKey, model string) *OpenRouterProvider {
 	return &OpenRouterProvider{

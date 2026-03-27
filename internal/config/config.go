@@ -69,6 +69,7 @@ type AgentConfig struct {
 	AzureAPIVersion  string `json:"azureApiVersion,omitempty"` // Azure API version (default "2024-06-01")
 	VertexProject    string `json:"vertexProject,omitempty"`   // Google Cloud project ID
 	VertexRegion     string `json:"vertexRegion,omitempty"`    // Google Cloud region (e.g. "us-central1")
+	RewardScoring    bool   `json:"rewardScoring,omitempty"`   // enable async reward-model scoring for nvidia/free router
 }
 
 // DataConfig holds data directory settings.

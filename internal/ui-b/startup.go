@@ -278,7 +278,9 @@ func fetchNvidiaNIMModels() []startupModelCategory {
 	}
 
 	// Build FREE MODELS category
-	var freeChoices []startupModelChoice
+	freeChoices := []startupModelChoice{
+		{Name: "Free Models Router [Free]", ID: "nvidia/free", ContextWindow: 131072, MaxTokens: 8192},
+	}
 	for _, m := range chatModels {
 		if nvidiaNIMFreeModels[m.ID] {
 			freeChoices = append(freeChoices, toChoice(m))
@@ -679,6 +681,7 @@ func defaultStartupProviderGroups() []startupProviderGroup {
 			AuthMethods: []startupAuthMethod{{Name: "API key", NeedsKey: "NVIDIA_API_KEY"}},
 			Categories: []startupModelCategory{
 				{Name: "FREE MODELS", Models: []startupModelChoice{
+					{Name: "Free Models Router [Free]", ID: "nvidia/free", ContextWindow: 131072, MaxTokens: 8192},
 					{Name: "GLM-4.7", ID: "z-ai/glm4.7"},
 					{Name: "Qwen3.5-122B", ID: "qwen/qwen3.5-122b-a10b"},
 					{Name: "llama-3.3-70b-instruct", ID: "meta/llama-3.3-70b-instruct"},
