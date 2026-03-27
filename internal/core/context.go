@@ -226,16 +226,20 @@ func extractKeyContent(messages []t.Message) string {
 //
 // Unlike linear compaction, it never destroys history. Instead it:
 //  1. Reads all ancestors from the current HEAD.
-//  2. Checks NeedsCompaction against that message list.
-//  3. If compaction is needed, extracts key content from the middle messages.
-//  4. Calls summarize to produce a summary string (falls back to key content).
-//  5. Creates a new branch forked from the root node (first ancestor).
-//  6. Adds a single assistant "context summary" node on the new branch.
-//  7. Re-adds the last KeepLastN messages as new nodes on the new branch.
-//  8. Switches the DAG to the new branch (original branch is fully preserved).
+//  2. Extracts key content from the middle messages.
+//  3. Calls summarize to produce a summary string (falls back to key content).
+//  4. Creates a new branch forked from the root node (first ancestor).
+//  5. Adds a single assistant "context summary" node on the new branch.
+//  6. Re-adds the last KeepLastN messages as new nodes on the new branch.
+//  7. The DAG is now on the new branch (original branch is fully preserved).
 //
-// The dag is mutated in place (branch switch). Returns nil when no compaction
-// was needed.
+// The caller (runLoop) is responsible for checking NeedsCompaction before
+// calling this function. CompactDAG trusts that decision and does not
+// re-check, avoiding disagreements between hook-compressed token counts
+// and raw DAG token estimates.
+//
+// The dag is mutated in place (branch switch). Returns nil when the DAG
+// is empty or has too few messages to compact.
 func CompactDAG(dag *DAG, cfg CompactionConfig, summarize func(string) (string, error)) error {
 	cfg = defaultCompactionConfig(cfg)
 	if cfg.Mode == CompactionOff {
@@ -256,13 +260,8 @@ func CompactDAG(dag *DAG, cfg CompactionConfig, summarize func(string) (string, 
 		return fmt.Errorf("compactDAG get ancestors: %w", err)
 	}
 
-	// Convert nodes → messages for token estimation.
+	// Convert nodes → messages for content extraction.
 	messages := nodesToMessages(ancestors)
-
-	// --- 2. Check threshold ---
-	if !NeedsCompaction(messages, cfg) {
-		return nil
-	}
 
 	keepN := cfg.KeepLastN
 	if len(messages) <= keepN+1 {
@@ -313,7 +312,7 @@ func CompactDAG(dag *DAG, cfg CompactionConfig, summarize func(string) (string, 
 	// --- 5. New branch from root node ---
 	rootNode := ancestors[0]
 	newBranchName := fmt.Sprintf("compact-%s", genID())
-	newBranchID, err := dag.Branch(rootNode.ID, newBranchName)
+	_, err = dag.Branch(rootNode.ID, newBranchName)
 	if err != nil {
 		return fmt.Errorf("compactDAG create branch: %w", err)
 	}
@@ -343,12 +342,7 @@ func CompactDAG(dag *DAG, cfg CompactionConfig, summarize func(string) (string, 
 		parentID = nodeID
 	}
 
-	// --- 8. Switch to the new branch (original preserved) ---
-	// newBranchID already set as current by dag.Branch(), but let's be explicit.
-	if err := dag.SwitchBranch(newBranchID); err != nil {
-		return fmt.Errorf("compactDAG switch branch: %w", err)
-	}
-
+	// dag.Branch() already switched to newBranchID — no SwitchBranch needed.
 	return nil
 }
 
