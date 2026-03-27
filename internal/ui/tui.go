@@ -311,6 +311,11 @@ type Model struct {
 	branches     []core.BranchInfo // cached for session switcher
 	workflow     workflowState     // workflow builder state
 
+	// Cached token estimate (invalidated on agent events)
+	cachedCtxTokens int
+	cachedPreEst    int
+	cachedCtxDirty  bool
+
 	// Terminal
 	width  int
 	height int
@@ -322,6 +327,24 @@ type TUIExtras struct {
 	Telemetry *features.TelemetryCollector
 	SubMgr    *features.SubAgentManager
 	MCPClient *features.MCPClient
+}
+
+
+// refreshCtxCache recomputes token estimates from the DAG. Call this only
+// when the conversation changes (after agent response, tool call, etc.),
+// not on every render frame.
+func (m *Model) refreshCtxCache() {
+	head, _ := m.agent.DAG().GetHead()
+	if head == "" {
+		m.cachedCtxTokens = 0
+		m.cachedPreEst = 0
+		m.cachedCtxDirty = false
+		return
+	}
+	msgs, _ := m.agent.DAG().PromptFrom(head)
+	m.cachedCtxTokens = core.EstimateTokens(msgs)
+	m.cachedPreEst = core.EstimatePromptCost("", msgs, nil)
+	m.cachedCtxDirty = false
 }
 
 func newModel(agent *core.Agent, modelName string, cfg config.AgentConfig, skills *features.SkillRegistry, extras *TUIExtras) Model {
@@ -344,6 +367,7 @@ func newModel(agent *core.Agent, modelName string, cfg config.AgentConfig, skill
 		barDir:        1,
 		startTime:     time.Now(),
 		statusLine:    "starting...",
+		cachedCtxDirty: true,
 		modifiedFiles: make(map[string]int),
 		ctxProgress: progress.New(
 			progress.WithGradient("#ff4d01", "#ff8c00"),
@@ -354,6 +378,8 @@ func newModel(agent *core.Agent, modelName string, cfg config.AgentConfig, skill
 
 	// Load existing branch history from DAG
 	head, _ := agent.DAG().GetHead()
+	// Pre-populate token cache
+	m.cachedCtxDirty = true
 	if head != "" {
 		ancestors, _ := agent.DAG().GetAncestors(head)
 		for _, node := range ancestors {
@@ -1402,14 +1428,12 @@ func (m Model) View() string {
 	// Status bar (below input)
 	statusLine := m.statusLine
 	if !m.processing {
-		preEst := 0
-		head, _ := m.agent.DAG().GetHead()
-		if head != "" {
-			msgs, _ := m.agent.DAG().PromptFrom(head)
-			preEst = core.EstimatePromptCost("", msgs, nil)
-			if m.input != "" {
-				preEst += core.EstimateTokensForText(m.input)
-			}
+		if m.cachedCtxDirty {
+			m.refreshCtxCache()
+		}
+		preEst := m.cachedPreEst
+		if m.input != "" {
+			preEst += core.EstimateTokensForText(m.input)
 		}
 		statusLine = m.buildStatus(m.totalTokensIn, m.totalTokensOut, m.totalCost, 0)
 		if preEst > 0 {
@@ -1962,12 +1986,7 @@ func (m Model) renderSidebar() string {
 		// Use actual input tokens from most recent API call
 		ctxPct = float64(m.lastInputTokens) / ctxWin * 100
 	} else {
-		// Estimate before first response arrives
-		head, _ := m.agent.DAG().GetHead()
-		if head != "" {
-			msgs, _ := m.agent.DAG().PromptFrom(head)
-			ctxPct = float64(core.EstimateTokens(msgs)) / ctxWin * 100
-		}
+		ctxPct = float64(m.cachedCtxTokens) / ctxWin * 100
 	}
 	lines = append(lines, fmt.Sprintf(" CTX: %.0f%%", ctxPct))
 	totalTok := m.totalTokensIn + m.totalTokensOut
@@ -2438,12 +2457,7 @@ func (m Model) buildStatus(tokIn, tokOut int, cost float64, elapsed time.Duratio
 		// Use actual input tokens from most recent API call
 		ctxPct = float64(m.lastInputTokens) / ctxWin * 100
 	} else {
-		// Estimate before first response arrives
-		head, _ := m.agent.DAG().GetHead()
-		if head != "" {
-			msgs, _ := m.agent.DAG().PromptFrom(head)
-			ctxPct = float64(core.EstimateTokens(msgs)) / ctxWin * 100
-		}
+		ctxPct = float64(m.cachedCtxTokens) / ctxWin * 100
 	}
 	parts = append(parts, "CTX:"+m.ctxProgress.ViewAs(ctxPct/100.0)+fmt.Sprintf(" %.0f%%", ctxPct))
 

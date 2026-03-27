@@ -6,8 +6,8 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	t "torus_go_agent/internal/types"
@@ -34,6 +34,7 @@ type BranchInfo struct {
 
 type DAG struct {
 	db       *sql.DB
+	mu       sync.RWMutex
 	branchID string
 	hooks    *HookRegistry // optional, set via SetHooks
 }
@@ -181,22 +182,41 @@ func scanNode(row *sql.Row) (*Node, error) {
 }
 
 func (d *DAG) GetAncestors(nodeID string) ([]Node, error) {
-	var ancestors []Node
-	cur := nodeID
-	for cur != "" {
-		row := d.db.QueryRow("SELECT id, parent_id, role, content, model, provider, timestamp, token_count FROM nodes WHERE id = ?", cur)
-		n, err := scanNode(row)
-		if err != nil {
-			if err == sql.ErrNoRows {
-				break
-			}
-			return nil, err
-		}
-		ancestors = append(ancestors, *n)
-		cur = n.ParentID
+	if nodeID == "" {
+		return nil, nil
 	}
-	slices.Reverse(ancestors)
-	return ancestors, nil
+	query := `WITH RECURSIVE chain(id, depth) AS (
+		SELECT ?, 0
+		UNION ALL
+		SELECT n.parent_id, c.depth + 1 FROM nodes n JOIN chain c ON n.id = c.id WHERE n.parent_id IS NOT NULL AND n.parent_id != ''
+	)
+	SELECT n.id, n.parent_id, n.role, n.content, n.model, n.provider, n.timestamp, n.token_count
+	FROM nodes n JOIN chain c ON n.id = c.id
+	ORDER BY c.depth DESC`
+
+	rows, err := d.db.Query(query, nodeID)
+	if err != nil {
+		return nil, fmt.Errorf("get ancestors: %w", err)
+	}
+	defer rows.Close()
+
+	var ancestors []Node
+	for rows.Next() {
+		var n Node
+		var pid sql.NullString
+		var cj string
+		if err := rows.Scan(&n.ID, &pid, &n.Role, &cj, &n.Model, &n.Provider, &n.Timestamp, &n.TokenCount); err != nil {
+			return nil, fmt.Errorf("scan ancestor: %w", err)
+		}
+		if pid.Valid {
+			n.ParentID = pid.String
+		}
+		if err := json.Unmarshal([]byte(cj), &n.Content); err != nil {
+			return nil, fmt.Errorf("unmarshal ancestor content: %w", err)
+		}
+		ancestors = append(ancestors, n)
+	}
+	return ancestors, rows.Err()
 }
 
 func (d *DAG) PromptFrom(nodeID string) ([]t.Message, error) {
@@ -285,7 +305,9 @@ func (d *DAG) Branch(fromNodeID, name string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	d.mu.Lock()
 	d.branchID = id
+	d.mu.Unlock()
 	return id, nil
 }
 
@@ -299,7 +321,9 @@ func (d *DAG) NewBranch(name string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	d.mu.Lock()
 	d.branchID = id
+	d.mu.Unlock()
 	return id, nil
 }
 
@@ -309,8 +333,10 @@ func (d *DAG) SwitchBranch(branchID string) error {
 	if exists == 0 {
 		return fmt.Errorf("branch %s not found", branchID)
 	}
+	d.mu.Lock()
 	oldBranch := d.branchID
 	d.branchID = branchID
+	d.mu.Unlock()
 	if d.hooks != nil {
 		d.hooks.Fire(context.Background(), HookOnBranchSwitch, &HookData{
 			AgentID: "main",
@@ -337,7 +363,11 @@ func (d *DAG) ListBranches() ([]BranchInfo, error) {
 	return bs, nil
 }
 
-func (d *DAG) CurrentBranchID() string { return d.branchID }
+func (d *DAG) CurrentBranchID() string {
+	d.mu.RLock()
+	defer d.mu.RUnlock()
+	return d.branchID
+}
 func (d *DAG) Close() error            { return d.db.Close() }
 
 // SearchAll searches all nodes across all branches for content matching the query.

@@ -1,8 +1,12 @@
+// subagents.go implements goroutine-based sub-agent spawning and lifecycle
+// management. Sub-agents run isolated on a forked DAG branch and report
+// results via channels.
 package features
 
 import (
 	"context"
 	"fmt"
+	"log"
 	"sync"
 	"time"
 
@@ -90,7 +94,9 @@ func (m *SubAgentManager) SpawnWithProvider(
 	if err != nil {
 		return "", fmt.Errorf("subagents: create branch: %w", err)
 	}
-	_ = parentDAG.SwitchBranch(parentBranchID)
+	if err := parentDAG.SwitchBranch(parentBranchID); err != nil {
+		log.Printf("[subagents] warning: restore parent branch %q: %v", parentBranchID, err)
+	}
 
 	// Fork an independent DAG for the sub-agent (shares DB, own branchID).
 	subDAG := parentDAG.Fork(subBranchID)

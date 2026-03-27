@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"strings"
 
@@ -505,7 +506,11 @@ func (p *GeminiProvider) parseGeminiSSE(ctx context.Context, resp *http.Response
 					return
 				}
 				// Function call args arrive complete in Gemini (not streamed like OpenAI)
-				argsJSON, _ := json.Marshal(part.FunctionCall.Args)
+				argsJSON, marshalErr := json.Marshal(part.FunctionCall.Args)
+				if marshalErr != nil {
+					log.Printf("[gemini] warning: could not marshal function call args for %q: %v", part.FunctionCall.Name, marshalErr)
+					argsJSON = []byte("{}")  
+				}
 				if !send(t.StreamEvent{
 					Type:         t.EventInputDelta,
 					ContentIndex: contentIdx,

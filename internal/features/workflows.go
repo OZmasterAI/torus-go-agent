@@ -1,3 +1,6 @@
+// workflows.go provides higher-level orchestration primitives built on
+// SubAgentManager: sequential pipelines, parallel fan-out, and iterative
+// loops with configurable stop conditions.
 package features
 
 import (

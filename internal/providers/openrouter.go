@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"strings"
 
@@ -302,7 +303,10 @@ func buildMessages(systemPrompt string, messages []t.Message) []openaiMsg {
 					textParts = append(textParts, b.Text)
 				}
 				if b.Type == "tool_use" {
-					argsJSON, _ := json.Marshal(b.Input)
+					argsJSON, err := json.Marshal(b.Input)
+					if err != nil {
+						log.Printf("openrouter: failed to marshal tool input for %q: %v", b.Name, err)
+					}
 					toolCalls = append(toolCalls, openaiToolCall{
 						ID:   b.ID,
 						Type: "function",
@@ -428,7 +432,9 @@ func (p *OpenRouterProvider) Complete(ctx context.Context, systemPrompt string, 
 	// Tool calls
 	for _, tc := range choice.Message.ToolCalls {
 		var args map[string]any
-		_ = json.Unmarshal([]byte(tc.Function.Arguments), &args)
+		if err := json.Unmarshal([]byte(tc.Function.Arguments), &args); err != nil {
+			log.Printf("openrouter: failed to unmarshal tool arguments for %q: %v", tc.Function.Name, err)
+		}
 		blocks = append(blocks, t.ContentBlock{
 			Type:  "tool_use",
 			ID:    tc.ID,
@@ -495,7 +501,10 @@ func (p *OpenRouterProvider) StreamComplete(ctx context.Context, systemPrompt st
 
 	if resp.StatusCode != 200 {
 		defer resp.Body.Close()
-		respBody, _ := io.ReadAll(resp.Body)
+		respBody, err := io.ReadAll(resp.Body)
+		if err != nil {
+			log.Printf("openrouter: failed to read error response body: %v", err)
+		}
 		return nil, fmt.Errorf("%s API error %d: %s", p.providerName, resp.StatusCode, string(respBody))
 	}
 
@@ -657,7 +666,9 @@ func (p *OpenRouterProvider) parseOpenAISSE(ctx context.Context, resp *http.Resp
 	for i, tc := range toolCalls {
 		var args map[string]any
 		if i < len(toolArgs) {
-			_ = json.Unmarshal([]byte(toolArgs[i].String()), &args)
+			if err := json.Unmarshal([]byte(toolArgs[i].String()), &args); err != nil {
+				log.Printf("openrouter: failed to unmarshal stream tool arguments for %q: %v", tc.Name, err)
+			}
 		}
 		tc.Input = args
 		blocks = append(blocks, tc)

@@ -1,3 +1,7 @@
+// Package tools provides the default set of built-in tools available to the
+// Torus agent: bash, read, write, edit, glob, and grep. Each tool is defined
+// as a [torus_go_agent/internal/types.Tool] value with a name, JSON schema for
+// its inputs, and an Execute function that performs the operation.
 package tools
 
 import (
@@ -43,12 +47,12 @@ func bashTool() t.Tool {
 			case <-done:
 				s := string(out)
 				if s == "" {
-					s = "(no output)"
+					s = NoOutputMsg
 				}
 				return &t.ToolResult{Content: s, IsError: cmdErr != nil}, nil
-			case <-time.After(30 * time.Second):
+			case <-time.After(BashTimeout):
 				cmd.Process.Kill()
-				return &t.ToolResult{Content: "Timed out (30s)", IsError: true}, nil
+				return &t.ToolResult{Content: BashTimeoutMsg, IsError: true}, nil
 			}
 		},
 	}
@@ -82,7 +86,7 @@ func readTool() t.Tool {
 			}
 			var out []string
 			for i := off; i < end; i++ {
-				out = append(out, fmt.Sprintf("%6d %s", i+1, lines[i]))
+				out = append(out, fmt.Sprintf(LineNumFormat, i+1, lines[i]))
 			}
 			return &t.ToolResult{Content: strings.Join(out, "\n")}, nil
 		},
@@ -104,8 +108,8 @@ func writeTool() t.Tool {
 		Execute: func(args map[string]any) (*t.ToolResult, error) {
 			fp, _ := args["file_path"].(string)
 			c, _ := args["content"].(string)
-			os.MkdirAll(filepath.Dir(fp), 0755)
-			if err := os.WriteFile(fp, []byte(c), 0644); err != nil {
+			os.MkdirAll(filepath.Dir(fp), DirPerm)
+			if err := os.WriteFile(fp, []byte(c), FilePerm); err != nil {
 				return &t.ToolResult{Content: "Error: " + err.Error(), IsError: true}, nil
 			}
 			return &t.ToolResult{Content: fmt.Sprintf("Wrote %d lines to %s", strings.Count(c, "\n")+1, fp)}, nil
@@ -145,7 +149,7 @@ func editTool() t.Tool {
 			} else {
 				c = strings.Replace(c, old, nw, 1)
 			}
-			if err := os.WriteFile(fp, []byte(c), 0644); err != nil {
+			if err := os.WriteFile(fp, []byte(c), FilePerm); err != nil {
 				return &t.ToolResult{Content: "Error: " + err.Error(), IsError: true}, nil
 			}
 			return &t.ToolResult{Content: "Edited " + fp}, nil
@@ -175,7 +179,7 @@ func globTool() t.Tool {
 				return &t.ToolResult{Content: "Error: " + err.Error(), IsError: true}, nil
 			}
 			if len(m) == 0 {
-				return &t.ToolResult{Content: "(no matches)"}, nil
+				return &t.ToolResult{Content: NoMatchesMsg}, nil
 			}
 			return &t.ToolResult{Content: strings.Join(m, "\n")}, nil
 		},
@@ -208,7 +212,7 @@ func grepTool() t.Tool {
 			cmdArgs = append(cmdArgs, pat, path)
 			out, err := osexec.Command("rg", cmdArgs...).CombinedOutput()
 			if err != nil && len(out) == 0 {
-				return &t.ToolResult{Content: "(no matches)"}, nil
+				return &t.ToolResult{Content: NoMatchesMsg}, nil
 			}
 			return &t.ToolResult{Content: string(out)}, nil
 		},

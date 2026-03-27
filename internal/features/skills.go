@@ -3,6 +3,7 @@ package features
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -29,7 +30,9 @@ func NewSkillRegistry(skillsDir string) *SkillRegistry {
 		skills: make(map[string]*Skill),
 		dir:    skillsDir,
 	}
-	_ = sr.Load() // best-effort; callers can call Load() again if needed
+	if err := sr.Load(); err != nil {
+		log.Printf("[skills] warning: initial load from %q: %v", skillsDir, err)
+	}
 	return sr
 }
 

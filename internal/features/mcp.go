@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"os/exec"
 	"sync"
 	"sync/atomic"
@@ -180,8 +181,12 @@ func (s *MCPServer) close() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.process != nil {
-		_ = s.process.Process.Kill()
-		_ = s.process.Wait()
+		if err := s.process.Process.Kill(); err != nil {
+			log.Printf("[mcp] warning: kill server %q: %v", s.Name, err)
+		}
+		if err := s.process.Wait(); err != nil {
+			log.Printf("[mcp] warning: wait server %q: %v", s.Name, err)
+		}
 	}
 }
 
@@ -275,7 +280,9 @@ func (c *MCPClient) AddServer(name, command string, args []string, env map[strin
 
 	_, err = srv.call("initialize", initParams)
 	if err != nil {
-		_ = cmd.Process.Kill()
+		if killErr := cmd.Process.Kill(); killErr != nil {
+			log.Printf("[mcp] warning: kill server %q after init failure: %v", name, killErr)
+		}
 		return fmt.Errorf("initialize server %q: %w", name, err)
 	}
 
@@ -285,14 +292,22 @@ func (c *MCPClient) AddServer(name, command string, args []string, env map[strin
 		JSONRPC: "2.0",
 		Method:  "notifications/initialized",
 	}
-	notifData, _ := json.Marshal(notif)
+	notifData, marshalErr := json.Marshal(notif)
+	if marshalErr != nil {
+		srv.mu.Unlock()
+		return fmt.Errorf("marshal initialized notification for %q: %w", name, marshalErr)
+	}
 	notifData = append(notifData, '\n')
-	_, _ = srv.stdin.Write(notifData)
+	if _, writeErr := srv.stdin.Write(notifData); writeErr != nil {
+		log.Printf("[mcp] warning: write initialized notification to %q: %v", name, writeErr)
+	}
 	srv.mu.Unlock()
 
 	// --- Discover tools ---
 	if err := c.discoverTools(srv); err != nil {
-		_ = cmd.Process.Kill()
+		if killErr := cmd.Process.Kill(); killErr != nil {
+			log.Printf("[mcp] warning: kill server %q after tools/list failure: %v", name, killErr)
+		}
 		return fmt.Errorf("tools/list from server %q: %w", name, err)
 	}
 

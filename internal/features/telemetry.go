@@ -1,3 +1,5 @@
+// telemetry.go collects timing and usage metrics from hook events and
+// exposes them as structured spans and aggregate counters.
 package features
 
 import (
