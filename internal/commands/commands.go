@@ -118,22 +118,17 @@ func Compact(dag *core.DAG, hooks *core.HookRegistry, compaction core.Compaction
 
 // ListBranches returns all branches with message counts and current marker.
 func ListBranches(dag *core.DAG) ([]BranchSummary, error) {
-	branches, err := dag.ListBranches()
+	branches, counts, err := dag.ListBranchesWithCounts()
 	if err != nil {
 		return nil, err
 	}
 	currentID := dag.CurrentBranchID()
-	var result []BranchSummary
+	result := make([]BranchSummary, 0, len(branches))
 	for _, b := range branches {
-		msgCount := 0
-		if b.HeadNodeID != "" {
-			anc, _ := dag.GetAncestors(b.HeadNodeID)
-			msgCount = len(anc)
-		}
 		result = append(result, BranchSummary{
 			ID:         b.ID,
 			Name:       b.Name,
-			Messages:   msgCount,
+			Messages:   counts[b.ID],
 			IsCurrent:  b.ID == currentID,
 			HeadNodeID: b.HeadNodeID,
 			ForkedFrom: b.ForkedFrom,

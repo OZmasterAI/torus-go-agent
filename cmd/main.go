@@ -17,6 +17,7 @@ import (
 	tuibchan "torus_go_agent/internal/channels/tui-b"
 	uib "torus_go_agent/internal/ui-b"
 	"torus_go_agent/internal/config"
+	"torus_go_agent/internal/constants"
 	"torus_go_agent/internal/core"
 	"torus_go_agent/internal/features"
 	"torus_go_agent/internal/providers"
@@ -40,7 +41,7 @@ func resolveConfigDir() string {
 	}
 	if xdg := os.Getenv("XDG_CONFIG_HOME"); xdg != "" {
 		d := filepath.Join(xdg, "torus_go_agent")
-		os.MkdirAll(d, 0755)
+		os.MkdirAll(d, constants.DirPerm)
 		return d
 	}
 	home, err := os.UserHomeDir()
@@ -48,7 +49,7 @@ func resolveConfigDir() string {
 		return filepath.Join(".", "config")
 	}
 	d := filepath.Join(home, ".config", "torus_go_agent")
-	os.MkdirAll(d, 0755)
+	os.MkdirAll(d, constants.DirPerm)
 	return d
 }
 
@@ -188,7 +189,7 @@ func main() {
 
 	// Create DAG
 	dataDir := cfg.DataDir(cfgDir)
-	os.MkdirAll(dataDir, 0755)
+	os.MkdirAll(dataDir, constants.DirPerm)
 	dag, err := core.NewDAG(filepath.Join(dataDir, "conversations.db"))
 	if err != nil {
 		log.Fatalf("dag: %v", err)
@@ -323,7 +324,7 @@ func main() {
 		},
 		SystemPrompt:      soul,
 		Tools:             defaultTools,
-		MaxTurns:          30,
+		MaxTurns:          types.DefaultMaxTurns,
 		ContextWindow:     cfg.Agent.ContextWindow,
 		SmartRouting:      cfg.Agent.SmartRouting,
 		SmartRoutingModel: cfg.Agent.SmartRoutingModel,
@@ -431,7 +432,7 @@ func main() {
 				Task:      task,
 				AgentType: agentType,
 				Tools:     features.DefaultToolsForType(agentType),
-				MaxTurns:  20,
+				MaxTurns:  types.SubAgentMaxTurns,
 			})
 			if err != nil {
 				return &types.ToolResult{Content: "Spawn failed: " + err.Error(), IsError: true}, nil
@@ -459,12 +460,13 @@ func main() {
 				Task:      task,
 				AgentType: agentType,
 				Tools:     features.DefaultToolsForType(agentType),
-				MaxTurns:  20,
+				MaxTurns:  types.SubAgentMaxTurns,
 			})
 			if err != nil {
 				return &types.ToolResult{Content: "Delegate failed: " + err.Error(), IsError: true}, nil
 			}
 			result := subMgr.Wait(id)
+			subMgr.DeleteResult(id)
 			if result.Error != nil {
 				return &types.ToolResult{Content: "Sub-agent error: " + result.Error.Error(), IsError: true}, nil
 			}
@@ -514,7 +516,7 @@ func main() {
 					Task:      task,
 					AgentType: agentType,
 					Tools:     features.DefaultToolsForType(agentType),
-					MaxTurns:  20,
+					MaxTurns:  types.SubAgentMaxTurns,
 				})
 			}
 			result, err := features.RunSequential(context.Background(), dag, prov, soul, configs, subMgr, agent)
@@ -567,7 +569,7 @@ func main() {
 					Task:      task,
 					AgentType: agentType,
 					Tools:     features.DefaultToolsForType(agentType),
-					MaxTurns:  20,
+					MaxTurns:  types.SubAgentMaxTurns,
 				})
 			}
 			results, err := features.RunParallel(context.Background(), dag, prov, soul, configs, subMgr, agent)
@@ -614,7 +616,7 @@ func main() {
 				Task:      task,
 				AgentType: agentType,
 				Tools:     features.DefaultToolsForType(agentType),
-				MaxTurns:  20,
+				MaxTurns:  types.SubAgentMaxTurns,
 			}
 
 			shouldStop := func(result string, iteration int) bool {

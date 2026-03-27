@@ -32,6 +32,7 @@ func RunSequential(
 			return result, err
 		}
 		res := subMgr.Wait(id)
+		subMgr.DeleteResult(id)
 		if res.Error != nil {
 			return result, res.Error
 		}
@@ -70,6 +71,9 @@ func RunParallel(
 		}(i, id)
 	}
 	wg.Wait()
+	for _, id := range ids {
+		subMgr.DeleteResult(id)
+	}
 	return results, nil
 }
 
@@ -98,6 +102,7 @@ func RunLoop(
 			return result, err
 		}
 		res := subMgr.Wait(id)
+		subMgr.DeleteResult(id)
 		if res.Error != nil {
 			return result, res.Error
 		}

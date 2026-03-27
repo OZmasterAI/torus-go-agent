@@ -101,6 +101,14 @@ type ProviderConfig struct {
 	MaxTokens int    `json:"max_tokens"`
 }
 
+const (
+	// DefaultMaxTurns is the default max turns for the main agent loop.
+	DefaultMaxTurns = 30
+
+	// SubAgentMaxTurns is the default max turns for sub-agent runs.
+	SubAgentMaxTurns = 20
+)
+
 // AgentConfig is the top-level configuration for an agent.
 type AgentConfig struct {
 	Provider          ProviderConfig `json:"provider"`

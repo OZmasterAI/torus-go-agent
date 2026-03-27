@@ -36,7 +36,8 @@ type SubAgentResult struct {
 	Text      string
 	Error     error
 	Duration  time.Duration
-	ToolCalls int
+	ToolCalls  int
+	FinishedAt time.Time
 }
 
 // subAgentState is the internal per-instance tracking record.
@@ -52,7 +53,9 @@ type SubAgentManager struct {
 
 // NewSubAgentManager creates an empty SubAgentManager.
 func NewSubAgentManager() *SubAgentManager {
-	return &SubAgentManager{}
+	mgr := &SubAgentManager{}
+	mgr.StartCleanup(1*time.Minute, 5*time.Minute)
+	return mgr
 }
 
 // SpawnWithProvider is the entry point for launching sub-agents.  It creates a new Agent on an isolated
@@ -78,7 +81,7 @@ func (m *SubAgentManager) SpawnWithProvider(
 	}
 	maxTurns := cfg.MaxTurns
 	if maxTurns <= 0 {
-		maxTurns = 30
+		maxTurns = types.DefaultMaxTurns
 	}
 
 	parentDAG := parentAgent.DAG()
@@ -171,6 +174,7 @@ func (m *SubAgentManager) SpawnWithProvider(
 
 // finalize stores the result, closes the channel, and removes from running map.
 func (m *SubAgentManager) finalize(id string, state *subAgentState, res *SubAgentResult) {
+	res.FinishedAt = time.Now()
 	m.results.Store(id, res)
 	state.result <- res
 	close(state.result)
@@ -215,6 +219,27 @@ func (m *SubAgentManager) Wait(id string) *SubAgentResult {
 	state := v.(*subAgentState)
 	res := <-state.result
 	return res
+}
+
+// DeleteResult removes a completed sub-agent's result from the results map.
+// Call after the result has been consumed to prevent memory accumulation.
+func (m *SubAgentManager) DeleteResult(id string) {
+	m.results.Delete(id)
+}
+
+// StartCleanup launches a background goroutine that periodically prunes
+// results older than ttl from the results map.
+func (m *SubAgentManager) StartCleanup(interval, ttl time.Duration) {
+	go func() {
+		for range time.Tick(interval) {
+			m.results.Range(func(k, v any) bool {
+				if time.Since(v.(*SubAgentResult).FinishedAt) > ttl {
+					m.results.Delete(k)
+				}
+				return true
+			})
+		}
+	}()
 }
 
 // DefaultToolsForType returns the restricted tool set for a given agent type.

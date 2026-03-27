@@ -6,6 +6,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"torus_go_agent/internal/constants"
 )
 
 // MCPServerConfig defines an MCP server to connect to.
@@ -101,7 +103,7 @@ func SaveConfig(path string, cfg *Config) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(path, append(data, '\n'), 0644)
+	return os.WriteFile(path, append(data, '\n'), constants.FilePerm)
 }
 
 // LoadConfig reads and parses a JSON config file with env var overrides.
@@ -209,7 +211,7 @@ func saveModelsCache(configDir string, models map[string]ModelInfo) {
 	if err != nil {
 		return
 	}
-	_ = os.WriteFile(filepath.Join(configDir, "models.json"), append(data, '\n'), 0644)
+	_ = os.WriteFile(filepath.Join(configDir, "models.json"), append(data, '\n'), constants.FilePerm)
 }
 
 // normalizeID strips hyphens and dots for fuzzy model ID comparison.

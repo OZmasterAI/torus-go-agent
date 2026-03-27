@@ -32,6 +32,8 @@ type BranchInfo struct {
 	ForkedFrom string `json:"forked_from,omitempty"` // node ID this branch was forked from
 }
 
+const dagBusyTimeoutMs = 5000
+
 type DAG struct {
 	db       *sql.DB
 	mu       sync.RWMutex
@@ -83,7 +85,7 @@ func NewDAG(dbPath string) (*DAG, error) {
 	if err != nil {
 		return nil, fmt.Errorf("open db: %w", err)
 	}
-	for _, p := range []string{"PRAGMA journal_mode=WAL", "PRAGMA busy_timeout=5000", "PRAGMA synchronous=NORMAL"} {
+	for _, p := range []string{"PRAGMA journal_mode=WAL", fmt.Sprintf("PRAGMA busy_timeout=%d", dagBusyTimeoutMs), "PRAGMA synchronous=NORMAL"} {
 		if _, err := db.Exec(p); err != nil {
 			db.Close()
 			return nil, fmt.Errorf("pragma: %w", err)
@@ -527,3 +529,39 @@ func (d *DAG) GetSubtree(nodeID string) ([]Node, error) {
 	return nodes, nil
 }
 
+
+// ListBranchesWithCounts returns all branches along with a map of branch ID to
+// ancestor (message) count. Uses a single recursive CTE to count ancestors for
+// all branch heads at once, avoiding N+1 queries.
+func (d *DAG) ListBranchesWithCounts() ([]BranchInfo, map[string]int, error) {
+	branches, err := d.ListBranches()
+	if err != nil {
+		return nil, nil, err
+	}
+
+	countQuery := `WITH RECURSIVE chain(branch_id, id, depth) AS (
+		SELECT b.id, b.head_node_id, 0 FROM branches b WHERE b.head_node_id != ''
+		UNION ALL
+		SELECT c.branch_id, n.parent_id, c.depth+1
+		FROM nodes n JOIN chain c ON n.id = c.id
+		WHERE n.parent_id IS NOT NULL AND n.parent_id != ''
+	)
+	SELECT branch_id, COUNT(*) FROM chain GROUP BY branch_id`
+
+	rows, err := d.db.Query(countQuery)
+	if err != nil {
+		return branches, nil, fmt.Errorf("list branches with counts: %w", err)
+	}
+	defer rows.Close()
+
+	counts := make(map[string]int, len(branches))
+	for rows.Next() {
+		var branchID string
+		var count int
+		if err := rows.Scan(&branchID, &count); err != nil {
+			return branches, nil, fmt.Errorf("scan branch count: %w", err)
+		}
+		counts[branchID] = count
+	}
+	return branches, counts, rows.Err()
+}

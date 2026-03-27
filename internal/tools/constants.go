@@ -1,8 +1,9 @@
 package tools
 
 import (
-	"os"
 	"time"
+
+	"torus_go_agent/internal/constants"
 )
 
 const (
@@ -18,11 +19,11 @@ const (
 	// NoMatchesMsg is returned when glob or grep finds no results.
 	NoMatchesMsg = "(no matches)"
 
-	// DirPerm is the permission mode used when creating directories.
-	DirPerm os.FileMode = 0755
+	// DirPerm re-exports constants.DirPerm for use within the tools package.
+	DirPerm = constants.DirPerm
 
-	// FilePerm is the permission mode used when writing files.
-	FilePerm os.FileMode = 0644
+	// FilePerm re-exports constants.FilePerm for use within the tools package.
+	FilePerm = constants.FilePerm
 
 	// LineNumFormat is the format string used to prefix line numbers in read output.
 	LineNumFormat = "%6d %s"

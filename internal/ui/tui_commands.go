@@ -10,6 +10,7 @@ import (
 
 	"torus_go_agent/internal/commands"
 	"torus_go_agent/internal/features"
+	"torus_go_agent/internal/types"
 )
 
 func (m *Model) handleCompact() (tea.Model, tea.Cmd) {
@@ -408,7 +409,7 @@ func (m *Model) executeWorkflow() (tea.Model, tea.Cmd) {
 			Task:      wa.Task,
 			AgentType: wa.AgentType,
 			Tools:     features.DefaultToolsForType(wa.AgentType),
-			MaxTurns:  20,
+			MaxTurns:  types.SubAgentMaxTurns,
 		})
 	}
 

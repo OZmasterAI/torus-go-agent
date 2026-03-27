@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"math"
 	"math/rand"
 	"net/http"
@@ -511,7 +512,10 @@ func (o *AgentConfigOverrides) getValue(idx int) string {
 }
 
 func (o *AgentConfigOverrides) setValue(idx int, val string) {
-	n, _ := strconv.Atoi(val)
+	n, err := strconv.Atoi(val)
+	if err != nil {
+		log.Printf("[startup] warning: invalid int %q: %v", val, err)
+	}
 	switch idx {
 	case 0:
 		o.Compaction = val
