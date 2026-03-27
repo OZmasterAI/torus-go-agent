@@ -119,6 +119,7 @@ func main() {
 		cfg.Agent.PersistThinking = setup.Config.PersistThinking
 		cfg.Agent.Thinking = setup.Config.Thinking
 		cfg.Agent.ThinkingBudget = setup.Config.ThinkingBudget
+		cfg.Agent.RewardScoring = setup.Config.RewardScoring
 	}
 
 	soul := config.LoadTorus(cfgDir)

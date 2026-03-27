@@ -241,6 +241,51 @@ func TestUpdateTorusParticles(t *testing.T) {
 	}
 }
 
+func TestNvidiaFreeEnablesRewardScoring(t *testing.T) {
+	m := setupModel{
+		configOverrides: defaultOverrides(),
+	}
+	mc := ModelChoice{
+		ID:            "nvidia/free",
+		ContextWindow: 131072,
+		MaxTokens:     8192,
+	}
+	if mc.ContextWindow > 0 {
+		m.configOverrides.ContextWindow = mc.ContextWindow
+		m.configOverrides.MaxTokens = mc.MaxTokens
+	}
+	if mc.ID == "nvidia/free" {
+		m.configOverrides.RewardScoring = true
+	}
+	if !m.configOverrides.RewardScoring {
+		t.Error("expected RewardScoring=true for nvidia/free")
+	}
+	if m.configOverrides.ContextWindow != 131072 {
+		t.Errorf("expected ContextWindow=131072, got %d", m.configOverrides.ContextWindow)
+	}
+}
+
+func TestNonNvidiaFreeSkipsRewardScoring(t *testing.T) {
+	m := setupModel{
+		configOverrides: defaultOverrides(),
+	}
+	mc := ModelChoice{
+		ID:            "some-other-model",
+		ContextWindow: 32768,
+		MaxTokens:     4096,
+	}
+	if mc.ContextWindow > 0 {
+		m.configOverrides.ContextWindow = mc.ContextWindow
+		m.configOverrides.MaxTokens = mc.MaxTokens
+	}
+	if mc.ID == "nvidia/free" {
+		m.configOverrides.RewardScoring = true
+	}
+	if m.configOverrides.RewardScoring {
+		t.Error("expected RewardScoring=false for non-nvidia/free model")
+	}
+}
+
 func TestFormatProviderModel(t *testing.T) {
 	tests := []struct{ input, want string }{
 		{"anthropic:claude-haiku-4-5", "claude-haiku-4-5 (anthropic)"},

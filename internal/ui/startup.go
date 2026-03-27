@@ -351,6 +351,7 @@ type AgentConfigOverrides struct {
 	PersistThinking        bool
 	Thinking               string
 	ThinkingBudget         int
+	RewardScoring          bool
 }
 
 func defaultOverrides() *AgentConfigOverrides {
@@ -385,6 +386,7 @@ func overridesFromConfig(a config.AgentConfig) *AgentConfigOverrides {
 		PersistThinking:        a.PersistThinking,
 		Thinking:               a.Thinking,
 		ThinkingBudget:         a.ThinkingBudget,
+		RewardScoring:          a.RewardScoring,
 	}
 }
 
@@ -1704,6 +1706,9 @@ func (m setupModel) selectItem() (tea.Model, tea.Cmd) {
 			m.configOverrides.MaxTokens = mc.MaxTokens
 		} else {
 			m.resolveModelSpecs()
+		}
+		if mc.ID == "nvidia/free" {
+			m.configOverrides.RewardScoring = true
 		}
 		return m, nil
 
