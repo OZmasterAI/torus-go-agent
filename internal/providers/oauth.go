@@ -101,8 +101,8 @@ func generatePKCE() (verifier, challenge string) {
 
 // ── Login flow ──────────────────────────────────────────────────────────────
 
-// buildAuthorizeURL constructs the PKCE authorize URL with the given challenge.
-func buildAuthorizeURL(challenge string) string {
+// buildAuthorizeURL constructs the PKCE authorize URL with the given challenge and state.
+func buildAuthorizeURL(challenge, state string) string {
 	params := url.Values{
 		"code":                  {"true"},
 		"client_id":             {oauthClientID},
@@ -111,6 +111,7 @@ func buildAuthorizeURL(challenge string) string {
 		"scope":                 {oauthScopes},
 		"code_challenge":        {challenge},
 		"code_challenge_method": {"S256"},
+		"state":                 {state},
 	}
 	return oauthAuthorizeURL + "?" + params.Encode()
 }
@@ -132,7 +133,14 @@ func parseCodeState(raw string) (code, state string) {
 func LoginAnthropic(onAuthURL func(string), onPromptCode func() (string, error)) (*OAuthCredentials, error) {
 	verifier, challenge := generatePKCE()
 
-	authURL := buildAuthorizeURL(challenge)
+	// Generate random state for CSRF protection (RFC 6749 §10.12).
+	stateBytes := make([]byte, 16)
+	if _, err := rand.Read(stateBytes); err != nil {
+		return nil, fmt.Errorf("failed to generate OAuth state: %w", err)
+	}
+	expectedState := base64URLEncode(stateBytes)
+
+	authURL := buildAuthorizeURL(challenge, expectedState)
 	onAuthURL(authURL)
 
 	codeState, err := onPromptCode()
@@ -143,6 +151,9 @@ func LoginAnthropic(onAuthURL func(string), onPromptCode func() (string, error))
 	code, state := parseCodeState(codeState)
 	if code == "" {
 		return nil, fmt.Errorf("empty authorization code received")
+	}
+	if state != expectedState {
+		return nil, fmt.Errorf("OAuth state mismatch: possible CSRF (got %q, want %q)", state, expectedState)
 	}
 
 	creds, err := exchangeCode(code, state, verifier)

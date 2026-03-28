@@ -273,24 +273,27 @@ func TestOAuthEdge_ExchangeCodeWithEmptyCode(t *testing.T) {
 	// by checking that the function returns an error for non-200 status.
 }
 
-// TestOAuthEdge_ExchangeCodeWithMismatchedState tests that exchangeCode
-// handles state mismatch scenarios.
+// TestOAuthEdge_ExchangeCodeWithMismatchedState tests that LoginAnthropic
+// rejects a callback whose state doesn't match the generated nonce.
 func TestOAuthEdge_ExchangeCodeWithMismatchedState(t *testing.T) {
-	// The current implementation uses verifier as state but doesn't validate
-	// that the returned state matches. This is an edge case.
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"access_token":  "access-token",
-			"refresh_token": "refresh-token",
-			"expires_in":    3600,
-		})
-	}))
-	defer server.Close()
-
-	// State validation is not implemented in the current exchangeCode function.
-	// This documents the edge case.
+	_, err := LoginAnthropic(
+		func(url string) {
+			// Verify the authorize URL contains a state parameter.
+			if !strings.Contains(url, "state=") {
+				t.Error("authorize URL missing state parameter")
+			}
+		},
+		func() (string, error) {
+			// Return a valid code but with a wrong state.
+			return "auth-code-123#wrong-state", nil
+		},
+	)
+	if err == nil {
+		t.Fatal("expected error for state mismatch, got nil")
+	}
+	if !strings.Contains(err.Error(), "state mismatch") {
+		t.Errorf("expected state mismatch error, got: %v", err)
+	}
 }
 
 // ── Concurrent Refresh Tests ──
