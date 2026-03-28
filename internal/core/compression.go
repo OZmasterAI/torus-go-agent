@@ -154,6 +154,9 @@ func CompressMessage(m t.Message, maxChars int, toolNames ...map[string]string) 
 			})
 		case "text":
 			text := b.Text
+			if text == "" {
+				continue // skip empty text blocks to avoid omitempty serialization issues
+			}
 			if len(text) > maxChars {
 				text = compressText(text, maxChars)
 			}

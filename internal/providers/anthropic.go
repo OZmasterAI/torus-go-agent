@@ -168,21 +168,25 @@ func buildAnthropicMessages(messages []t.Message) []anthropicMsg {
 			}
 			content = text
 		} else {
-			// Multi-block: trim trailing whitespace from the last text block
-			// of assistant messages for the same reason.
+			// Multi-block: filter empty text blocks (omitempty drops the "text"
+			// field entirely, causing API validation errors) and trim trailing
+			// whitespace from the last text block of assistant messages.
+			blocks := make([]t.ContentBlock, 0, len(m.Content))
+			for _, b := range m.Content {
+				if b.Type == "text" && b.Text == "" {
+					continue
+				}
+				blocks = append(blocks, b)
+			}
 			if m.Role == t.RoleAssistant {
-				blocks := make([]t.ContentBlock, len(m.Content))
-				copy(blocks, m.Content)
 				for i := len(blocks) - 1; i >= 0; i-- {
 					if blocks[i].Type == "text" {
 						blocks[i].Text = strings.TrimRight(blocks[i].Text, " \t\n\r")
 						break
 					}
 				}
-				content = blocks
-			} else {
-				content = m.Content
 			}
+			content = blocks
 		}
 		apiMsgs = append(apiMsgs, anthropicMsg{
 			Role:    string(m.Role),
