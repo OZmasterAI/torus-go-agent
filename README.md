@@ -4,11 +4,15 @@ A terminal-native AI agent framework written in Go. Multi-provider, DAG-based co
 
 ## Features
 
-- **Multi-provider routing** — Anthropic, OpenRouter, Gemini, Azure OpenAI, Vertex AI. Weighted routing with automatic fallback chains.
+- **Multi-provider routing** — Anthropic, OpenRouter, Gemini, Azure OpenAI, Vertex AI. Weighted routing with automatic fallback chains. Optional reward-model router adjusts weights based on async response scoring.
 - **DAG conversation storage** — SQLite-backed immutable message graph. Branch, fork, alias, and switch between conversation threads. Nothing is ever deleted.
-- **3-layer context management** — Continuous compression (operation-aware scoring), zone budgeting (token budget allocation), and compaction (sliding window or LLM summarization).
-- **6 built-in tools** — bash, read, write, edit, glob, grep. Secret scanning on write/edit.
-- **Sub-agents** — Spawn isolated agents (builder, researcher, tester) with their own DAG branches.
+- **Unified context management** — Three layers work together each turn:
+  - **Continuous compression** — Groups messages into semantic operations using 3-signal boundary detection (tool type, file scope, intent). Scores each operation 0–1 across 5 dimensions (recency, file overlap, outcome significance, operation type, causal dependency). High-scoring operations stay verbatim; low-scoring ones become one-line summaries; the lowest are archived into working memory injected into the system prompt.
+  - **Zone budgeting** — Divides the context window into two zones with dynamic rebalancing. Per-operation caps prevent any single old operation from dominating.
+  - **Compaction** — Three modes (`off`, `sliding`, `llm`). The primary path is DAG-native: `CompactDAG` forks a new branch with a summary node instead of destroying history. Triggers on token count, message count, or both.
+- **6 built-in tools** — bash, read, write, edit, glob, grep. Secret scanning on write/edit. Per-tool output truncation limits for context efficiency.
+- **Sub-agents** — Spawn isolated agents (builder, researcher, tester) with their own DAG branches and restricted tool sets.
+- **Workflows** — Sequential pipelines, parallel fan-out, and iterative loops over sub-agents.
 - **MCP support** — Connect external tool servers via JSON-RPC over stdio.
 - **Skills** — Load markdown files as slash commands.
 - **31 hook points** — Observe, block, or transform at any stage of the agent loop.
@@ -57,7 +61,10 @@ cp .env.example .env
 | `model` | — | Model ID (e.g. `claude-sonnet-4-6`) |
 | `maxTokens` | 8192 | Max output tokens per response |
 | `compaction` | `llm` | Compaction mode: `off`, `sliding`, `llm` |
-| `continuousCompression` | `true` | Per-turn gradual message compression |
+| `compactionTrigger` | `both` | When to compact: `tokens`, `messages`, or `both` |
+| `compactionThreshold` | `65` | Token usage % that triggers compaction |
+| `compactionKeepLastN` | `10` | Messages to keep verbatim after compaction |
+| `continuousCompression` | `true` | Unified per-turn compression with operation-aware scoring |
 | `zoneBudgeting` | `true` | Zone-based token budget allocation |
 | `thinking` | `high` | Thinking level: `low`, `mid`, `high`, `max` (Anthropic only) |
 
@@ -160,21 +167,24 @@ hooks.RegisterPriority(core.HookBeforeToolCall, "safety", func(ctx context.Conte
 
 ## Slash Commands
 
-`/new` `/clear` `/compact` `/fork` `/switch` `/branches` `/alias` `/messages` `/steering` `/stats` `/agents` `/mcp-tools` `/skills` `/exit`
+`/new` `/clear` `/compact` `/fork` `/switch` `/branches` `/alias` `/messages` `/steering` `/stats` `/agents` `/mcp-tools` `/skills` `/sequential` `/parallel` `/loop` `/exit`
 
 ## Architecture
 
 ```
 cmd/main.go              Entry point, provider setup, hook wiring
 internal/
-  core/                  DAG, agent loop, hooks, compression, tokenizer
+  core/                  DAG, agent loop, hooks, compression, compaction, tokenizer
   features/              Skills, sub-agents, MCP, routing, workflows
-  providers/             Multi-provider router, Anthropic, OpenRouter, Gemini, OAuth
+  providers/             Multi-provider router, reward router, Anthropic, OpenRouter, Gemini, OAuth
   tools/                 bash, read, write, edit, glob, grep
-  ui/                    Bubble Tea TUI
+  ui/                    Bubble Tea TUI (original)
+  ui-b/                  Bubble Tea TUI (composable redesign)
   channels/              Channel interface + Telegram, HTTP adapters
   config/                XDG config loading
   commands/              Slash command handlers
+  constants/             Shared constants
+  memory/                In-process memory helpers
   safety/                Secret scanning
   types/                 Shared types
 ```
