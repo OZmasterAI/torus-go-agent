@@ -261,6 +261,8 @@ func (b *batchChannel) runMultiTurn(agent *core.Agent, rawPrompt string, outputD
 	// Parse as JSON array of strings
 	var messages []string
 	if err := json.Unmarshal([]byte(rawPrompt), &messages); err != nil {
+		// Reset partial results from failed string parse
+		messages = nil
 		// Try parsing as array of {role, content} objects
 		var objMessages []struct {
 			Role    string `json:"role"`
