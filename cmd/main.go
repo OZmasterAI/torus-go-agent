@@ -13,6 +13,7 @@ import (
 	"torus_go_agent/internal/channels"
 	_ "torus_go_agent/internal/channels/http"     // register http channel
 	_ "torus_go_agent/internal/channels/telegram" // register telegram channel
+	batchchan "torus_go_agent/internal/channels/batch"
 	tuichan "torus_go_agent/internal/channels/tui"
 	tuibchan "torus_go_agent/internal/channels/tui-b"
 	uib "torus_go_agent/internal/ui-b"
@@ -64,7 +65,7 @@ func main() {
 	// Interactive startup: let user pick provider/model (skip with --no-setup flag)
 	skipSetup := false
 	for _, arg := range os.Args[1:] {
-		if arg == "--no-setup" || arg == "--telegram" || arg == "--http" {
+		if arg == "--no-setup" || arg == "--telegram" || arg == "--http" || strings.HasPrefix(arg, "--batch") {
 			skipSetup = true
 		}
 	}
@@ -640,7 +641,7 @@ func main() {
 		Meta:    map[string]any{"provider": cfg.Agent.Provider, "model": cfg.Agent.Model},
 	})
 
-	// Select channel: --telegram/--http flag or default to TUI
+	// Select channel: --telegram/--http/--batch flag or default to TUI
 	channelName := "tui"
 	for _, arg := range os.Args[1:] {
 		if arg == "--telegram" {
@@ -651,6 +652,15 @@ func main() {
 		}
 		if arg == "--tui-b" {
 			channelName = "tui-b"
+		}
+		if strings.HasPrefix(arg, "--batch") {
+			channelName = "batch"
+			if strings.HasPrefix(arg, "--batch=") {
+				batchchan.Config.PromptFile = arg[8:]
+			}
+		}
+		if strings.HasPrefix(arg, "--output=") {
+			batchchan.Config.OutputDir = arg[9:]
 		}
 	}
 
