@@ -1,0 +1,1 @@
+Fix all compilation errors in this Go web application. The project should build cleanly with `go build ./...`

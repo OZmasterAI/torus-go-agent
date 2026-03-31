@@ -1,0 +1,34 @@
+[
+  {
+    "question": "What primary key type was chosen for the database?",
+    "keywords": [
+      "UUID",
+      "auto-increment",
+      "rejected"
+    ]
+  },
+  {
+    "question": "What CI/CD runner was specified?",
+    "keywords": [
+      "ubuntu-22.04",
+      "GitHub Actions",
+      "runs-on"
+    ]
+  },
+  {
+    "question": "What API endpoints were documented?",
+    "keywords": [
+      "/api/v2/users",
+      "/api/v2/auth/login",
+      "Bearer"
+    ]
+  },
+  {
+    "question": "What was the CI/CD timeout?",
+    "keywords": [
+      "15",
+      "minutes",
+      "timeout"
+    ]
+  }
+]

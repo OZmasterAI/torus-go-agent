@@ -1,0 +1,43 @@
+[
+  {
+    "question": "What file had the nil pointer bug?",
+    "keywords": [
+      "auth.go",
+      "ValidateToken",
+      "nil"
+    ]
+  },
+  {
+    "question": "What was the rate limit decided on?",
+    "keywords": [
+      "100",
+      "requests",
+      "minute",
+      "token bucket"
+    ]
+  },
+  {
+    "question": "What HTTP status code bug was found?",
+    "keywords": [
+      "200",
+      "401",
+      "status"
+    ]
+  },
+  {
+    "question": "What function names were created for the rate limiter?",
+    "keywords": [
+      "NewRateLimiter",
+      "CheckLimit",
+      "CleanupExpired"
+    ]
+  },
+  {
+    "question": "What rate limiting approach was rejected?",
+    "keywords": [
+      "Redis",
+      "in-memory",
+      "dependency"
+    ]
+  }
+]
