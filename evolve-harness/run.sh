@@ -5,6 +5,7 @@ SEARCH_DB="evolve-harness/search_db"
 TASKS="evolve-harness/tasks"
 MAX_ITER=${MAX_ITER:-10}
 BINARY=${BINARY:-./torus-agent}
+EVAL_FLAGS=${EVAL_FLAGS:-""}
 
 snapshot_harness() {
     local ID=$1
@@ -41,7 +42,7 @@ if [ ! -f "$SEARCH_DB/harness_000/scores.json" ]; then
     snapshot_harness 000
     go build -o "$BINARY" ./cmd/
     python3 evolve-harness/evaluate.py \
-        --harness=000 --tasks="$TASKS" --binary="$BINARY" --search-db="$SEARCH_DB"
+        --harness=000 --tasks="$TASKS" --binary="$BINARY" --search-db="$SEARCH_DB" $EVAL_FLAGS
     echo -n "Baseline: "
     report_scores "$SEARCH_DB/harness_000/scores.json"
 fi
@@ -57,7 +58,7 @@ for i in $(seq 1 $MAX_ITER); do
 
     # 1. Run proposer
     echo "Running proposer..."
-    claude -p "$(cat evolve-harness/proposer.md)
+    claude -p --model claude-sonnet-4-6 "$(cat evolve-harness/proposer.md)
 
 Current iteration: $ID
 Search database: $SEARCH_DB/
@@ -84,7 +85,7 @@ Read the search_db to understand what's been tried. Propose your modification." 
     echo "Evaluating..."
     python3 evolve-harness/evaluate.py \
         --harness="$ID" --tasks="$TASKS" --binary="$BINARY" \
-        --search-db="$SEARCH_DB" --baseline-tpp="$BASELINE_TPP"
+        --search-db="$SEARCH_DB" --baseline-tpp="$BASELINE_TPP" $EVAL_FLAGS
 
     # 4. Revert to baseline source
     apply_harness "000"

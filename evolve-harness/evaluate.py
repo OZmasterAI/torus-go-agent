@@ -24,12 +24,25 @@ def main():
     parser.add_argument("--harness", required=True, help="Harness ID (e.g. 000)")
     parser.add_argument("--tasks", required=True, help="Path to tasks directory")
     parser.add_argument("--binary", default="./torus-agent", help="Agent binary path")
-    parser.add_argument("--search-db", default="evolve-harness/search_db",
-                        help="Search database directory")
-    parser.add_argument("--baseline-tpp", type=float, default=0,
-                        help="Baseline tokens_per_pass for efficiency scoring")
-    parser.add_argument("--timeout", type=int, default=300,
-                        help="Per-task timeout in seconds")
+    parser.add_argument(
+        "--search-db",
+        default="evolve-harness/search_db",
+        help="Search database directory",
+    )
+    parser.add_argument(
+        "--baseline-tpp",
+        type=float,
+        default=0,
+        help="Baseline tokens_per_pass for efficiency scoring",
+    )
+    parser.add_argument(
+        "--timeout", type=int, default=300, help="Per-task timeout in seconds"
+    )
+    parser.add_argument(
+        "--coding-only",
+        action="store_true",
+        help="Only evaluate coding tasks (skip tool-use and compression)",
+    )
     args = parser.parse_args()
 
     harness_dir = os.path.join(args.search_db, f"harness_{args.harness}")
@@ -39,14 +52,18 @@ def main():
     print(f"=== Evaluating harness {args.harness} ===")
 
     coding_dir = os.path.join(args.tasks, "coding")
-    tool_dir = os.path.join(args.tasks, "tool_use")
-    compression_dir = os.path.join(args.tasks, "compression")
-
     coding = evaluate_coding_tasks(args.binary, coding_dir, traces_dir, args.timeout)
-    tools = evaluate_tool_tasks(args.binary, tool_dir, traces_dir, args.timeout)
-    compression = evaluate_compression_tasks(
-        args.binary, compression_dir, traces_dir, args.timeout
-    )
+
+    if args.coding_only:
+        tools = []
+        compression = []
+    else:
+        tool_dir = os.path.join(args.tasks, "tool_use")
+        compression_dir = os.path.join(args.tasks, "compression")
+        tools = evaluate_tool_tasks(args.binary, tool_dir, traces_dir, args.timeout)
+        compression = evaluate_compression_tasks(
+            args.binary, compression_dir, traces_dir, args.timeout
+        )
 
     scores = compute_scores(coding, tools, compression, args.baseline_tpp)
     write_results(harness_dir, scores, coding, tools, compression)
@@ -59,8 +76,9 @@ def main():
     print(f"  composite:              {scores['composite']:.3f}")
 
 
-def run_agent(binary, prompt_file, output_dir, workdir=None, extra_flags=None,
-              timeout=300):
+def run_agent(
+    binary, prompt_file, output_dir, workdir=None, extra_flags=None, timeout=300
+):
     """Run the agent binary in batch mode. Returns result.json as dict or None."""
     output_dir = os.path.abspath(output_dir)
     os.makedirs(output_dir, exist_ok=True)
@@ -118,19 +136,26 @@ def evaluate_coding_tasks(binary, tasks_dir, traces_dir, timeout):
             shutil.copy2(test_script, os.path.join(tmpdir, "test.sh"))
 
         trace_out = os.path.join(traces_dir, f"coding_{task_name}")
-        result = run_agent(binary, prompt_file, trace_out, workdir=tmpdir,
-                           timeout=timeout)
+        result = run_agent(
+            binary, prompt_file, trace_out, workdir=tmpdir, timeout=timeout
+        )
 
         # Run test.sh to verify pass/fail
         passed = False
         if os.path.exists(test_script):
             try:
                 test_result = subprocess.run(
-                    ["bash", test_script], capture_output=True, text=True,
-                    timeout=30, cwd=tmpdir
+                    ["bash", os.path.join(tmpdir, "test.sh")],
+                    capture_output=True,
+                    text=True,
+                    timeout=30,
+                    cwd=tmpdir,
                 )
                 passed = test_result.returncode == 0
-            except (subprocess.TimeoutExpired, Exception):
+                if not passed:
+                    print(f"    test stderr: {test_result.stderr[:200]}")
+            except (subprocess.TimeoutExpired, Exception) as e:
+                print(f"    test exception: {e}")
                 passed = False
 
         tokens_in = 0
@@ -146,14 +171,16 @@ def evaluate_coding_tasks(binary, tasks_dir, traces_dir, timeout):
         status = "PASS" if passed else "FAIL"
         print(f"    {status} (tokens: {tokens_in}in/{tokens_out}out)")
 
-        results.append({
-            "task": task_name,
-            "passed": passed,
-            "tokens_in": tokens_in,
-            "tokens_out": tokens_out,
-            "cost": cost,
-            "duration_ms": duration_ms,
-        })
+        results.append(
+            {
+                "task": task_name,
+                "passed": passed,
+                "tokens_in": tokens_in,
+                "tokens_out": tokens_out,
+                "cost": cost,
+                "duration_ms": duration_ms,
+            }
+        )
 
         shutil.rmtree(tmpdir, ignore_errors=True)
 
@@ -186,8 +213,9 @@ def evaluate_tool_tasks(binary, tasks_dir, traces_dir, timeout):
             shutil.copytree(workspace, tmpdir, dirs_exist_ok=True)
 
         trace_out = os.path.join(traces_dir, f"tool_{task_name}")
-        result = run_agent(binary, prompt_file, trace_out, workdir=tmpdir,
-                           timeout=timeout)
+        result = run_agent(
+            binary, prompt_file, trace_out, workdir=tmpdir, timeout=timeout
+        )
 
         # Run verify.py on result.json
         tool_score = 0.0
@@ -200,8 +228,10 @@ def evaluate_tool_tasks(binary, tasks_dir, traces_dir, timeout):
             try:
                 verify_result = subprocess.run(
                     ["python3", verify_script],
-                    capture_output=True, text=True, timeout=30,
-                    cwd=trace_out
+                    capture_output=True,
+                    text=True,
+                    timeout=30,
+                    cwd=trace_out,
                 )
                 if verify_result.stdout.strip():
                     vr = json.loads(verify_result.stdout)
@@ -217,14 +247,16 @@ def evaluate_tool_tasks(binary, tasks_dir, traces_dir, timeout):
 
         cost = result.get("total_cost", 0.0) if result else 0.0
 
-        results.append({
-            "task": task_name,
-            "passed": passed,
-            "tool_score": tool_score,
-            "max_score": max_score,
-            "details": details,
-            "cost": cost,
-        })
+        results.append(
+            {
+                "task": task_name,
+                "passed": passed,
+                "tool_score": tool_score,
+                "max_score": max_score,
+                "details": details,
+                "cost": cost,
+            }
+        )
 
         shutil.rmtree(tmpdir, ignore_errors=True)
 
@@ -255,9 +287,11 @@ def evaluate_compression_tasks(binary, tasks_dir, traces_dir, timeout):
 
         # Feed conversation via multi-turn batch with small context window
         result = run_agent(
-            binary, convo_file, trace_out,
+            binary,
+            convo_file,
+            trace_out,
             extra_flags=["--multi-turn", "--context-window=8000"],
-            timeout=timeout
+            timeout=timeout,
         )
 
         with open(queries_file) as f:
@@ -285,12 +319,14 @@ def evaluate_compression_tasks(binary, tasks_dir, traces_dir, timeout):
             keywords_found += found
             print(f"    query {qi}: {found}/{len(expected_keywords)} keywords")
 
-        results.append({
-            "task": task_name,
-            "keywords_found": keywords_found,
-            "keywords_total": keywords_total,
-            "cost": result.get("total_cost", 0.0) if result else 0.0,
-        })
+        results.append(
+            {
+                "task": task_name,
+                "keywords_found": keywords_found,
+                "keywords_total": keywords_total,
+                "cost": result.get("total_cost", 0.0) if result else 0.0,
+            }
+        )
 
     return results
 
