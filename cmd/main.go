@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/joho/godotenv"
@@ -667,6 +668,11 @@ func main() {
 		}
 		if arg == "--multi-turn" {
 			batchchan.Config.MultiTurn = true
+		}
+		if strings.HasPrefix(arg, "--context-window=") {
+			if v, err := strconv.Atoi(arg[17:]); err == nil && v > 0 {
+				cfg.Agent.ContextWindow = v
+			}
 		}
 	}
 

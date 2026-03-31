@@ -70,6 +70,11 @@ type Result struct {
 }
 
 func (b *batchChannel) Start(agent *core.Agent, cfg config.Config, _ *features.SkillRegistry) error {
+	// Batch mode always starts with a fresh branch (no prior conversation context)
+	if _, err := agent.DAG().NewBranch("batch"); err != nil {
+		log.Printf("[batch] warning: could not create fresh branch: %v", err)
+	}
+
 	promptFile := Config.PromptFile
 	outputDir := Config.OutputDir
 
@@ -110,6 +115,12 @@ func (b *batchChannel) Start(agent *core.Agent, cfg config.Config, _ *features.S
 			return fmt.Errorf("batch: chdir to %s: %w", absWorkDir, err)
 		}
 		log.Printf("[batch] workdir: %s", absWorkDir)
+	}
+
+	// Prepend workdir context so the LLM knows where to operate
+	if Config.WorkDir != "" {
+		absWD, _ := os.Getwd()
+		prompt = fmt.Sprintf("Working directory: %s\nAll files are in this directory. Use this as the base path for all tool calls (read, write, edit, grep, glob, bash).\n\n%s", absWD, prompt)
 	}
 
 	log.Printf("[batch] prompt: %s (%d chars)", promptFile, len(prompt))

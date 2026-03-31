@@ -1,6 +1,5 @@
 #!/bin/bash
 set -e
-cd workspace
 
 # Port must be changed
 grep -q "port: 9090" config.yaml
