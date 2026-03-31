@@ -4,23 +4,23 @@
 
 ```
 evolve-harness/
-├── CONTEXT.md              # Background and architecture (this project's README)
+├── CONTEXT.md              # Background and architecture
 ├── DESIGN.md               # This file — system design
-├── PLAN.md                 # Writing plans for steps 1-5
+├── PLAN.md                 # Implementation plans for steps 1-5
 ├── proposer.md             # Proposer skill (instructions for Claude Code)
 ├── evaluate.py             # Evaluator script
 ├── run.sh                  # Orchestrator loop
 ├── tasks/                  # Task definitions
-│   ├── coding/             # 30 coding tasks
-│   │   ├── 001_fizzbuzz/
+│   ├── coding/             # 15 harness-sensitive coding tasks
+│   │   ├── 001_long_debug/
 │   │   │   ├── prompt.txt
 │   │   │   ├── test.sh
-│   │   │   └── workspace/  # starting files (if any)
+│   │   │   └── workspace/
 │   │   └── ...
 │   ├── tool_use/           # 15 tool-use tasks
 │   │   ├── 001_read_edit/
 │   │   │   ├── prompt.txt
-│   │   │   ├── verify.py   # checks tool sequence in trace
+│   │   │   ├── verify.py
 │   │   │   └── workspace/
 │   │   └── ...
 │   └── compression/        # 10 compression tasks
@@ -30,13 +30,19 @@ evolve-harness/
 │       │   └── expected.json
 │       └── ...
 └── search_db/              # Accumulated during search (gitignored)
-    ├── harness_000/        # Baseline
-    │   ├── src/            # Snapshot of optimizable Go files
+    ├── harness_000/
+    │   ├── src/            # Preserves package paths
+    │   │   ├── core/compression.go
+    │   │   ├── core/compression_ops.go
+    │   │   ├── core/context.go
+    │   │   ├── providers/anthropic.go
+    │   │   ├── tools/tools.go
+    │   │   └── features/routing.go
     │   ├── scores.json
     │   └── traces/
     │       ├── coding_001/result.json
     │       └── ...
-    └── harness_001/        # First proposer iteration
+    └── harness_001/
         └── ...
 ```
 
@@ -44,27 +50,45 @@ evolve-harness/
 
 ### 1. Coding (weight: 0.35)
 
-**What:** Can the agent solve coding tasks end-to-end?
-**Tasks:** 30 tasks across 3 difficulty tiers (10 easy, 10 medium, 10 hard).
+**What:** Can the agent solve tasks that stress harness-quality?
+**Tasks:** 15 tasks designed to be sensitive to compression, context management, tool routing, and prompt framing — NOT pure model capability tests.
+
+**Key principle:** A task like "write fizzbuzz" tests the model, not the harness. The model passes or fails regardless of compression weights. Good tasks are ones where harness decisions (how much context to keep, which tool to suggest, when to compress) make the difference between pass and fail.
+
+**Task categories (5 each):**
+
+**Long-horizon (5):** Tasks requiring 10+ turns where context management determines success.
+- Workspace has 5+ files. Agent must read, plan, then modify multiple files.
+- Context exceeds 50% of window by mid-task — compression quality matters.
+- Errors are seeded that require reading earlier tool output to fix.
+
+**Tool-sensitive (5):** Tasks where using the wrong tool causes failure or waste.
+- Edit tasks where `write` would destroy formatting but `edit` preserves it.
+- Search tasks where `bash: grep` misses results that `grep` tool catches.
+- Tasks where redundant reads waste context budget.
+
+**Error-recovery (5):** Tasks where the first approach fails and the agent must adapt.
+- Workspace has misleading file names. Agent must recover from wrong assumptions.
+- Build errors that require reading compiler output and fixing iteratively.
+- Tasks where the prompt is deliberately ambiguous — harness framing shapes model behavior.
+
 **Scoring:** Binary pass/fail via `test.sh` exit code.
 **Score:** `coding_pass_rate = passed / total`
 
-Easy tasks: single-file, clear spec (fizzbuzz, string reverse, file parser).
-Medium tasks: multi-file, requires reading existing code (fix a bug, add a feature).
-Hard tasks: multi-step reasoning, ambiguous requirements, error recovery.
-
 Each task provides:
-- `prompt.txt` — the user instruction
-- `test.sh` — verification script (runs tests, diffs output, checks file existence)
-- `workspace/` — starting files copied into a temp dir before the agent runs
+- `prompt.txt` — user instruction
+- `test.sh` — verification (runs tests, diffs output, checks files)
+- `workspace/` — starting files copied to temp dir
 
 ### 2. Context Efficiency (weight: 0.20)
 
-**What:** How many tokens does the agent use to achieve the same results?
-**Tasks:** Same 30 coding tasks.
-**Scoring:** `efficiency = coding_pass_rate / (total_input_tokens / baseline_input_tokens)`
+**What:** How many tokens does the agent spend per successful task?
+**Tasks:** Same 15 coding tasks.
+**Metric:** `tokens_per_pass = total_input_tokens / max(tasks_passed, 1)`
 
-A harness that passes 80% of tasks in 50K tokens scores higher than one that passes 85% in 200K tokens. This creates pressure to compress well and route efficiently.
+Lower is better. This is NOT a ratio against baseline — it's an absolute metric. The proposer sees both `coding_pass_rate` and `tokens_per_pass` as separate numbers and can reason about the tradeoff.
+
+Normalized for scoring: `efficiency_score = baseline_tokens_per_pass / tokens_per_pass` (capped at 1.0). A harness that uses half the tokens per pass scores 1.0; one that uses 2x scores 0.5.
 
 ### 3. Tool-Use Precision (weight: 0.25)
 
@@ -90,118 +114,105 @@ Each task provides:
 
 **What:** After compression, can the agent still answer questions about earlier conversation?
 **Tasks:** 10 tasks, each with a multi-turn conversation + post-compression queries.
-**Scoring:** Information retention rate.
 
-Pipeline:
-1. Feed conversation.json messages into the agent (via batch channel multi-turn mode — Step 1 extends batch channel for this)
-2. Trigger compression (the conversation exceeds the configured threshold)
-3. After compression, ask the queries from queries.json
-4. Score answers against expected.json (exact match on key facts, or LLM-as-judge)
+**Pipeline:**
+1. Set `ContextWindow=8000` and `ContinuousCompression=true` to force compression early.
+2. Feed `conversation.json` messages via batch multi-turn mode.
+3. After all messages (compression has fired multiple times), ask queries from `queries.json`.
+4. Score answers via keyword extraction: each expected answer lists 3-5 key terms, actual answer gets 1 point per term present.
 
-**Score:** `compression_retention = correct_answers / total_queries`
+**Why keyword scoring:** LLM-as-judge adds noise and cost per iteration. Exact match is too brittle. Keywords are deterministic, cheap, and sufficient for "did compression preserve this fact?"
+
+**Score:** `compression_retention = total_keywords_found / total_keywords_expected`
+
+Each task provides:
+- `conversation.json` — array of `{"role": "user", "content": "..."}` messages
+- `queries.json` — array of `{"question": "...", "keywords": ["term1", "term2", ...]}`
+- No `expected.json` needed — keywords are in `queries.json`
 
 ### Composite Score
 
 ```python
 composite = (
     0.35 * coding_pass_rate +
-    0.20 * context_efficiency +
+    0.20 * efficiency_score +
     0.25 * tool_precision +
     0.20 * compression_retention
 )
 ```
 
-The proposer sees all four scores and can reason about trade-offs. Pareto-optimal solutions are tracked.
+The proposer sees ALL raw metrics (pass rate, tokens_per_pass, per-task tool scores, per-query keyword hits) plus the composite. It can reason about trade-offs.
 
 ## Evaluator (evaluate.py)
 
-Single Python script that:
+Single Python script:
 
-1. Takes `--harness=N` (harness directory) and `--tasks=path` (task directory)
-2. For each task:
-   a. Copy workspace files to a temp directory
-   b. Run `./torus-agent --no-setup --batch=prompt.txt --output=trace_dir/`
-   c. Run `test.sh` or `verify.py` against the output
-   d. Collect score + trace
-3. Compute per-dimension and composite scores
-4. Write `scores.json` to the harness directory
-
-Needs:
-- `ANTHROPIC_API_KEY` or equivalent in env
-- go_sdk_agent binary built with the harness's modified source files
-- Task files in expected structure
+1. Takes `--harness=N`, `--tasks=path`, `--binary=path`, `--search-db=path`
+2. For each coding task:
+   a. Copy workspace/ to temp dir
+   b. Run: `binary --no-setup --batch=prompt.txt --output=trace_dir/ --workdir=temp_dir/`
+   c. Run: `test.sh` in temp dir
+   d. Collect pass/fail + token counts from result.json
+3. For each tool-use task:
+   a. Same as coding, but also run `verify.py` on result.json
+4. For each compression task:
+   a. Run: `binary --no-setup --batch=conversation.json --output=trace_dir/ --multi-turn --context-window=8000`
+   b. For each query: run agent with query, check keywords in response
+5. Compute per-dimension and composite scores
+6. Write `scores.json` + `detailed_results.json`
 
 ## Proposer Skill (proposer.md)
 
-An instruction file given to Claude Code when it acts as the proposer. Contains:
-
-1. **Goal statement**: "You are optimizing go_sdk_agent's harness code to maximize a composite score across coding, efficiency, tool-use, and compression."
-2. **Filesystem map**: Where to find prior harnesses, traces, and scores in `search_db/`.
-3. **Optimizable surfaces**: Exact file paths and knob descriptions (from CONTEXT.md).
-4. **Constraints**: Don't modify provider code, don't change the batch channel, don't change tool implementations (only descriptions).
-5. **Output format**: Write modified files to `search_db/harness_NNN/src/`.
-6. **Strategy guidance**: "Read traces from failing tasks before proposing changes. Prefer additive changes over modifications to existing logic. State your hypothesis before each change."
+Instructions for Claude Code acting as the proposer. Key sections:
+1. Goal statement with composite formula
+2. Filesystem map (where in search_db/ to find code, traces, scores)
+3. Optimizable surfaces with exact file paths and knob descriptions
+4. Constraints (what NOT to modify)
+5. Output format (write to `search_db/harness_NNN/src/{package}/`)
+6. Strategy: read traces first, state hypothesis, prefer additive changes, one change per iteration
 
 ## Orchestrator (run.sh)
 
 ```bash
-#!/bin/bash
-set -euo pipefail
+snapshot_harness() {
+    mkdir -p "$SEARCH_DB/harness_$1/src/core"
+    mkdir -p "$SEARCH_DB/harness_$1/src/providers"
+    mkdir -p "$SEARCH_DB/harness_$1/src/tools"
+    mkdir -p "$SEARCH_DB/harness_$1/src/features"
+    cp internal/core/compression.go internal/core/compression_ops.go internal/core/context.go "$SEARCH_DB/harness_$1/src/core/"
+    cp internal/providers/anthropic.go "$SEARCH_DB/harness_$1/src/providers/"
+    cp internal/tools/tools.go "$SEARCH_DB/harness_$1/src/tools/"
+    cp internal/features/routing.go "$SEARCH_DB/harness_$1/src/features/"
+}
 
-MAX_ITER=${MAX_ITER:-10}
-TASKS_DIR="evolve-harness/tasks"
-SEARCH_DB="evolve-harness/search_db"
-
-# Step 0: Evaluate baseline if not done
-if [ ! -f "$SEARCH_DB/harness_000/scores.json" ]; then
-    echo "Evaluating baseline..."
-    snapshot_harness 000
-    python evolve-harness/evaluate.py --harness=000 --tasks=$TASKS_DIR
-fi
-
-# Step 1..N: Proposer loop
-for i in $(seq 1 $MAX_ITER); do
-    HARNESS_ID=$(printf "%03d" $i)
-
-    # 1. Run proposer
-    claude -p "$(cat evolve-harness/proposer.md)" \
-        --allowedTools Read,Write,Edit,Bash,Grep,Glob
-
-    # 2. Apply modifications and rebuild
-    apply_harness $HARNESS_ID
-    go build -o torus-agent-eval ./cmd/
-
-    # 3. Evaluate
-    python evolve-harness/evaluate.py \
-        --harness=$HARNESS_ID \
-        --tasks=$TASKS_DIR \
-        --binary=./torus-agent-eval
-
-    # 4. Log
-    echo "Harness $HARNESS_ID: $(cat $SEARCH_DB/harness_$HARNESS_ID/scores.json)"
-done
-
-echo "Search complete. Best harness:"
-python -c "import json,glob; scores=[json.load(open(f)) for f in glob.glob('$SEARCH_DB/*/scores.json')]; print(max(scores, key=lambda s: s['composite']))"
+apply_harness() {
+    cp "$SEARCH_DB/harness_$1/src/core/"*.go internal/core/
+    cp "$SEARCH_DB/harness_$1/src/providers/"*.go internal/providers/
+    cp "$SEARCH_DB/harness_$1/src/tools/"*.go internal/tools/
+    cp "$SEARCH_DB/harness_$1/src/features/"*.go internal/features/
+}
 ```
 
-## Multi-Turn Batch Mode (Extension)
+Main loop: baseline eval → proposer → apply + build → evaluate → revert → report. Build failures skip the iteration. After all iterations, print Pareto frontier.
 
-For compression tasks, the batch channel needs to support multi-turn conversations. Extension:
+## Batch Channel Flags
 
 ```bash
-./torus-agent --no-setup --batch=conversation.json --output=traces/comp_001/ --multi-turn
+# Single task with workspace
+./torus-agent --no-setup --batch=prompt.txt --output=traces/001/ --workdir=/tmp/workspace/
+
+# Multi-turn (compression evaluation)
+./torus-agent --no-setup --batch=conversation.json --output=traces/comp/ --multi-turn
 ```
 
-Where `conversation.json` is an array of user messages. The batch channel sends them sequentially, collecting traces for each turn. This triggers natural compression when the conversation grows long enough.
+`--workdir` changes the process working directory before the agent loop starts, so all tool operations (read, write, edit, bash) operate on the task's workspace files.
 
 ## Cost Estimate
 
-Per iteration (30 coding + 15 tool + 10 compression tasks):
-- ~55 agent runs per iteration
-- ~5K-50K input tokens per run (varies with task difficulty)
-- Proposer reads ~10M tokens of search_db per iteration
-- Estimated: $15-40 per iteration at Opus pricing
-- 10 iterations: $150-400 total
-
-The coding tasks dominate cost because they involve multi-turn tool use. Compression tasks are cheaper (mostly context, fewer LLM calls).
+Per iteration (15 coding + 15 tool + 10 compression = 40 tasks):
+- ~40 agent runs per iteration
+- ~5K-50K input tokens per run
+- Proposer reads search_db (~10M tokens) per iteration
+- Estimated: $15-30 per iteration at Opus pricing
+- 10 iterations: $150-300 total
+- MVP (10 tasks, 3 iterations): ~$30

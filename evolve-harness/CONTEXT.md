@@ -93,6 +93,12 @@ go_sdk_agent is a Go-based LLM agent harness with:
 }
 ```
 
+**Flags:**
+- `--batch=prompt.txt` — prompt file to read
+- `--output=dir/` — where to write result.json
+- `--workdir=dir/` — chdir before agent loop (so tools operate on workspace files; output path is resolved to absolute before chdir)
+- `--multi-turn` — (planned) parse prompt as JSON array, send each as a turn
+
 ## Branch
 
 All work is on `evolve-harness` branch, forked from `master` at `9643bd1`.

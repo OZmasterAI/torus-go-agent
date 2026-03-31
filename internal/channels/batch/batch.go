@@ -23,6 +23,7 @@ func init() { channels.Register(&batchChannel{}) }
 var Config = struct {
 	PromptFile string
 	OutputDir  string
+	WorkDir    string // working directory for agent tool execution (default: current dir)
 }{}
 
 type batchChannel struct{}
@@ -85,12 +86,29 @@ func (b *batchChannel) Start(agent *core.Agent, cfg config.Config, _ *features.S
 		return fmt.Errorf("batch: prompt file is empty: %s", promptFile)
 	}
 
-	// Default output dir to current directory
+	// Default output dir to current directory.
+	// Resolve to absolute path before any chdir so result.json lands in the right place.
 	if outputDir == "" {
 		outputDir = "."
 	}
+	outputDir, err = filepath.Abs(outputDir)
+	if err != nil {
+		return fmt.Errorf("batch: resolve output dir: %w", err)
+	}
 	if err := os.MkdirAll(outputDir, 0o755); err != nil {
 		return fmt.Errorf("batch: create output dir: %w", err)
+	}
+
+	// Change working directory if specified (so agent tools operate on the right files)
+	if Config.WorkDir != "" {
+		absWorkDir, err := filepath.Abs(Config.WorkDir)
+		if err != nil {
+			return fmt.Errorf("batch: resolve workdir: %w", err)
+		}
+		if err := os.Chdir(absWorkDir); err != nil {
+			return fmt.Errorf("batch: chdir to %s: %w", absWorkDir, err)
+		}
+		log.Printf("[batch] workdir: %s", absWorkDir)
 	}
 
 	log.Printf("[batch] prompt: %s (%d chars)", promptFile, len(prompt))

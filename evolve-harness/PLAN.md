@@ -3,185 +3,214 @@
 ## Prerequisites
 
 - [x] Step 0: Batch channel (`internal/channels/batch/batch.go`) — DONE
+- [x] `--workdir` flag for workspace isolation — DONE
 - [x] Branch: `evolve-harness`
 
 ---
 
-## Step 1: Task Set
+## Step 1: Task Set + Multi-Turn Batch
 
-**Goal:** Create 55 evaluation tasks with automated scoring.
+**Goal:** Create 40 evaluation tasks with automated scoring, plus multi-turn batch mode.
 
-### 1A. Coding Tasks (30 tasks)
+### 1A. Multi-Turn Batch Extension (MUST be first — compression tasks depend on it)
 
-Each task lives in `evolve-harness/tasks/coding/NNN_name/` with:
-- `prompt.txt` — user instruction
-- `test.sh` — exits 0 on pass, 1 on fail
-- `workspace/` — starting files (optional)
+Extend batch channel to support `--multi-turn` flag.
 
-#### Easy (10 tasks) — single file, clear spec
+**File:** `internal/channels/batch/batch.go`
 
-```
-001_fizzbuzz/          # "Write fizzbuzz.py that prints 1-100"
-                       # test.sh: python3 fizzbuzz.py | diff - expected.txt
-002_reverse_string/    # "Write reverse.go that reverses stdin"
-                       # test.sh: echo "hello" | go run reverse.go | grep "olleh"
-003_count_words/       # "Write count.py that counts words in input.txt"
-004_json_parser/       # "Write parse.py that extracts 'name' field from data.json"
-005_fibonacci/         # "Write fib.go that prints first 20 fibonacci numbers"
-006_file_copy/         # "Copy all .txt files from src/ to dst/"
-007_sort_csv/          # "Sort data.csv by the 'score' column descending"
-008_http_status/       # "Write check.sh that returns HTTP status of a URL"
-009_find_duplicates/   # "Find duplicate lines in input.txt"
-010_calc_average/      # "Calculate average of numbers in numbers.txt"
-```
+**Changes (~40 lines):**
+```go
+// Add to Config struct:
+MultiTurn bool
 
-#### Medium (10 tasks) — multi-file, read-then-modify
+// In Start(), before the agent loop:
+if Config.MultiTurn {
+    return b.runMultiTurn(agent, prompt, outputDir)
+}
 
-```
-011_fix_syntax/        # workspace has broken.py with a syntax error. "Fix the bug"
-                       # test.sh: python3 broken.py && echo "PASS"
-012_add_tests/         # workspace has calc.go. "Add unit tests"
-                       # test.sh: go test ./...
-013_refactor_function/ # workspace has utils.py with a 50-line function. "Split into 3 functions"
-                       # test.sh: python3 -m pytest test_utils.py
-014_convert_format/    # workspace has data.xml. "Convert to JSON"
-                       # test.sh: python3 -c "import json; json.load(open('data.json'))"
-015_add_logging/       # workspace has server.go. "Add structured logging"
-                       # test.sh: go build ./... && grep -q 'log.' server.go
-016_fix_test/          # workspace has passing code but failing test. "Fix the test"
-                       # test.sh: go test ./...
-017_implement_interface/ # workspace has interface.go with a Go interface. "Implement it"
-                       # test.sh: go build ./... && go test ./...
-018_extract_config/    # workspace has hardcoded values. "Extract to config.json"
-                       # test.sh: test -f config.json && python3 verify.py
-019_add_error_handling/ # workspace has code that panics on bad input. "Add error handling"
-                       # test.sh: echo "bad" | go run main.go; test $? -eq 0
-020_document_api/      # workspace has undocumented functions. "Add godoc comments"
-                       # test.sh: go doc ./... 2>&1 | grep -c "func" | awk '$1 >= 3'
+// New method:
+func (b *batchChannel) runMultiTurn(agent *core.Agent, rawPrompt string, outputDir string) error {
+    // 1. Parse rawPrompt as JSON array of strings (each is a user message)
+    // 2. For each message: agent.Run(ctx, msg) — collect response + trace per turn
+    // 3. Write result.json with per-turn traces and cumulative metrics
+}
 ```
 
-#### Hard (10 tasks) — multi-step, ambiguous, error recovery
-
+**Flag wiring in cmd/main.go:**
+```go
+if arg == "--multi-turn" {
+    batchchan.Config.MultiTurn = true
+}
 ```
-021_debug_crash/       # workspace has a Go binary that segfaults. "Find and fix the bug"
-                       # test.sh: go test -race ./...
-022_migrate_schema/    # workspace has SQLite DB + old schema. "Migrate to new schema"
-                       # test.sh: python3 verify_migration.py
-023_build_cli/         # "Build a CLI tool that greps across multiple files with context"
-                       # test.sh: ./tool --pattern "foo" testdata/ | diff - expected.txt
-024_optimize_slow/     # workspace has correct but O(n^2) code. "Optimize to O(n log n)"
-                       # test.sh: time go run main.go < large_input.txt (must complete in <2s)
-025_merge_configs/     # workspace has 3 YAML configs. "Merge into one with conflict resolution"
-                       # test.sh: python3 verify_merge.py
-026_fix_race/          # workspace has Go code with a data race. "Fix the race condition"
-                       # test.sh: go test -race ./... -count=5
-027_parse_protocol/    # workspace has a binary protocol spec + sample data. "Write a parser"
-                       # test.sh: go run parser.go < sample.bin | diff - expected.txt
-028_cross_file_refactor/ # workspace has 5 Go files. "Rename Widget to Component everywhere"
-                       # test.sh: go build ./... && ! grep -r "Widget" *.go
-029_api_client/        # "Build an HTTP client for the API described in api_spec.json"
-                       # test.sh: go test ./...
-030_fix_flaky/         # workspace has a flaky test. "Make it deterministic"
-                       # test.sh: for i in $(seq 1 10); do go test ./... || exit 1; done
-```
-
-### 1B. Tool-Use Tasks (15 tasks)
-
-Each task in `evolve-harness/tasks/tool_use/NNN_name/` with:
-- `prompt.txt` — instruction
-- `verify.py` — reads `result.json`, checks tool sequence
-- `workspace/` — starting files
-- Optional: `required_tools.json`, `banned_tools.json`
-
-```
-001_read_then_edit/    # "Change function name in main.go"
-                       # Required: ["read", "edit"]. Banned: ["write"]
-                       # verify: must read before edit, must not use write
-
-002_search_codebase/   # "Find all functions that return error"
-                       # Required: ["grep"]. Banned: ["bash"]
-                       # verify: must use grep, not bash with grep/rg
-
-003_find_files/        # "List all Go test files"
-                       # Required: ["glob"]. Banned: ["bash"]
-                       # verify: must use glob, not bash with find/ls
-
-004_create_new_file/   # "Create a new config.json file"
-                       # Required: ["write"]. Banned: ["bash"]
-                       # verify: must use write tool, not bash echo/cat
-
-005_multi_file_edit/   # "Update the function signature in 3 files"
-                       # Required: ["glob", "read", "edit"]
-                       # verify: must glob first, then read each, then edit each
-
-006_run_tests/         # "Run the test suite and report results"
-                       # Required: ["bash"]
-                       # verify: must use bash with go test or pytest
-
-007_read_no_reread/    # "Summarize main.go"
-                       # verify: must read main.go exactly once (no redundant reads)
-
-008_edit_not_rewrite/  # "Fix the typo on line 15 of main.go"
-                       # Required: ["edit"]. Banned: ["write"]
-                       # verify: must use edit (surgical), not write (full rewrite)
-
-009_search_then_fix/   # "Find and fix all TODO comments"
-                       # Required: ["grep", "edit"]
-                       # verify: must grep for TODO, then edit each file
-
-010_bash_for_system/   # "Check disk space and running processes"
-                       # Required: ["bash"]
-                       # verify: must use bash (no other tool can do this)
-
-011_glob_pattern/      # "Find all files matching *.test.js in the project"
-                       # Required: ["glob"]
-                       # verify: glob with correct pattern, not bash find
-
-012_sequential_ops/    # "Read config.json, update the port, write it back"
-                       # Required: ["read", "edit"]
-                       # verify: read → edit sequence, not write (preserves formatting)
-
-013_error_recovery/    # workspace has a file that can't be read. "Try to read secret.txt"
-                       # verify: agent handles error gracefully, doesn't retry 5+ times
-
-014_minimal_tools/     # "What's in main.go?" (simple question)
-                       # verify: uses exactly 1 read call, no unnecessary tools
-
-015_skill_trigger/     # "Commit all changes" (should trigger /commit skill)
-                       # verify: trace shows skill was used (check prompt prepend)
-```
-
-### 1C. Compression Tasks (10 tasks)
-
-Each task in `evolve-harness/tasks/compression/NNN_name/` with:
-- `conversation.json` — array of user messages (multi-turn)
-- `queries.json` — questions to ask after compression
-- `expected.json` — expected answers (key facts)
-
-```
-001_long_coding/       # 40-turn coding conversation. Queries: "What file had the bug?"
-002_multi_topic/       # 30-turn conversation spanning 3 topics. Queries per topic.
-003_error_chain/       # 25-turn debugging session. Queries: "What was the root cause?"
-004_decision_trail/    # 20-turn decision discussion. Queries: "Why did we choose X?"
-005_code_review/       # 35-turn code review. Queries: "What files were reviewed?"
-006_refactor_history/  # 30-turn refactoring. Queries: "What was renamed?"
-007_config_changes/    # 20-turn config discussion. Queries: "What port did we set?"
-008_test_debugging/    # 25-turn test fixing. Queries: "Which tests were flaky?"
-009_architecture/      # 30-turn architecture discussion. Queries: "What pattern was chosen?"
-010_mixed_tools/       # 35-turn session with varied tool use. Queries about specific tool results.
-```
-
-### Implementation
-
-**Files to create:**
-- `evolve-harness/tasks/coding/NNN_name/{prompt.txt, test.sh, workspace/}` x 30
-- `evolve-harness/tasks/tool_use/NNN_name/{prompt.txt, verify.py, workspace/}` x 15
-- `evolve-harness/tasks/compression/NNN_name/{conversation.json, queries.json, expected.json}` x 10
 
 **Tests:**
-- `evolve-harness/tasks/validate_tasks.py` — ensures every task has required files, test.sh is executable, verify.py parses, conversation.json is valid JSON
+```go
+func TestBatch_MultiTurn_ParsesJSONArray(t *testing.T)   // valid JSON array → runs N turns
+func TestBatch_MultiTurn_InvalidJSON(t *testing.T)       // garbage input → error
+func TestBatch_MultiTurn_TracksAllTurns(t *testing.T)    // result.json has events from all turns
+```
 
-**Approach:** Start with 5 coding + 3 tool-use + 2 compression tasks (minimal viable set). Expand after first end-to-end run proves the pipeline works.
+### 1B. Coding Tasks (15 harness-sensitive tasks)
+
+Each task in `evolve-harness/tasks/coding/NNN_name/` with:
+- `prompt.txt` — user instruction
+- `test.sh` — exits 0=pass, 1=fail
+- `workspace/` — starting files
+
+#### Long-Horizon (5) — context management determines success
+
+```
+001_multi_file_fix/
+    # workspace: 6 Go files with 3 related bugs across files.
+    # Agent must read all files, understand dependencies, fix in correct order.
+    # Mid-task context exceeds 50% window — what gets compressed matters.
+    # test.sh: go test ./...
+
+002_iterative_debug/
+    # workspace: Go project that builds but fails 3 tests.
+    # Agent must: run tests → read failure → fix → re-run → fix next → re-run.
+    # 10+ turns guaranteed. Earlier test output must survive compression.
+    # test.sh: go test ./... (all 3 must pass)
+
+003_chain_edits/
+    # workspace: 8 Python files. prompt: "Rename class User to Account everywhere."
+    # Must grep, then edit each file. Order matters (imports break if partial).
+    # Compression must preserve which files were already edited.
+    # test.sh: python3 -m pytest && ! grep -r "class User" *.py
+
+004_config_cascade/
+    # workspace: app with config.yaml, 3 modules reading it, tests.
+    # prompt: "Add a 'timeout' field, wire it through all modules, add tests."
+    # Must track which modules are done across many turns.
+    # test.sh: go test ./... && grep -q "timeout" config.yaml
+
+005_doc_from_code/
+    # workspace: 10 Go files with complex logic, no comments.
+    # prompt: "Write a DESIGN.md explaining the architecture."
+    # Must read all files (lots of context), then synthesize.
+    # test.sh: test -f DESIGN.md && wc -w DESIGN.md | awk '$1 >= 200'
+```
+
+#### Tool-Sensitive (5) — wrong tool = failure or context waste
+
+```
+006_preserve_formatting/
+    # workspace: carefully formatted YAML with comments.
+    # prompt: "Change the port from 8080 to 9090."
+    # write tool destroys comments/formatting. edit preserves them.
+    # test.sh: grep -q "9090" config.yaml && grep -q "# Main server port" config.yaml
+
+007_large_file_search/
+    # workspace: 2000-line Go file + 5 small files.
+    # prompt: "Find all functions that return (string, error)."
+    # Reading the 2000-line file wastes context. grep is the right tool.
+    # test.sh: diff expected_functions.txt <(sort output.txt)
+
+008_targeted_edit/
+    # workspace: 500-line Python file with one typo on line 247.
+    # prompt: "Fix the typo in utils.py"
+    # write rewrites 500 lines (wasteful). edit changes 1 line.
+    # test.sh: python3 utils.py  (typo causes NameError)
+
+009_multi_grep_edit/
+    # workspace: 12 files, 4 contain "FIXME" comments with instructions.
+    # prompt: "Address all FIXME comments."
+    # Must grep → read relevant → edit. Not read all 12 files.
+    # test.sh: ! grep -r "FIXME" *.py && python3 -m pytest
+
+010_bash_only_task/
+    # workspace: none. prompt: "Create a directory structure: src/{lib,bin,test}/ with a Makefile"
+    # bash is the right tool for mkdir/touch. read/write are wrong.
+    # test.sh: test -d src/lib && test -d src/bin && test -f Makefile
+```
+
+#### Error-Recovery (5) — first attempt fails, must adapt
+
+```
+011_misleading_error/
+    # workspace: Python project. The actual bug is in deps, not the reported file.
+    # prompt: "Fix the import error in main.py" (but main.py is fine; utils.py is broken)
+    # Agent must read error, realize misdirection, search wider.
+    # test.sh: python3 main.py
+
+012_build_fix_cycle/
+    # workspace: Go project with 3 compile errors. Each fix reveals the next.
+    # Agent must: build → read error → fix → build → read error → fix → build.
+    # If compression drops earlier build output, agent re-introduces old bugs.
+    # test.sh: go build ./... && go test ./...
+
+013_wrong_assumption/
+    # workspace: files named "database.py" (actually a mock) and "cache.py" (actual DB logic).
+    # prompt: "Fix the database connection timeout."
+    # Agent will likely read database.py first (wrong file). Must recover.
+    # test.sh: python3 -m pytest test_connection.py
+
+014_partial_success/
+    # workspace: 4 test files, 2 are passing, 2 are failing.
+    # prompt: "Make all tests pass."
+    # If agent fixes one then breaks a passing test, must notice and fix both.
+    # test.sh: python3 -m pytest (all 4 must pass)
+
+015_ambiguous_spec/
+    # workspace: Go HTTP server. prompt: "Add authentication."
+    # Deliberately vague. Good harness framing → agent asks clarifying then implements basic.
+    # Bad framing → agent builds something over-complex that doesn't compile.
+    # test.sh: go build ./... && curl -s localhost:0/health (must return 401 without auth header)
+```
+
+### 1C. Tool-Use Tasks (15 tasks)
+
+Each in `evolve-harness/tasks/tool_use/NNN_name/`.
+
+(Same as original plan — these are already harness-sensitive by design.)
+
+```
+001_read_then_edit/    # Required: ["read", "edit"]. Banned: ["write"]
+002_search_codebase/   # Required: ["grep"]. Banned: ["bash"]
+003_find_files/        # Required: ["glob"]. Banned: ["bash"]
+004_create_new_file/   # Required: ["write"]. Banned: ["bash"]
+005_multi_file_edit/   # Required: ["glob", "read", "edit"]
+006_run_tests/         # Required: ["bash"]
+007_read_no_reread/    # verify: read file exactly once
+008_edit_not_rewrite/  # Required: ["edit"]. Banned: ["write"]
+009_search_then_fix/   # Required: ["grep", "edit"]
+010_bash_for_system/   # Required: ["bash"]
+011_glob_pattern/      # Required: ["glob"]
+012_sequential_ops/    # Required: ["read", "edit"] (not write)
+013_error_recovery/    # verify: graceful error handling, no excessive retries
+014_minimal_tools/     # verify: exactly 1 tool call for a simple question
+015_skill_trigger/     # verify: skill was triggered from trace
+```
+
+### 1D. Compression Tasks (10 tasks)
+
+Each in `evolve-harness/tasks/compression/NNN_name/`.
+
+Conversations are realistic multi-turn sessions. Queries test retention of specific facts.
+
+```
+001_long_coding/       # 40 turns of coding. Keywords: file names, function names, error messages
+002_multi_topic/       # 30 turns, 3 topics. Keywords: topic-specific terms
+003_error_chain/       # 25 turns debugging. Keywords: root cause, fix description
+004_decision_trail/    # 20 turns decision-making. Keywords: options considered, chosen option, reason
+005_code_review/       # 35 turns code review. Keywords: files reviewed, issues found
+006_refactor_history/  # 30 turns refactoring. Keywords: old names, new names, moved files
+007_config_changes/    # 20 turns config work. Keywords: setting names, values set
+008_test_debugging/    # 25 turns test fixing. Keywords: test names, failure modes
+009_architecture/      # 30 turns arch discussion. Keywords: patterns chosen, rejected alternatives
+010_mixed_tools/       # 35 turns with varied tools. Keywords: tool outputs, file contents
+```
+
+Each `queries.json`:
+```json
+[
+  {"question": "What file contained the original bug?", "keywords": ["utils.py", "TypeError"]},
+  {"question": "What function was renamed?", "keywords": ["processData", "handleInput"]},
+  {"question": "Why did we reject option B?", "keywords": ["latency", "500ms", "unacceptable"]}
+]
+```
+
+3-5 queries per task, 3-5 keywords per query. Scoring: case-insensitive substring match.
 
 ---
 
@@ -192,150 +221,186 @@ Each task in `evolve-harness/tasks/compression/NNN_name/` with:
 ### File: `evolve-harness/evaluate.py`
 
 ```python
-# evaluate.py --harness=000 --tasks=evolve-harness/tasks [--binary=./torus-agent]
+#!/usr/bin/env python3
+"""Evaluate a harness against the task suite."""
+
+import argparse, json, os, shutil, subprocess, sys, tempfile
+from pathlib import Path
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--harness", required=True)
+    parser.add_argument("--tasks", required=True)
+    parser.add_argument("--binary", default="./torus-agent")
+    parser.add_argument("--search-db", default="evolve-harness/search_db")
+    parser.add_argument("--baseline-tpp", type=float, default=0)  # tokens_per_pass for baseline
+    args = parser.parse_args()
+
+    harness_dir = f"{args.search_db}/harness_{args.harness}"
+    traces_dir = f"{harness_dir}/traces"
+    os.makedirs(traces_dir, exist_ok=True)
+
+    coding = evaluate_coding_tasks(args.binary, f"{args.tasks}/coding", traces_dir)
+    tools = evaluate_tool_tasks(args.binary, f"{args.tasks}/tool_use", traces_dir)
+    compression = evaluate_compression_tasks(args.binary, f"{args.tasks}/compression", traces_dir)
+
+    scores = compute_scores(coding, tools, compression, args.baseline_tpp)
+    write_scores(harness_dir, scores)
+
+def run_agent(binary, prompt_file, output_dir, workdir=None, extra_flags=None):
+    """Run the agent binary in batch mode. Returns result.json as dict or None on failure."""
+    cmd = [binary, "--no-setup", f"--batch={prompt_file}", f"--output={output_dir}"]
+    if workdir:
+        cmd.append(f"--workdir={workdir}")
+    if extra_flags:
+        cmd.extend(extra_flags)
+    result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+    result_path = os.path.join(output_dir, "result.json")
+    if os.path.exists(result_path):
+        return json.load(open(result_path))
+    return None
+
+def evaluate_coding_tasks(binary, tasks_dir, traces_dir):
+    """Returns list of {task, passed, tokens_in, tokens_out, cost, duration_ms}."""
+
+def evaluate_tool_tasks(binary, tasks_dir, traces_dir):
+    """Returns list of {task, passed, tool_score, details}."""
+
+def evaluate_compression_tasks(binary, tasks_dir, traces_dir):
+    """Returns list of {task, keywords_found, keywords_total}."""
+
+def check_keywords(response_text, keywords):
+    """Case-insensitive substring match. Returns count of keywords found."""
+    found = 0
+    lower = response_text.lower()
+    for kw in keywords:
+        if kw.lower() in lower:
+            found += 1
+    return found
+
+def compute_scores(coding, tools, compression, baseline_tpp):
+    """Compute all metrics and composite score."""
+    coding_pass_rate = sum(1 for c in coding if c["passed"]) / max(len(coding), 1)
+    tasks_passed = max(sum(1 for c in coding if c["passed"]), 1)
+    total_tokens = sum(c["tokens_in"] for c in coding)
+    tokens_per_pass = total_tokens / tasks_passed
+
+    if baseline_tpp > 0:
+        efficiency_score = min(baseline_tpp / tokens_per_pass, 1.0)
+    else:
+        efficiency_score = 1.0  # first run IS the baseline
+
+    tool_precision = sum(t["tool_score"] for t in tools) / max(sum(t.get("max_score", 2.0) for t in tools), 1)
+    kw_found = sum(c["keywords_found"] for c in compression)
+    kw_total = max(sum(c["keywords_total"] for c in compression), 1)
+    compression_retention = kw_found / kw_total
+
+    composite = (0.35 * coding_pass_rate + 0.20 * efficiency_score +
+                 0.25 * tool_precision + 0.20 * compression_retention)
+
+    return {
+        "coding_pass_rate": coding_pass_rate,
+        "tokens_per_pass": tokens_per_pass,
+        "efficiency_score": efficiency_score,
+        "tool_precision": tool_precision,
+        "compression_retention": compression_retention,
+        "composite": composite,
+        "total_input_tokens": total_tokens,
+        "total_output_tokens": sum(c.get("tokens_out", 0) for c in coding),
+        "total_cost": sum(c.get("cost", 0) for c in coding + tools + compression),
+    }
+
+def write_scores(harness_dir, scores):
+    with open(f"{harness_dir}/scores.json", "w") as f:
+        json.dump(scores, f, indent=2)
 ```
 
-### Functions
+### Tests: `evolve-harness/test_evaluate.py`
 
 ```python
-def main(harness_id, tasks_dir, binary):
-    """Entry point: evaluate harness against all tasks."""
-
-def evaluate_coding(binary, task_dir, output_dir) -> CodingResult:
-    """Run agent on one coding task.
-    1. Copy workspace/ to temp dir
-    2. Run: binary --no-setup --batch=prompt.txt --output=output_dir/
-    3. Run: test.sh in temp dir
-    4. Return {passed: bool, tokens_in: int, tokens_out: int, cost: float, duration_ms: int}
-    """
-
-def evaluate_tool_use(binary, task_dir, output_dir) -> ToolUseResult:
-    """Run agent on one tool-use task.
-    1. Copy workspace/ to temp dir
-    2. Run: binary --no-setup --batch=prompt.txt --output=output_dir/
-    3. Run: verify.py result.json
-    4. Return {passed: bool, tool_score: float, details: dict}
-    """
-
-def evaluate_compression(binary, task_dir, output_dir) -> CompressionResult:
-    """Run agent on one compression task.
-    1. Run: binary --no-setup --batch=conversation.json --output=output_dir/ --multi-turn
-    2. For each query in queries.json:
-       Run: binary --no-setup --batch=query.txt --output=output_dir/query_N/
-    3. Score answers against expected.json
-    4. Return {retention: float, tokens_used: int}
-    """
-
-def compute_scores(coding_results, tool_results, compression_results) -> Scores:
-    """Compute composite score.
-    coding_pass_rate = sum(passed) / len(coding)
-    efficiency = coding_pass_rate / (total_tokens / baseline_tokens)
-    tool_precision = sum(tool_scores) / max_possible
-    compression_retention = sum(correct) / total_queries
-    composite = 0.35*coding + 0.20*efficiency + 0.25*tools + 0.20*compression
-    """
-
-def write_scores(harness_dir, scores, results):
-    """Write scores.json and detailed_results.json."""
+def test_check_keywords():         # "foo bar" contains ["foo", "baz"] → 1/2
+def test_compute_scores_baseline(): # known inputs → expected composite
+def test_compute_scores_improved():  # fewer tokens → higher efficiency
+def test_run_agent_missing_binary(): # graceful failure
 ```
-
-### Output: `search_db/harness_NNN/scores.json`
-
-```json
-{
-  "coding_pass_rate": 0.73,
-  "context_efficiency": 0.85,
-  "tool_precision": 0.68,
-  "compression_retention": 0.81,
-  "composite": 0.764,
-  "total_input_tokens": 452000,
-  "total_output_tokens": 28000,
-  "total_cost": 7.23,
-  "total_duration_ms": 145000,
-  "per_task": { ... }
-}
-```
-
-### Tests
-
-```python
-# test_evaluate.py
-def test_evaluate_coding_pass():    # mock agent run + passing test.sh
-def test_evaluate_coding_fail():    # mock agent run + failing test.sh
-def test_evaluate_tool_use():       # mock trace + verify.py
-def test_compute_scores():          # known inputs → expected composite
-def test_scores_json_format():      # validate output schema
-```
-
-### Multi-Turn Extension (for compression tasks)
-
-Extend batch channel to accept `--multi-turn` flag:
-- `Config.MultiTurn bool`
-- When true, read `prompt.txt` as JSON array of strings
-- Send each message sequentially via `agent.Run(ctx, msg)`, collecting traces per turn
-- This naturally triggers compression when context exceeds threshold
-
-**File change:** `internal/channels/batch/batch.go` — add ~30 lines for multi-turn loop.
 
 ---
 
 ## Step 3: Proposer Skill
 
-**Goal:** An instruction file that tells Claude Code how to read `search_db/` and propose modifications.
+**Goal:** Instruction file for Claude Code as the proposer.
 
 ### File: `evolve-harness/proposer.md`
-
-### Contents (outline)
 
 ```markdown
 # Meta-Harness Proposer
 
 ## Your Task
-You are optimizing go_sdk_agent to maximize a composite score:
+Optimize go_sdk_agent's harness code to maximize:
   composite = 0.35*coding + 0.20*efficiency + 0.25*tools + 0.20*compression
 
 ## Search Database
-All prior harness attempts are in evolve-harness/search_db/:
-  search_db/harness_000/  (baseline)
-  search_db/harness_001/  (your first attempt)
+evolve-harness/search_db/ contains all prior attempts:
+  harness_000/  — baseline (unmodified go_sdk_agent)
+  harness_001/  — first iteration
   ...
 
-Each contains:
-  src/           — snapshot of modified Go files
-  scores.json    — composite + per-dimension scores
-  traces/        — result.json per task (full turn-by-turn traces)
-
-## What You Can Modify
-ONLY these files (copy from internal/ to search_db/harness_NNN/src/):
-  compression.go       — scoring weights, zone budgets, tool truncation limits
-  compression_ops.go   — operation boundary detection, scoring signals
-  context.go           — compaction strategy, keepLastN, threshold
-  anthropic.go         — system prompt, cache breakpoint strategy
-  tools.go             — tool descriptions (NOT implementations)
-  routing.go           — smart routing thresholds and keywords
-
-DO NOT modify: batch.go, loop.go, dag.go, providers, tool implementations.
+Each directory contains:
+  src/core/compression.go       — compression scoring weights, zone budgets
+  src/core/compression_ops.go   — operation boundary detection, scoring signals
+  src/core/context.go           — compaction strategy, keepLastN, threshold
+  src/providers/anthropic.go    — system prompt, cache breakpoints
+  src/tools/tools.go            — tool descriptions
+  src/features/routing.go       — smart routing thresholds
+  scores.json                   — per-dimension and composite scores
+  traces/                       — result.json per task (turn-by-turn events)
+  hypothesis.md                 — (your) reasoning for this iteration's changes
 
 ## Process
-1. Read search_db/ — start with scores.json for all prior harnesses
+1. Read scores.json for ALL prior harnesses — understand the trajectory
 2. Identify the worst-performing dimension
-3. Read traces from failing tasks in that dimension
-4. Form a hypothesis about WHY those tasks fail
-5. Propose a MINIMAL modification (prefer additive over destructive)
-6. Write modified files to search_db/harness_NNN/src/
-7. Write search_db/harness_NNN/hypothesis.md explaining your reasoning
+3. Read traces from 3-5 FAILING tasks in that dimension
+4. Read the source code that controls that dimension
+5. Form a hypothesis: "Task X fails because [specific mechanism]"
+6. Write hypothesis.md FIRST
+7. Make a MINIMAL modification to one file
+8. Write modified files to search_db/harness_NNN/src/{package}/
 
 ## Rules
-- State your hypothesis BEFORE writing code
-- Change ONE thing per iteration (don't bundle multiple fixes)
-- If prior iterations regressed, explain why before trying again
-- Read raw traces (tool calls, turn-by-turn) — don't rely only on scores
-- Prefer additive changes (Meta-Harness found 5/7 modification attempts regressed)
+- ONE change per iteration. Do not bundle fixes.
+- ADDITIVE over destructive. Meta-Harness found 5/7 modification attempts regressed.
+- Read RAW TRACES (tool calls, turn-by-turn). Scores alone tell you nothing about WHY.
+- If 2+ prior iterations regressed, explain the confound before trying again.
+- Do not modify: batch.go, loop.go, dag.go, hook implementations, tool Execute functions.
+- Do not introduce new Go files. Only modify existing ones listed above.
+
+## Knob Reference (key tunable parameters)
+
+### compression.go
+- DefaultToolLimits: head/tail line counts per tool (bash: 30/15, read: 60/20, etc.)
+- UnifiedCompressConfig: KeepFirst, KeepLast (10), MinMessages, ArchivePct (25%)
+- Template threshold: score < 0.3 → archive, >= 0.3 → template one-liner
+- Per-op cap: 50% of zone2Effective budget
+
+### compression_ops.go
+- ScoreOperation weights: recency (0.20), file_overlap (0.20), outcome (0.20), op_type (0.20), causal (0.20)
+- boundaryThreshold: 0.20
+- Tool type transition weight: 0.35, file scope weight: 0.30, intent signal weight: 0.20
+
+### context.go
+- CompactionConfig: Threshold (0-100%), KeepLastN (10), Trigger ("tokens"/"messages"/"both")
+
+### anthropic.go
+- applyCacheControl: marks last 2 messages (could be 3)
+- System prompt blocks: identity + custom, both with cache_control
+
+### tools.go
+- Tool descriptions: text that shapes which tool the model chooses
+- Tool names and input schemas
+
+### routing.go
+- IsSimpleMessage: maxSimpleBytes, maxSimpleWords, complexityKeywords list
 ```
-
-### Tests
-
-No automated tests — this is a prompt artifact. Validate by manual review.
 
 ---
 
@@ -345,155 +410,155 @@ No automated tests — this is a prompt artifact. Validate by manual review.
 
 ### File: `evolve-harness/run.sh`
 
-### Functions
-
-```bash
-snapshot_harness() {
-    # Copy current optimizable Go files to search_db/harness_$1/src/
-    HARNESS_DIR="$SEARCH_DB/harness_$1"
-    mkdir -p "$HARNESS_DIR/src"
-    cp internal/core/compression.go "$HARNESS_DIR/src/"
-    cp internal/core/compression_ops.go "$HARNESS_DIR/src/"
-    cp internal/core/context.go "$HARNESS_DIR/src/"
-    cp internal/providers/anthropic.go "$HARNESS_DIR/src/"
-    cp internal/tools/tools.go "$HARNESS_DIR/src/"
-    cp internal/features/routing.go "$HARNESS_DIR/src/"
-}
-
-apply_harness() {
-    # Copy modified files from search_db/harness_$1/src/ back to internal/
-    HARNESS_DIR="$SEARCH_DB/harness_$1"
-    for f in "$HARNESS_DIR/src/"*.go; do
-        basename=$(basename "$f")
-        # Route to correct package based on filename
-        case "$basename" in
-            compression*.go|context.go) cp "$f" internal/core/ ;;
-            anthropic.go) cp "$f" internal/providers/ ;;
-            tools.go) cp "$f" internal/tools/ ;;
-            routing.go) cp "$f" internal/features/ ;;
-        esac
-    done
-}
-
-run_proposer() {
-    # Launch Claude Code as the proposer
-    claude -p "$(cat evolve-harness/proposer.md)
-
-Current harness: $1
-Search database: evolve-harness/search_db/
-Write new harness to: evolve-harness/search_db/harness_$2/src/
-
-Read the search_db to understand what's been tried. Propose your modification."
-}
-```
-
-### Main loop
-
 ```bash
 #!/bin/bash
 set -euo pipefail
+
 SEARCH_DB="evolve-harness/search_db"
 TASKS="evolve-harness/tasks"
 MAX_ITER=${MAX_ITER:-10}
 BINARY=${BINARY:-./torus-agent}
 
-# Baseline
+snapshot_harness() {
+    local ID=$1
+    mkdir -p "$SEARCH_DB/harness_$ID/src/"{core,providers,tools,features}
+    cp internal/core/compression.go internal/core/compression_ops.go internal/core/context.go \
+       "$SEARCH_DB/harness_$ID/src/core/"
+    cp internal/providers/anthropic.go "$SEARCH_DB/harness_$ID/src/providers/"
+    cp internal/tools/tools.go "$SEARCH_DB/harness_$ID/src/tools/"
+    cp internal/features/routing.go "$SEARCH_DB/harness_$ID/src/features/"
+}
+
+apply_harness() {
+    local ID=$1
+    cp "$SEARCH_DB/harness_$ID/src/core/"*.go internal/core/
+    cp "$SEARCH_DB/harness_$ID/src/providers/"*.go internal/providers/
+    cp "$SEARCH_DB/harness_$ID/src/tools/"*.go internal/tools/
+    cp "$SEARCH_DB/harness_$ID/src/features/"*.go internal/features/
+}
+
+# === Baseline ===
 if [ ! -f "$SEARCH_DB/harness_000/scores.json" ]; then
+    echo "=== Evaluating baseline ==="
     snapshot_harness 000
     go build -o "$BINARY" ./cmd/
     python3 evolve-harness/evaluate.py --harness=000 --tasks="$TASKS" --binary="$BINARY" --search-db="$SEARCH_DB"
+    echo "Baseline: $(cat $SEARCH_DB/harness_000/scores.json | python3 -c 'import sys,json; s=json.load(sys.stdin); print(f"composite={s[\"composite\"]:.3f}")')"
 fi
 
-# Search loop
+# Get baseline tokens_per_pass for efficiency scoring
+BASELINE_TPP=$(python3 -c "import json; print(json.load(open('$SEARCH_DB/harness_000/scores.json'))['tokens_per_pass'])")
+
+# === Search Loop ===
 for i in $(seq 1 $MAX_ITER); do
     ID=$(printf "%03d" $i)
+    echo ""
     echo "=== Iteration $ID ==="
 
-    # 1. Proposer
-    run_proposer "$(($i - 1))" "$ID"
+    # 1. Run proposer
+    echo "Running proposer..."
+    claude -p "$(cat evolve-harness/proposer.md)
+
+Current iteration: $ID
+Search database: $SEARCH_DB/
+Write new harness to: $SEARCH_DB/harness_$ID/src/
+
+Read the search_db to understand what's been tried. Propose your modification." \
+        --allowedTools Read,Write,Edit,Grep,Glob
 
     # 2. Apply + build
+    if [ ! -d "$SEARCH_DB/harness_$ID/src" ]; then
+        echo "Proposer didn't write files — skipping"
+        continue
+    fi
+
     apply_harness "$ID"
-    if ! go build -o "$BINARY" ./cmd/; then
-        echo "Build failed for harness $ID — skipping"
-        echo '{"error": "build_failed"}' > "$SEARCH_DB/harness_$ID/scores.json"
-        # Revert
+    if ! go build -o "$BINARY" ./cmd/ 2>"$SEARCH_DB/harness_$ID/build_error.txt"; then
+        echo "Build failed — see $SEARCH_DB/harness_$ID/build_error.txt"
+        echo '{"error": "build_failed", "composite": 0}' > "$SEARCH_DB/harness_$ID/scores.json"
         apply_harness "000"
         continue
     fi
 
     # 3. Evaluate
-    python3 evolve-harness/evaluate.py --harness="$ID" --tasks="$TASKS" --binary="$BINARY" --search-db="$SEARCH_DB"
+    echo "Evaluating..."
+    python3 evolve-harness/evaluate.py \
+        --harness="$ID" --tasks="$TASKS" --binary="$BINARY" \
+        --search-db="$SEARCH_DB" --baseline-tpp="$BASELINE_TPP"
 
-    # 4. Revert source to baseline (proposer reads from search_db, not live source)
+    # 4. Revert to baseline source
     apply_harness "000"
 
     # 5. Report
-    echo "Harness $ID: $(python3 -c "import json; print(json.dumps(json.load(open('$SEARCH_DB/harness_$ID/scores.json')), indent=2))")"
+    echo "Harness $ID: $(cat $SEARCH_DB/harness_$ID/scores.json | python3 -c 'import sys,json; s=json.load(sys.stdin); print(f"composite={s.get(\"composite\",0):.3f} coding={s.get(\"coding_pass_rate\",0):.2f} tools={s.get(\"tool_precision\",0):.2f} compression={s.get(\"compression_retention\",0):.2f}")')"
 done
 
-# Summary
+# === Summary ===
+echo ""
 echo "=== Search Complete ==="
 python3 -c "
 import json, glob, os
 scores = []
 for f in sorted(glob.glob('$SEARCH_DB/*/scores.json')):
     s = json.load(open(f))
-    if 'composite' in s:
+    if 'composite' in s and s['composite'] > 0:
         hid = os.path.basename(os.path.dirname(f))
         scores.append((s['composite'], hid, s))
 scores.sort(reverse=True)
+print('Top 5 harnesses:')
 for composite, hid, s in scores[:5]:
-    print(f'{hid}: composite={composite:.3f} coding={s[\"coding_pass_rate\"]:.2f} tools={s[\"tool_precision\"]:.2f} compression={s[\"compression_retention\"]:.2f}')
+    print(f'  {hid}: composite={composite:.3f}  coding={s[\"coding_pass_rate\"]:.2f}  efficiency={s[\"efficiency_score\"]:.2f}  tools={s[\"tool_precision\"]:.2f}  compression={s[\"compression_retention\"]:.2f}')
+best_id = scores[0][1] if scores else 'none'
+print(f'\nBest: {best_id}')
+print(f'Apply with: apply_harness {best_id.split(\"_\")[1]}')
 "
-```
-
-### Tests
-
-```bash
-# test_run.sh — verify snapshot/apply roundtrip
-snapshot_harness test_000
-apply_harness test_000
-go build ./cmd/  # must succeed
-diff internal/core/compression.go evolve-harness/search_db/harness_test_000/src/compression.go  # must match
 ```
 
 ---
 
 ## Step 5: End-to-End Integration
 
-**Goal:** Run the full pipeline once to validate everything works together.
+**Goal:** Run the full pipeline once (MVP) to validate everything works.
+
+### MVP Scope
+- 5 coding tasks (2 long-horizon, 2 tool-sensitive, 1 error-recovery)
+- 3 tool-use tasks
+- 2 compression tasks
+- 3 proposer iterations
 
 ### Checklist
 
 - [ ] Build baseline binary
-- [ ] Run evaluator on 10 tasks (5 coding + 3 tool-use + 2 compression)
-- [ ] Verify scores.json is correct
-- [ ] Verify traces are readable and contain expected events
-- [ ] Run proposer once — verify it reads search_db/ and writes a valid harness
-- [ ] Build with proposer's modifications — verify it compiles
-- [ ] Re-evaluate — verify new scores.json
-- [ ] Run orchestrator for 2 iterations — verify full loop works
-- [ ] Review proposer's hypothesis.md — verify it shows causal reasoning
+- [ ] Run evaluator on MVP tasks → verify `scores.json` is correct
+- [ ] Verify traces contain expected events (turns, tools, usage)
+- [ ] Run proposer once → verify it reads `search_db/`, writes valid Go files, writes `hypothesis.md`
+- [ ] Build with proposer's modifications → verify compilation
+- [ ] Re-evaluate → verify new `scores.json` (different from baseline)
+- [ ] Run full orchestrator for 3 iterations → verify loop completes
+- [ ] Review proposer's `hypothesis.md` files → verify causal reasoning from traces
+- [ ] Check Pareto frontier output → verify ranking
 
-### Minimal Viable Run (MVP)
-
-Start with just 10 tasks (5 coding + 3 tool-use + 2 compression) and 3 iterations. This validates the full pipeline end-to-end before scaling to 55 tasks and 10 iterations.
+### Post-MVP
+After MVP validates the pipeline:
+1. Expand to full 40-task suite
+2. Run 10 iterations
+3. Apply best harness to `master` branch
+4. Compare before/after on real usage
 
 ---
 
-## Implementation Order
+## Implementation Order (Revised)
 
-| Step | What | Depends On | Est. Files |
-|------|------|-----------|------------|
-| 1A   | 10 coding tasks (easy) | Step 0 | 30 files |
-| 1B   | 5 tool-use tasks | Step 0 | 15 files |
-| 1C   | 2 compression tasks | Multi-turn batch extension | 6 files |
-| 2    | evaluate.py | Steps 1A-C | 2 files |
-| 1D   | Multi-turn batch extension | Step 0 | 1 file edit |
-| 3    | proposer.md | Step 2 | 1 file |
-| 4    | run.sh | Steps 2-3 | 1 file |
-| 5    | End-to-end test | Steps 1-4 | validation only |
-| 1E   | Remaining 40 tasks | Step 5 validated | 120 files |
+| Step | What | Depends On | Files |
+|------|------|-----------|-------|
+| **1A** | Multi-turn batch extension | Step 0 | 1 edit + tests |
+| **1B** | 5 coding tasks (MVP) | Step 0 | 15 files |
+| **1C** | 3 tool-use tasks (MVP) | Step 0 | 9 files |
+| **1D** | 2 compression tasks (MVP) | Step 1A | 4 files |
+| **2** | evaluate.py | Steps 1A-D | 2 files |
+| **3** | proposer.md | Step 2 | 1 file |
+| **4** | run.sh | Steps 2-3 | 1 file |
+| **5** | End-to-end MVP test | Steps 1-4 | validation |
+| **6** | Expand to full 40 tasks | Step 5 | ~90 files |
 
-Start with the MVP path: 1A(10) → 1B(5) → 2 → 3 → 4 → 5 → then expand tasks.
+Start: **1A → 1B → 1C → 1D → 2 → 3 → 4 → 5**
