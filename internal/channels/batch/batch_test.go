@@ -135,3 +135,144 @@ func TestBatch_RunsAndWritesResult(t *testing.T) {
 		t.Error("expected non-empty trace")
 	}
 }
+
+func TestBatch_MultiTurn_ParsesJSONArray(t *testing.T) {
+	tmp := t.TempDir()
+	promptFile := filepath.Join(tmp, "messages.json")
+	os.WriteFile(promptFile, []byte(`["hello","how are you","goodbye"]`), 0o644)
+	outDir := filepath.Join(tmp, "out")
+
+	prov := &stubProvider{
+		text:  "Hi there!",
+		usage: tp.Usage{InputTokens: 10, OutputTokens: 5, TotalTokens: 15},
+	}
+	dagPath := filepath.Join(tmp, "test.db")
+	dag, err := core.NewDAG(dagPath)
+	if err != nil {
+		t.Fatalf("dag: %v", err)
+	}
+	defer dag.Close()
+
+	hooks := core.NewHookRegistry()
+	agent := core.NewAgent(tp.AgentConfig{
+		Provider:      tp.ProviderConfig{Name: "stub", Model: "stub-model"},
+		SystemPrompt:  "test",
+		MaxTurns:      5,
+		ContextWindow: 100000,
+	}, prov, hooks, dag)
+
+	Config.PromptFile = promptFile
+	Config.OutputDir = outDir
+	Config.MultiTurn = true
+	Config.WorkDir = ""
+	defer func() { Config.MultiTurn = false }()
+
+	bch := &batchChannel{}
+	err = bch.Start(agent, config.Config{}, features.NewSkillRegistry(""))
+	if err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+
+	data, err := os.ReadFile(filepath.Join(outDir, "result.json"))
+	if err != nil {
+		t.Fatalf("read result: %v", err)
+	}
+
+	var result MultiTurnResult
+	if err := json.Unmarshal(data, &result); err != nil {
+		t.Fatalf("parse result: %v", err)
+	}
+
+	if len(result.Messages) != 3 {
+		t.Fatalf("messages = %d, want 3", len(result.Messages))
+	}
+	if result.Messages[0].Message != "hello" {
+		t.Errorf("msg[0] = %q, want %q", result.Messages[0].Message, "hello")
+	}
+	if result.Messages[2].Message != "goodbye" {
+		t.Errorf("msg[2] = %q, want %q", result.Messages[2].Message, "goodbye")
+	}
+	if result.TotalInput != 30 { // 10 per message × 3
+		t.Errorf("total_input = %d, want 30", result.TotalInput)
+	}
+	if result.DurationMs <= 0 {
+		t.Error("expected positive duration")
+	}
+}
+
+func TestBatch_MultiTurn_InvalidJSON(t *testing.T) {
+	tmp := t.TempDir()
+	promptFile := filepath.Join(tmp, "bad.json")
+	os.WriteFile(promptFile, []byte("not json at all"), 0o644)
+	outDir := filepath.Join(tmp, "out")
+
+	Config.PromptFile = promptFile
+	Config.OutputDir = outDir
+	Config.MultiTurn = true
+	Config.WorkDir = ""
+	defer func() { Config.MultiTurn = false }()
+
+	bch := &batchChannel{}
+	err := bch.Start(nil, config.Config{}, nil)
+	if err == nil {
+		t.Fatal("expected error for invalid JSON")
+	}
+}
+
+func TestBatch_MultiTurn_ObjectFormat(t *testing.T) {
+	tmp := t.TempDir()
+	promptFile := filepath.Join(tmp, "conv.json")
+	os.WriteFile(promptFile, []byte(`[{"role":"user","content":"hello"},{"role":"user","content":"world"}]`), 0o644)
+	outDir := filepath.Join(tmp, "out")
+
+	prov := &stubProvider{
+		text:  "Response",
+		usage: tp.Usage{InputTokens: 8, OutputTokens: 3, TotalTokens: 11},
+	}
+	dagPath := filepath.Join(tmp, "test.db")
+	dag, err := core.NewDAG(dagPath)
+	if err != nil {
+		t.Fatalf("dag: %v", err)
+	}
+	defer dag.Close()
+
+	hooks := core.NewHookRegistry()
+	agent := core.NewAgent(tp.AgentConfig{
+		Provider:      tp.ProviderConfig{Name: "stub", Model: "stub-model"},
+		SystemPrompt:  "test",
+		MaxTurns:      5,
+		ContextWindow: 100000,
+	}, prov, hooks, dag)
+
+	Config.PromptFile = promptFile
+	Config.OutputDir = outDir
+	Config.MultiTurn = true
+	Config.WorkDir = ""
+	defer func() { Config.MultiTurn = false }()
+
+	bch := &batchChannel{}
+	err = bch.Start(agent, config.Config{}, features.NewSkillRegistry(""))
+	if err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+
+	data, err := os.ReadFile(filepath.Join(outDir, "result.json"))
+	if err != nil {
+		t.Fatalf("read result: %v", err)
+	}
+
+	var result MultiTurnResult
+	if err := json.Unmarshal(data, &result); err != nil {
+		t.Fatalf("parse result: %v", err)
+	}
+
+	if len(result.Messages) != 2 {
+		t.Fatalf("messages = %d, want 2", len(result.Messages))
+	}
+	if result.Messages[0].Message != "hello" {
+		t.Errorf("msg[0] = %q, want %q", result.Messages[0].Message, "hello")
+	}
+	if result.LastResponse != "Response" {
+		t.Errorf("last_response = %q, want %q", result.LastResponse, "Response")
+	}
+}

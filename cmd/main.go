@@ -665,6 +665,9 @@ func main() {
 		if strings.HasPrefix(arg, "--workdir=") {
 			batchchan.Config.WorkDir = arg[10:]
 		}
+		if arg == "--multi-turn" {
+			batchchan.Config.MultiTurn = true
+		}
 	}
 
 	// Pass extras to TUI channel for /stats, /agents, /mcp-tools

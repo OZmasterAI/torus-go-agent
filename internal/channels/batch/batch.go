@@ -24,6 +24,7 @@ var Config = struct {
 	PromptFile string
 	OutputDir  string
 	WorkDir    string // working directory for agent tool execution (default: current dir)
+	MultiTurn  bool   // parse prompt file as JSON array of user messages
 }{}
 
 type batchChannel struct{}
@@ -113,6 +114,11 @@ func (b *batchChannel) Start(agent *core.Agent, cfg config.Config, _ *features.S
 
 	log.Printf("[batch] prompt: %s (%d chars)", promptFile, len(prompt))
 	log.Printf("[batch] output: %s", outputDir)
+
+	// Multi-turn mode: parse prompt as JSON array and send each message sequentially
+	if Config.MultiTurn {
+		return b.runMultiTurn(agent, prompt, outputDir)
+	}
 
 	// Run agent and collect trace
 	start := time.Now()
@@ -224,5 +230,162 @@ func (b *batchChannel) Start(agent *core.Agent, cfg config.Config, _ *features.S
 	if finalErr != "" {
 		os.Exit(1)
 	}
+	return nil
+}
+
+// TurnResult captures one message exchange in multi-turn mode.
+type TurnResult struct {
+	Message  string       `json:"message"`
+	Response string       `json:"response"`
+	Turns    int          `json:"turns"`
+	Input    int          `json:"input_tokens"`
+	Output   int          `json:"output_tokens"`
+	Cost     float64      `json:"cost"`
+	Tools    int          `json:"tool_calls"`
+	Trace    []TraceEvent `json:"trace"`
+}
+
+// MultiTurnResult is written to result.json in multi-turn mode.
+type MultiTurnResult struct {
+	Messages    []TurnResult `json:"messages"`
+	TotalInput  int          `json:"total_input_tokens"`
+	TotalOutput int          `json:"total_output_tokens"`
+	TotalCost   float64      `json:"total_cost"`
+	TotalTurns  int          `json:"total_turns"`
+	TotalTools  int          `json:"total_tool_calls"`
+	DurationMs  int64        `json:"duration_ms"`
+	LastResponse string      `json:"last_response"`
+}
+
+func (b *batchChannel) runMultiTurn(agent *core.Agent, rawPrompt string, outputDir string) error {
+	// Parse as JSON array of strings
+	var messages []string
+	if err := json.Unmarshal([]byte(rawPrompt), &messages); err != nil {
+		// Try parsing as array of {role, content} objects
+		var objMessages []struct {
+			Role    string `json:"role"`
+			Content string `json:"content"`
+		}
+		if err2 := json.Unmarshal([]byte(rawPrompt), &objMessages); err2 != nil {
+			return fmt.Errorf("batch: multi-turn: expected JSON array of strings or [{role,content}]: %w", err)
+		}
+		for _, m := range objMessages {
+			messages = append(messages, m.Content)
+		}
+	}
+	if len(messages) == 0 {
+		return fmt.Errorf("batch: multi-turn: empty message array")
+	}
+
+	log.Printf("[batch] multi-turn: %d messages", len(messages))
+	start := time.Now()
+	ctx := context.Background()
+
+	var turnResults []TurnResult
+	var totalIn, totalOut, totalTools, totalTurns int
+	var totalCost float64
+
+	for i, msg := range messages {
+		log.Printf("[batch] multi-turn message %d/%d (%d chars)", i+1, len(messages), len(msg))
+
+		var trace []TraceEvent
+		var finalText string
+		var msgIn, msgOut, msgTools, msgTurns int
+		var msgCost float64
+
+		for ev := range agent.RunStream(ctx, msg) {
+			now := time.Now().UTC().Format(time.RFC3339Nano)
+			switch ev.Type {
+			case core.EventAgentTurnStart:
+				msgTurns = ev.Turn
+				trace = append(trace, TraceEvent{Time: now, Type: "turn_start", Turn: ev.Turn})
+			case core.EventAgentTurnEnd:
+				var usage *UsageRecord
+				if ev.Usage != nil {
+					usage = &UsageRecord{
+						InputTokens:      ev.Usage.InputTokens,
+						OutputTokens:     ev.Usage.OutputTokens,
+						CacheReadTokens:  ev.Usage.CacheReadTokens,
+						CacheWriteTokens: ev.Usage.CacheWriteTokens,
+						TotalTokens:      ev.Usage.TotalTokens,
+						Cost:             ev.Usage.Cost,
+					}
+					msgIn += ev.Usage.InputTokens
+					msgOut += ev.Usage.OutputTokens
+					msgCost += ev.Usage.Cost
+				}
+				trace = append(trace, TraceEvent{Time: now, Type: "turn_end", Turn: ev.Turn, Usage: usage})
+			case core.EventAgentToolStart:
+				trace = append(trace, TraceEvent{
+					Time: now, Type: "tool_start", ToolName: ev.ToolName, ToolArgs: ev.ToolArgs,
+				})
+			case core.EventAgentToolEnd:
+				msgTools++
+				te := TraceEvent{Time: now, Type: "tool_end", ToolName: ev.ToolName}
+				if ev.ToolResult != nil {
+					te.ToolResult = ev.ToolResult.Content
+					te.ToolError = ev.ToolResult.IsError
+				}
+				trace = append(trace, te)
+			case core.EventAgentDone:
+				finalText = ev.Text
+				trace = append(trace, TraceEvent{Time: now, Type: "done", Text: ev.Text})
+			case core.EventAgentError:
+				if ev.Error != nil {
+					trace = append(trace, TraceEvent{Time: now, Type: "error", Error: ev.Error.Error()})
+				}
+			}
+		}
+
+		turnResults = append(turnResults, TurnResult{
+			Message:  msg,
+			Response: finalText,
+			Turns:    msgTurns,
+			Input:    msgIn,
+			Output:   msgOut,
+			Cost:     msgCost,
+			Tools:    msgTools,
+			Trace:    trace,
+		})
+		totalIn += msgIn
+		totalOut += msgOut
+		totalCost += msgCost
+		totalTools += msgTools
+		totalTurns += msgTurns
+	}
+
+	duration := time.Since(start)
+	lastResp := ""
+	if len(turnResults) > 0 {
+		lastResp = turnResults[len(turnResults)-1].Response
+	}
+
+	result := MultiTurnResult{
+		Messages:     turnResults,
+		TotalInput:   totalIn,
+		TotalOutput:  totalOut,
+		TotalCost:    totalCost,
+		TotalTurns:   totalTurns,
+		TotalTools:   totalTools,
+		DurationMs:   duration.Milliseconds(),
+		LastResponse: lastResp,
+	}
+
+	resultPath := filepath.Join(outputDir, "result.json")
+	f, err := os.Create(resultPath)
+	if err != nil {
+		return fmt.Errorf("batch: create result: %w", err)
+	}
+	enc := json.NewEncoder(f)
+	enc.SetIndent("", "  ")
+	if err := enc.Encode(result); err != nil {
+		f.Close()
+		return fmt.Errorf("batch: write result: %w", err)
+	}
+	f.Close()
+
+	log.Printf("[batch] multi-turn done in %s — messages=%d turns=%d tools=%d tokens=%d/%d cost=$%.4f",
+		duration.Round(time.Millisecond), len(messages), totalTurns, totalTools, totalIn, totalOut, totalCost)
+	log.Printf("[batch] result: %s", resultPath)
 	return nil
 }
