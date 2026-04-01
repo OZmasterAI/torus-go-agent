@@ -1,0 +1,1 @@
+Read server.go, then change the timeout from 30 to 60 seconds.

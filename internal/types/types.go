@@ -77,6 +77,14 @@ type StreamEvent struct {
 	Error        error             // error event
 }
 
+// TransientError wraps an error that may succeed on retry (e.g., 429, 529, overloaded).
+type TransientError struct {
+	Err error
+}
+
+func (e *TransientError) Error() string { return e.Err.Error() }
+func (e *TransientError) Unwrap() error { return e.Err }
+
 // ToolResult is the output from executing a tool.
 type ToolResult struct {
 	ToolUseID string `json:"tool_use_id"`

@@ -2,8 +2,10 @@ package core
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
+	"time"
 
 	t "torus_go_agent/internal/types"
 )
@@ -209,11 +211,42 @@ func (a *Agent) runLoop(ctx context.Context, userMessage string, ch chan<- Agent
 
 		var resp *t.AssistantMessage
 		var llmErr error
-		streamCh, streamErr := activeProvider.StreamComplete(ctx, a.config.SystemPrompt, messages, toolDefs, maxTokens)
-		if streamErr != nil {
-			llmErr = streamErr
-		} else {
+		for attempt := 0; attempt <= 3; attempt++ {
+			if attempt > 0 {
+				delay := time.Duration(1<<uint(attempt)) * time.Second
+				if delay > 8*time.Second {
+					delay = 8 * time.Second
+				}
+				timer := time.NewTimer(delay)
+				select {
+				case <-timer.C:
+				case <-ctx.Done():
+					timer.Stop()
+					llmErr = ctx.Err()
+				}
+				if llmErr == ctx.Err() {
+					break
+				}
+				log.Printf("[loop] retrying LLM call (attempt %d/4) after transient error", attempt+1)
+			}
+			streamCh, streamErr := activeProvider.StreamComplete(ctx, a.config.SystemPrompt, messages, toolDefs, maxTokens)
+			if streamErr != nil {
+				llmErr = streamErr
+				var te *t.TransientError
+				if errors.As(streamErr, &te) {
+					continue
+				}
+				break
+			}
 			resp, llmErr = consumeStreamEmit(streamCh, emit)
+			if llmErr != nil {
+				var te *t.TransientError
+				if errors.As(llmErr, &te) {
+					continue
+				}
+				break
+			}
+			break
 		}
 		if llmErr != nil {
 			a.hooks.Fire(ctx, HookOnError, &HookData{AgentID: "main", Meta: map[string]any{"error": llmErr.Error()}})

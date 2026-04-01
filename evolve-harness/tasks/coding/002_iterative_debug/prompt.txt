@@ -1,0 +1,1 @@
+This Go project builds successfully but has failing tests. Run the tests, identify the bugs, and fix them until all tests pass.

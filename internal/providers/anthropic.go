@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"time"
 
 	t "torus_go_agent/internal/types"
 )
@@ -31,6 +32,34 @@ func ThinkingBudgetForLevel(level string) int {
 		return 65536
 	default:
 		return 0
+	}
+}
+
+const maxRetries = 3
+
+// isTransientStatus returns true for HTTP status codes that warrant retry.
+func isTransientStatus(code int) bool {
+	return code == 429 || code == 529
+}
+
+// isTransientSSEError checks if an SSE error payload indicates a transient condition.
+func isTransientSSEError(data string) bool {
+	return strings.Contains(data, "overloaded_error") || strings.Contains(data, "rate_limit_error")
+}
+
+// retryBackoff sleeps with exponential backoff, respecting context cancellation.
+func retryBackoff(ctx context.Context, attempt int) error {
+	delay := time.Duration(1<<uint(attempt)) * time.Second // 1s, 2s, 4s
+	if delay > 8*time.Second {
+		delay = 8 * time.Second
+	}
+	t := time.NewTimer(delay)
+	defer t.Stop()
+	select {
+	case <-t.C:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
 	}
 }
 
@@ -283,26 +312,44 @@ func (p *AnthropicProvider) Complete(ctx context.Context, systemPrompt string, m
 		return nil, fmt.Errorf("marshal request: %w", err)
 	}
 
-	httpReq, err := http.NewRequestWithContext(ctx, "POST", p.BaseURL+"/messages", bytes.NewReader(body))
-	if err != nil {
-		return nil, fmt.Errorf("create request: %w", err)
+	var respBody []byte
+	var lastErr error
+	for attempt := 0; attempt <= maxRetries; attempt++ {
+		if attempt > 0 {
+			if err := retryBackoff(ctx, attempt); err != nil {
+				return nil, err
+			}
+		}
+
+		httpReq, err := http.NewRequestWithContext(ctx, "POST", p.BaseURL+"/messages", bytes.NewReader(body))
+		if err != nil {
+			return nil, fmt.Errorf("create request: %w", err)
+		}
+		p.setHeaders(httpReq)
+
+		resp, err := p.client.Do(httpReq)
+		if err != nil {
+			return nil, fmt.Errorf("http request: %w", err)
+		}
+
+		respBody, err = io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if err != nil {
+			return nil, fmt.Errorf("read response: %w", err)
+		}
+
+		if resp.StatusCode == 200 {
+			lastErr = nil
+			break
+		}
+
+		lastErr = fmt.Errorf("anthropic API error %d: %s", resp.StatusCode, string(respBody))
+		if !isTransientStatus(resp.StatusCode) {
+			return nil, lastErr
+		}
 	}
-
-	p.setHeaders(httpReq)
-
-	resp, err := p.client.Do(httpReq)
-	if err != nil {
-		return nil, fmt.Errorf("http request: %w", err)
-	}
-	defer resp.Body.Close()
-
-	respBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("read response: %w", err)
-	}
-
-	if resp.StatusCode != 200 {
-		return nil, fmt.Errorf("anthropic API error %d: %s", resp.StatusCode, string(respBody))
+	if lastErr != nil {
+		return nil, &t.TransientError{Err: lastErr}
 	}
 
 	var apiResp anthropicResponse
@@ -432,21 +479,40 @@ func (p *AnthropicProvider) StreamComplete(ctx context.Context, systemPrompt str
 		return nil, fmt.Errorf("marshal request: %w", err)
 	}
 
-	httpReq, err := http.NewRequestWithContext(ctx, "POST", p.BaseURL+"/messages", bytes.NewReader(body))
-	if err != nil {
-		return nil, fmt.Errorf("create request: %w", err)
-	}
-	p.setHeaders(httpReq)
+	var resp *http.Response
+	var lastErr error
+	for attempt := 0; attempt <= maxRetries; attempt++ {
+		if attempt > 0 {
+			if err := retryBackoff(ctx, attempt); err != nil {
+				return nil, err
+			}
+		}
 
-	resp, err := p.client.Do(httpReq)
-	if err != nil {
-		return nil, fmt.Errorf("http request: %w", err)
-	}
+		httpReq, err := http.NewRequestWithContext(ctx, "POST", p.BaseURL+"/messages", bytes.NewReader(body))
+		if err != nil {
+			return nil, fmt.Errorf("create request: %w", err)
+		}
+		p.setHeaders(httpReq)
 
-	if resp.StatusCode != 200 {
-		defer resp.Body.Close()
+		resp, err = p.client.Do(httpReq)
+		if err != nil {
+			return nil, fmt.Errorf("http request: %w", err)
+		}
+
+		if resp.StatusCode == 200 {
+			lastErr = nil
+			break
+		}
+
 		respBody, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("anthropic API error %d: %s", resp.StatusCode, string(respBody))
+		resp.Body.Close()
+		lastErr = fmt.Errorf("anthropic API error %d: %s", resp.StatusCode, string(respBody))
+		if !isTransientStatus(resp.StatusCode) {
+			return nil, lastErr
+		}
+	}
+	if lastErr != nil {
+		return nil, &t.TransientError{Err: lastErr}
 	}
 
 	ch := make(chan t.StreamEvent, 32)
@@ -614,9 +680,13 @@ func (p *AnthropicProvider) parseAnthropicSSE(ctx context.Context, resp *http.Re
 			return
 
 		case "error":
+			err := fmt.Errorf("anthropic stream error: %s", data)
+			if isTransientSSEError(data) {
+				err = &t.TransientError{Err: err}
+			}
 			send(t.StreamEvent{
 				Type:  t.EventError,
-				Error: fmt.Errorf("anthropic stream error: %s", data),
+				Error: err,
 			})
 			return
 		}
