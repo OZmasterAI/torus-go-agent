@@ -513,9 +513,10 @@ func TestRun_ReturnsText(t *testing.T) {
 // TestRun_PropagatesError verifies that Run returns the LLM error.
 func TestRun_PropagatesError(t *testing.T) {
 	mp := &mockProvider{
-		name:      "mock",
-		modelID:   "mock-model-1",
-		streamErr: errors.New("provider down"),
+		name:        "mock",
+		modelID:     "mock-model-1",
+		streamErr:   errors.New("provider down"),
+		completeErr: errors.New("provider down"),
 	}
 	agent, _ := newTestAgent(t, mp)
 

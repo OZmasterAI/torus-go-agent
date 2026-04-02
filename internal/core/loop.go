@@ -50,11 +50,14 @@ func (a *Agent) SetCompaction(cfg CompactionConfig) { a.compaction = cfg }
 func (a *Agent) GetCompaction() CompactionConfig     { return a.compaction }
 
 // Run processes a user message and returns the final text.
-// It wraps RunStream, draining events and calling OnStreamDelta/OnToolUse callbacks.
+// It uses Complete (non-streaming) by default, unless ForceStream is set.
 func (a *Agent) Run(ctx context.Context, userMessage string) (string, error) {
+	streaming := a.config.ForceStream
+	ch := make(chan AgentEvent, 32)
+	go a.runLoop(ctx, userMessage, ch, streaming)
 	var finalText string
 	var finalErr error
-	for ev := range a.RunStream(ctx, userMessage) {
+	for ev := range ch {
 		switch ev.Type {
 		case EventAgentTextDelta:
 			if a.OnStreamDelta != nil {
@@ -81,11 +84,11 @@ func (a *Agent) Run(ctx context.Context, userMessage string) (string, error) {
 // The channel is closed when the loop finishes.
 func (a *Agent) RunStream(ctx context.Context, userMessage string) <-chan AgentEvent {
 	ch := make(chan AgentEvent, 32)
-	go a.runLoop(ctx, userMessage, ch)
+	go a.runLoop(ctx, userMessage, ch, true)
 	return ch
 }
 
-func (a *Agent) runLoop(ctx context.Context, userMessage string, ch chan<- AgentEvent) {
+func (a *Agent) runLoop(ctx context.Context, userMessage string, ch chan<- AgentEvent, streaming bool) {
 	defer close(ch)
 
 	emit := func(ev AgentEvent) {
@@ -234,19 +237,38 @@ func (a *Agent) runLoop(ctx context.Context, userMessage string, ch chan<- Agent
 				}
 				log.Printf("[loop] retrying LLM call (attempt %d/4) after transient error", attempt+1)
 			}
-			streamCh, streamErr := activeProvider.StreamComplete(ctx, a.config.SystemPrompt, messages, toolDefs, maxTokens)
-			if streamErr != nil {
-				llmErr = streamErr
-				var te *t.TransientError
-				if errors.As(streamErr, &te) {
-					continue
+			if streaming {
+				streamCh, streamErr := activeProvider.StreamComplete(ctx, a.config.SystemPrompt, messages, toolDefs, maxTokens)
+				if streamErr != nil {
+					llmErr = streamErr
+					var te *t.TransientError
+					if errors.As(streamErr, &te) {
+						continue
+					}
+					break
 				}
-				break
-			}
-			if a.config.ParallelTools {
-				resp, eagerResults, llmErr = a.consumeStreamEager(ctx, streamCh, emit)
+				if a.config.ParallelTools {
+					resp, eagerResults, llmErr = a.consumeStreamEager(ctx, streamCh, emit)
+				} else {
+					resp, llmErr = consumeStreamEmit(streamCh, emit)
+				}
 			} else {
-				resp, llmErr = consumeStreamEmit(streamCh, emit)
+				var completeErr error
+				resp, completeErr = activeProvider.Complete(ctx, a.config.SystemPrompt, messages, toolDefs, maxTokens)
+				if completeErr != nil {
+					llmErr = completeErr
+					var te *t.TransientError
+					if errors.As(completeErr, &te) {
+						continue
+					}
+					break
+				}
+				// Emit text deltas so callbacks still fire.
+				for _, block := range resp.Content {
+					if block.Type == "text" && block.Text != "" {
+						emit(AgentEvent{Type: EventAgentTextDelta, Text: block.Text})
+					}
+				}
 			}
 			if llmErr != nil {
 				var te *t.TransientError

@@ -128,6 +128,7 @@ type AgentConfig struct {
 	SmartRoutingModel string         `json:"smart_routing_model,omitempty"`
 	PersistThinking   bool           `json:"persist_thinking"`
 	ParallelTools     bool           `json:"parallel_tools"`
+	ForceStream       bool           `json:"force_stream,omitempty"` // when true, Run() still uses StreamComplete
 }
 
 // Provider is the interface all LLM providers implement.

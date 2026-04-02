@@ -390,8 +390,30 @@ type switchingToolProvider struct {
 
 func (s *switchingToolProvider) Name() string    { return "switching" }
 func (s *switchingToolProvider) ModelID() string { return "switching-model" }
-func (s *switchingToolProvider) Complete(_ context.Context, _ string, _ []typ.Message, _ []typ.Tool, _ int) (*typ.AssistantMessage, error) {
-	return nil, errors.New("complete not implemented")
+func (s *switchingToolProvider) Complete(_ context.Context, _ string, msgs []typ.Message, _ []typ.Tool, _ int) (*typ.AssistantMessage, error) {
+	if s.firstCall {
+		s.firstCall = false
+		return &typ.AssistantMessage{
+			Message: typ.Message{
+				Role: typ.RoleAssistant,
+				Content: []typ.ContentBlock{
+					{Type: "tool_use", ID: "id-1", Name: "test_tool", Input: map[string]interface{}{"arg": "value"}},
+				},
+			},
+			Model:      "switching-model",
+			StopReason: "tool_use",
+			Usage:      typ.Usage{InputTokens: 10, OutputTokens: 5, TotalTokens: 15},
+		}, nil
+	}
+	return &typ.AssistantMessage{
+		Message: typ.Message{
+			Role:    typ.RoleAssistant,
+			Content: []typ.ContentBlock{{Type: "text", Text: "final response"}},
+		},
+		Model:      "switching-model",
+		StopReason: "end_turn",
+		Usage:      typ.Usage{InputTokens: 10, OutputTokens: 5, TotalTokens: 15},
+	}, nil
 }
 func (s *switchingToolProvider) StreamComplete(_ context.Context, _ string, _ []typ.Message, _ []typ.Tool, _ int) (<-chan typ.StreamEvent, error) {
 	ch := make(chan typ.StreamEvent, 2)
@@ -1342,5 +1364,116 @@ func TestLoopEdge_EagerStreamingFallback(t *testing.T) {
 		if ev.ToolResult == nil || ev.ToolResult.IsError {
 			t.Errorf("tool %s failed unexpectedly", ev.ToolName)
 		}
+	}
+}
+
+// trackingProvider records which method was called: Complete or StreamComplete.
+type trackingProvider struct {
+	mockProvider
+	mu             sync.Mutex
+	completeCalls  int
+	streamCalls    int
+}
+
+func (tp *trackingProvider) Complete(ctx context.Context, sys string, msgs []typ.Message, tools []typ.Tool, maxTokens int) (*typ.AssistantMessage, error) {
+	tp.mu.Lock()
+	tp.completeCalls++
+	tp.mu.Unlock()
+	return tp.mockProvider.Complete(ctx, sys, msgs, tools, maxTokens)
+}
+
+func (tp *trackingProvider) StreamComplete(ctx context.Context, sys string, msgs []typ.Message, tools []typ.Tool, maxTokens int) (<-chan typ.StreamEvent, error) {
+	tp.mu.Lock()
+	tp.streamCalls++
+	tp.mu.Unlock()
+	return tp.mockProvider.StreamComplete(ctx, sys, msgs, tools, maxTokens)
+}
+
+// TestLoopEdge_RunUsesComplete verifies that Run() calls Complete, not StreamComplete.
+func TestLoopEdge_RunUsesComplete(t *testing.T) {
+	tp := &trackingProvider{
+		mockProvider: mockProvider{name: "track", modelID: "track-1", cannedText: "hello"},
+	}
+	dag := helperNewTestDAG(t)
+	cfg := typ.AgentConfig{
+		Provider: typ.ProviderConfig{Name: "track", Model: "track-1", MaxTokens: 512},
+		MaxTurns: 5,
+	}
+	hooks := NewHookRegistry()
+	agent := NewAgent(cfg, tp, hooks, dag)
+	agent.SetCompaction(CompactionConfig{Mode: CompactionOff})
+
+	got, err := agent.Run(context.Background(), "test")
+	if err != nil {
+		t.Fatalf("Run failed: %v", err)
+	}
+	if got != "hello" {
+		t.Errorf("Run() = %q, want %q", got, "hello")
+	}
+	if tp.completeCalls != 1 {
+		t.Errorf("Complete called %d times, want 1", tp.completeCalls)
+	}
+	if tp.streamCalls != 0 {
+		t.Errorf("StreamComplete called %d times, want 0", tp.streamCalls)
+	}
+}
+
+// TestLoopEdge_RunStreamUsesStreamComplete verifies that RunStream() calls StreamComplete, not Complete.
+func TestLoopEdge_RunStreamUsesStreamComplete(t *testing.T) {
+	tp := &trackingProvider{
+		mockProvider: mockProvider{name: "track", modelID: "track-1", cannedText: "hello"},
+	}
+	dag := helperNewTestDAG(t)
+	cfg := typ.AgentConfig{
+		Provider: typ.ProviderConfig{Name: "track", Model: "track-1", MaxTokens: 512},
+		MaxTurns: 5,
+	}
+	hooks := NewHookRegistry()
+	agent := NewAgent(cfg, tp, hooks, dag)
+	agent.SetCompaction(CompactionConfig{Mode: CompactionOff})
+
+	evs := collectEvents(agent.RunStream(context.Background(), "test"))
+	if tp.streamCalls != 1 {
+		t.Errorf("StreamComplete called %d times, want 1", tp.streamCalls)
+	}
+	if tp.completeCalls != 0 {
+		t.Errorf("Complete called %d times, want 0", tp.completeCalls)
+	}
+	// Verify we still get a done event.
+	var done bool
+	for _, ev := range evs {
+		if ev.Type == EventAgentDone {
+			done = true
+		}
+	}
+	if !done {
+		t.Error("expected EventAgentDone")
+	}
+}
+
+// TestLoopEdge_ForceStreamOverridesRun verifies that ForceStream=true makes Run() use StreamComplete.
+func TestLoopEdge_ForceStreamOverridesRun(t *testing.T) {
+	tp := &trackingProvider{
+		mockProvider: mockProvider{name: "track", modelID: "track-1", cannedText: "hello"},
+	}
+	dag := helperNewTestDAG(t)
+	cfg := typ.AgentConfig{
+		Provider:    typ.ProviderConfig{Name: "track", Model: "track-1", MaxTokens: 512},
+		MaxTurns:    5,
+		ForceStream: true,
+	}
+	hooks := NewHookRegistry()
+	agent := NewAgent(cfg, tp, hooks, dag)
+	agent.SetCompaction(CompactionConfig{Mode: CompactionOff})
+
+	_, err := agent.Run(context.Background(), "test")
+	if err != nil {
+		t.Fatalf("Run failed: %v", err)
+	}
+	if tp.streamCalls != 1 {
+		t.Errorf("StreamComplete called %d times, want 1", tp.streamCalls)
+	}
+	if tp.completeCalls != 0 {
+		t.Errorf("Complete called %d times, want 0", tp.completeCalls)
 	}
 }
