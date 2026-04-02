@@ -42,6 +42,18 @@ const (
 	HookBeforeSpawn        HookPoint = "before_spawn"
 	HookAfterSpawn         HookPoint = "after_spawn"
 	HookOnSubagentComplete HookPoint = "on_subagent_complete"
+
+	// New hook events (CC parity).
+	HookPostToolUseFailure HookPoint = "post_tool_use_failure"
+	HookOnStop             HookPoint = "on_stop"              // can override stop decision via Block
+	HookOnSessionStart     HookPoint = "on_session_start"
+	HookOnSessionEnd       HookPoint = "on_session_end"
+	HookOnNotification     HookPoint = "on_notification"
+	HookOnConfigChange     HookPoint = "on_config_change"
+	HookOnTaskCreated      HookPoint = "on_task_created"
+	HookOnTaskCompleted    HookPoint = "on_task_completed"
+	HookOnSubagentStart    HookPoint = "on_subagent_start"    // like before_spawn but with AdditionalContext
+	HookOnInstructionsLoaded HookPoint = "on_instructions_loaded"
 )
 
 type HookData struct {
@@ -54,9 +66,10 @@ type HookData struct {
 	Response    *t.AssistantMessage
 	TokensIn    int
 	TokensOut   int
-	Block       bool
-	BlockReason string
-	Meta        map[string]any
+	Block             bool
+	BlockReason       string
+	AdditionalContext string // returned by hooks to inject context (e.g., SubagentStart)
+	Meta              map[string]any
 }
 
 type HookFn func(ctx context.Context, data *HookData) error
