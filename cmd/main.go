@@ -337,14 +337,22 @@ func main() {
 		ForceStream:       cfg.Agent.ForceStream,
 	}, router, hooks, dag)
 
-	// Hot-reload system prompt when TORUS.md changes.
-	torusPath := filepath.Join(cfgDir, "TORUS.md")
-	reloader := core.NewPromptReloader(agent, []string{torusPath}, 5*time.Second, func() string {
-		s := config.LoadTorus(cfgDir)
+	// Hot-reload system prompt from multi-tier instruction files.
+	cwd, _ := os.Getwd()
+	instructionFiles := core.LoadAndParseAll(cwd, core.LoadReasonSessionStart)
+	var watchPaths []string
+	for _, f := range instructionFiles {
+		watchPaths = append(watchPaths, f.Path)
+	}
+	// Always watch the config-dir TORUS.md even if not yet created.
+	if torusPath := filepath.Join(cfgDir, "TORUS.md"); !contains(watchPaths, torusPath) {
+		watchPaths = append(watchPaths, torusPath)
+	}
+	reloader := core.NewPromptReloader(agent, watchPaths, 5*time.Second, func() string {
+		files := core.LoadAndParseAll(cwd, core.LoadReasonFileChange)
+		s := core.BuildPrompt(files, nil)
 		s = strings.ReplaceAll(s, "{{MODEL}}", cfg.Agent.Provider+"/"+cfg.Agent.Model)
-		if cwd, err := os.Getwd(); err == nil {
-			s = strings.ReplaceAll(s, "{{CWD}}", cwd)
-		}
+		s = strings.ReplaceAll(s, "{{CWD}}", cwd)
 		return s
 	})
 	reloader.Start()
@@ -797,4 +805,13 @@ func makeProvider(providerName, apiKey, model string, agentCfg *config.AgentConf
 		}
 		return p
 	}
+}
+
+func contains(ss []string, s string) bool {
+	for _, v := range ss {
+		if v == s {
+			return true
+		}
+	}
+	return false
 }
