@@ -431,6 +431,20 @@ func (a *Agent) Hooks() *HookRegistry     { return a.hooks }
 func (a *Agent) Provider() t.Provider     { return a.provider }
 func (a *Agent) SystemPrompt() string     { return a.config.SystemPrompt }
 func (a *Agent) AddTool(tool t.Tool)        { a.config.Tools = append(a.config.Tools, tool) }
+
+// ReloadSystemPrompt updates the system prompt and fires HookOnInstructionsLoaded.
+// Hooks can modify the prompt via AdditionalContext.
+func (a *Agent) ReloadSystemPrompt(ctx context.Context, newPrompt string) {
+	data := &HookData{
+		AgentID: "main",
+		Meta:    map[string]any{"prompt_length": len(newPrompt)},
+	}
+	a.hooks.Fire(ctx, HookOnInstructionsLoaded, data)
+	if data.AdditionalContext != "" {
+		newPrompt = newPrompt + "\n\n" + data.AdditionalContext
+	}
+	a.config.SystemPrompt = newPrompt
+}
 func (a *Agent) SetSteeringMode(mode string) { a.steeringMode = mode }
 func (a *Agent) GetSteeringMode() string {
 	if a.steeringMode == "" {
