@@ -352,7 +352,7 @@ func main() {
 	}
 	reloader := core.NewPromptReloader(agent, watchPaths, 5*time.Second, func() string {
 		files := core.LoadAndParseAll(initCwd, core.LoadReasonFileChange)
-		s := core.BuildPrompt(files, nil)
+		s := core.BuildPrompt(files, agent.ActiveFiles())
 		s = strings.ReplaceAll(s, "{{MODEL}}", cfg.Agent.Provider+"/"+cfg.Agent.Model)
 		s = strings.ReplaceAll(s, "{{CWD}}", initCwd)
 		return s

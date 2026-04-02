@@ -525,3 +525,81 @@ func TestRun_PropagatesError(t *testing.T) {
 		t.Fatal("Run should have returned an error, got nil")
 	}
 }
+
+// --- ActiveFiles tracking tests ---
+
+func TestActiveFiles_Empty(t *testing.T) {
+	mp := &mockProvider{name: "test", modelID: "m", cannedText: "done"}
+	agent, _ := newTestAgent(t, mp)
+	if got := agent.ActiveFiles(); len(got) != 0 {
+		t.Fatalf("expected empty, got %v", got)
+	}
+}
+
+func TestTrackActiveFiles_FilePath(t *testing.T) {
+	mp := &mockProvider{name: "test", modelID: "m", cannedText: "done"}
+	agent, _ := newTestAgent(t, mp)
+	agent.trackActiveFiles(map[string]any{"file_path": "/home/user/foo.go"})
+	got := agent.ActiveFiles()
+	if len(got) != 1 || got[0] != "/home/user/foo.go" {
+		t.Fatalf("expected [/home/user/foo.go], got %v", got)
+	}
+}
+
+func TestTrackActiveFiles_Path(t *testing.T) {
+	mp := &mockProvider{name: "test", modelID: "m", cannedText: "done"}
+	agent, _ := newTestAgent(t, mp)
+	agent.trackActiveFiles(map[string]any{"path": "/home/user/src"})
+	got := agent.ActiveFiles()
+	if len(got) != 1 || got[0] != "/home/user/src" {
+		t.Fatalf("expected [/home/user/src], got %v", got)
+	}
+}
+
+func TestTrackActiveFiles_BothKeys(t *testing.T) {
+	mp := &mockProvider{name: "test", modelID: "m", cannedText: "done"}
+	agent, _ := newTestAgent(t, mp)
+	agent.trackActiveFiles(map[string]any{"file_path": "/a.go", "path": "/b"})
+	got := agent.ActiveFiles()
+	if len(got) != 2 {
+		t.Fatalf("expected 2 files, got %v", got)
+	}
+}
+
+func TestTrackActiveFiles_Dedup(t *testing.T) {
+	mp := &mockProvider{name: "test", modelID: "m", cannedText: "done"}
+	agent, _ := newTestAgent(t, mp)
+	agent.trackActiveFiles(map[string]any{"file_path": "/a.go"})
+	agent.trackActiveFiles(map[string]any{"file_path": "/a.go"})
+	got := agent.ActiveFiles()
+	if len(got) != 1 {
+		t.Fatalf("expected 1 (deduped), got %v", got)
+	}
+}
+
+func TestTrackActiveFiles_EvictsOldest(t *testing.T) {
+	mp := &mockProvider{name: "test", modelID: "m", cannedText: "done"}
+	agent, _ := newTestAgent(t, mp)
+	for i := 0; i < maxActiveFiles+10; i++ {
+		agent.trackActiveFiles(map[string]any{"file_path": fmt.Sprintf("/file_%d.go", i)})
+	}
+	got := agent.ActiveFiles()
+	if len(got) != maxActiveFiles {
+		t.Fatalf("expected %d files (capped), got %d", maxActiveFiles, len(got))
+	}
+	// Oldest should have been evicted; newest should be present
+	if got[len(got)-1] != fmt.Sprintf("/file_%d.go", maxActiveFiles+9) {
+		t.Fatalf("expected newest file at end, got %s", got[len(got)-1])
+	}
+}
+
+func TestActiveFiles_SnapshotIsolation(t *testing.T) {
+	mp := &mockProvider{name: "test", modelID: "m", cannedText: "done"}
+	agent, _ := newTestAgent(t, mp)
+	agent.trackActiveFiles(map[string]any{"file_path": "/a.go"})
+	snap := agent.ActiveFiles()
+	agent.trackActiveFiles(map[string]any{"file_path": "/b.go"})
+	if len(snap) != 1 {
+		t.Fatal("snapshot should be isolated from subsequent mutations")
+	}
+}

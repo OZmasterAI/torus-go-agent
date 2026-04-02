@@ -22,6 +22,8 @@ type Agent struct {
 	compaction      CompactionConfig
 	lastInputTokens int // actual input tokens from most recent API call
 	steeringMode  string // "mild" (default) or "aggressive"
+	activeFiles   []string       // recently-touched file paths from tool calls
+	activeFilesMu sync.RWMutex   // guards activeFiles
 	Summarize     func(string) (string, error)
 	OnStreamDelta func(delta string)
 	OnToolUse     func(name string, args map[string]any, result *t.ToolResult)
@@ -432,6 +434,48 @@ func (a *Agent) Provider() t.Provider     { return a.provider }
 func (a *Agent) SystemPrompt() string     { return a.config.SystemPrompt }
 func (a *Agent) AddTool(tool t.Tool)        { a.config.Tools = append(a.config.Tools, tool) }
 
+// maxActiveFiles caps the number of tracked file paths.
+const maxActiveFiles = 50
+
+// ActiveFiles returns a snapshot of recently-touched file paths.
+func (a *Agent) ActiveFiles() []string {
+	a.activeFilesMu.RLock()
+	defer a.activeFilesMu.RUnlock()
+	out := make([]string, len(a.activeFiles))
+	copy(out, a.activeFiles)
+	return out
+}
+
+// trackActiveFiles extracts file paths from tool args and adds them to the tracker.
+func (a *Agent) trackActiveFiles(args map[string]any) {
+	var paths []string
+	if fp, ok := args["file_path"].(string); ok && fp != "" {
+		paths = append(paths, fp)
+	}
+	if p, ok := args["path"].(string); ok && p != "" {
+		paths = append(paths, p)
+	}
+	if len(paths) == 0 {
+		return
+	}
+	a.activeFilesMu.Lock()
+	defer a.activeFilesMu.Unlock()
+	seen := make(map[string]bool, len(a.activeFiles))
+	for _, f := range a.activeFiles {
+		seen[f] = true
+	}
+	for _, p := range paths {
+		if !seen[p] {
+			a.activeFiles = append(a.activeFiles, p)
+			seen[p] = true
+		}
+	}
+	// Evict oldest entries if over cap.
+	if len(a.activeFiles) > maxActiveFiles {
+		a.activeFiles = a.activeFiles[len(a.activeFiles)-maxActiveFiles:]
+	}
+}
+
 // ReloadSystemPrompt updates the system prompt and fires HookOnInstructionsLoaded.
 // Hooks can modify the prompt via AdditionalContext.
 func (a *Agent) ReloadSystemPrompt(ctx context.Context, newPrompt string) {
@@ -519,6 +563,8 @@ func (a *Agent) executeToolsSequential(ctx context.Context, toolCalls []t.Conten
 			}
 		}
 
+		a.trackActiveFiles(tc.Input)
+
 		afterTool := &HookData{AgentID: "main", ToolName: tc.Name, ToolArgs: tc.Input, ToolResult: result}
 		a.hooks.Fire(ctx, HookAfterToolCall, afterTool)
 		if afterTool.ToolResult != nil {
@@ -605,6 +651,7 @@ func (a *Agent) executeToolsParallel(ctx context.Context, toolCalls []t.ContentB
 
 	// Phase 3: after-hooks + DAG writes, sequential
 	for i, pc := range prepared {
+		a.trackActiveFiles(pc.tc.Input)
 		afterTool := &HookData{AgentID: "main", ToolName: pc.tc.Name, ToolArgs: pc.tc.Input, ToolResult: results[i]}
 		a.hooks.Fire(ctx, HookAfterToolCall, afterTool)
 		if afterTool.ToolResult != nil {
@@ -757,6 +804,8 @@ func (a *Agent) finishEagerTools(ctx context.Context, toolCalls []t.ContentBlock
 			a.executeToolsSequential(ctx, []t.ContentBlock{tc}, emit)
 			continue
 		}
+
+		a.trackActiveFiles(er.args)
 
 		afterTool := &HookData{AgentID: "main", ToolName: er.name, ToolArgs: er.args, ToolResult: er.result}
 		a.hooks.Fire(ctx, HookAfterToolCall, afterTool)
