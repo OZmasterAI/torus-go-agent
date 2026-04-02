@@ -264,7 +264,13 @@ def evaluate_tool_tasks(binary, tasks_dir, traces_dir, timeout):
 
 
 def evaluate_compression_tasks(binary, tasks_dir, traces_dir, timeout):
-    """Evaluate compression retention. Returns list of per-task result dicts."""
+    """Evaluate compression retention (single-session, post-compression queries).
+
+    Appends query questions to the conversation so they run in the same
+    multi-turn session.  The small --context-window forces compression
+    during the conversation, and the trailing queries test whether the
+    agent retained key facts post-compression.
+    """
     results = []
     if not os.path.isdir(tasks_dir):
         print(f"  No compression tasks directory: {tasks_dir}")
@@ -283,38 +289,60 @@ def evaluate_compression_tasks(binary, tasks_dir, traces_dir, timeout):
 
         print(f"  compression/{task_name}...")
 
-        trace_out = os.path.join(traces_dir, f"compression_{task_name}")
+        with open(convo_file) as f:
+            conversation = json.load(f)
+        with open(queries_file) as f:
+            queries = json.load(f)
 
-        # Feed conversation via multi-turn batch with small context window
+        # Build a single multi-turn session: conversation + query questions.
+        # Keep only user messages — the batch multi-turn runner sends each
+        # entry as a user turn and collects the agent's response.
+        combined = []
+        for msg in conversation:
+            if isinstance(msg, str):
+                combined.append(msg)
+            elif isinstance(msg, dict) and msg.get("role") == "user":
+                combined.append(msg["content"])
+
+        num_queries = len(queries)
+        for query in queries:
+            combined.append(query["question"])
+
+        # Write combined messages to a temp file
+        trace_out = os.path.join(traces_dir, f"compression_{task_name}")
+        os.makedirs(trace_out, exist_ok=True)
+        combined_file = os.path.join(trace_out, "combined.json")
+        with open(combined_file, "w") as f:
+            json.dump(combined, f)
+
+        # Single multi-turn run with tight context window to force compression
         result = run_agent(
             binary,
-            convo_file,
+            combined_file,
             trace_out,
             extra_flags=["--multi-turn", "--context-window=8000"],
             timeout=timeout,
         )
 
-        with open(queries_file) as f:
-            queries = json.load(f)
-
         keywords_found = 0
         keywords_total = 0
 
+        # Extract query responses from the tail of the multi-turn result
+        turn_messages = result.get("messages", []) if result else []
+        query_responses = (
+            turn_messages[-num_queries:]
+            if num_queries <= len(turn_messages)
+            else turn_messages
+        )
+
         for qi, query in enumerate(queries):
-            question = query["question"]
             expected_keywords = query["keywords"]
             keywords_total += len(expected_keywords)
 
-            # Write query to temp file and run agent
-            query_tmpfile = os.path.join(trace_out, f"query_{qi}.txt")
-            os.makedirs(os.path.dirname(query_tmpfile), exist_ok=True)
-            with open(query_tmpfile, "w") as f:
-                f.write(question)
+            response_text = ""
+            if qi < len(query_responses):
+                response_text = query_responses[qi].get("response", "")
 
-            query_trace = os.path.join(trace_out, f"query_{qi}")
-            query_result = run_agent(binary, query_tmpfile, query_trace, timeout=60)
-
-            response_text = query_result.get("response", "") if query_result else ""
             found = check_keywords(response_text, expected_keywords)
             keywords_found += found
             print(f"    query {qi}: {found}/{len(expected_keywords)} keywords")
