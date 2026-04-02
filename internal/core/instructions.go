@@ -165,7 +165,9 @@ func ParseFrontmatter(content string) (paths []string, body string) {
 			continue // The "paths:" header line
 		}
 		if strings.HasPrefix(line, "- ") {
-			paths = append(paths, strings.TrimSpace(line[2:]))
+			val := strings.TrimSpace(line[2:])
+			val = strings.Trim(val, "\"'") // strip YAML quotes
+			paths = append(paths, val)
 		}
 	}
 	return paths, body
@@ -278,14 +280,46 @@ func BuildPrompt(files []InstructionFile, activeFiles []string) string {
 }
 
 // matchesAnyGlob returns true if any of the globs match any of the files.
+// Supports * (single segment), ** (any depth), and plain prefix matching.
 func matchesAnyGlob(globs []string, files []string) bool {
 	for _, g := range globs {
 		for _, f := range files {
-			if matched, _ := filepath.Match(g, f); matched {
+			if globMatch(g, f) {
 				return true
 			}
-			// Also try matching just the filename.
-			if matched, _ := filepath.Match(g, filepath.Base(f)); matched {
+		}
+	}
+	return false
+}
+
+// globMatch matches a path against a glob pattern.
+// * matches within a single path segment, ** matches across segments.
+// A trailing * matches any suffix (e.g., "internal/core/loop*" matches "internal/core/loop.go").
+func globMatch(pattern, name string) bool {
+	// Handle ** by splitting pattern into segments.
+	if strings.Contains(pattern, "**") {
+		// "internal/**" matches any file under internal/
+		prefix := strings.SplitN(pattern, "**", 2)[0]
+		if strings.HasPrefix(name, prefix) {
+			return true
+		}
+		return false
+	}
+	// Try filepath.Match first (works for same-depth patterns like "*.go").
+	if matched, _ := filepath.Match(pattern, name); matched {
+		return true
+	}
+	if matched, _ := filepath.Match(pattern, filepath.Base(name)); matched {
+		return true
+	}
+	// Prefix glob: "internal/core/loop*" → prefix "internal/core/loop", match anything after.
+	if strings.HasSuffix(pattern, "*") {
+		prefix := pattern[:len(pattern)-1]
+		if strings.HasPrefix(name, prefix) {
+			// Only match if the remainder has no extra path separators
+			// (unless the pattern already contains path separators).
+			remainder := name[len(prefix):]
+			if !strings.Contains(remainder, "/") {
 				return true
 			}
 		}
