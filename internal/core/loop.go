@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"sync"
 	"time"
 
 	t "torus_go_agent/internal/types"
@@ -303,45 +304,10 @@ func (a *Agent) runLoop(ctx context.Context, userMessage string, ch chan<- Agent
 		}
 
 		toolCalls := ExtractToolCalls(resp)
-		for _, tc := range toolCalls {
-			// Aggressive steering: check before each tool, skip remaining if user steered
-			if a.steeringMode == "aggressive" && a.drainSteering() > 0 {
-				break
-			}
-			toolData := &HookData{AgentID: "main", ToolName: tc.Name, ToolArgs: tc.Input, Meta: map[string]any{}}
-			a.hooks.Fire(ctx, HookBeforeToolCall, toolData)
-			tc.Name = toolData.ToolName
-			tc.Input = toolData.ToolArgs
-			emit(AgentEvent{Type: EventAgentToolStart, ToolName: tc.Name, ToolArgs: tc.Input})
-
-			var result *t.ToolResult
-			if toolData.Block {
-				result = &t.ToolResult{ToolUseID: tc.ID, Content: fmt.Sprintf("[BLOCKED] %s", toolData.BlockReason), IsError: true}
-			} else {
-				tool := a.findTool(tc.Name)
-				if tool == nil {
-					result = &t.ToolResult{ToolUseID: tc.ID, Content: fmt.Sprintf("Tool '%s' not found", tc.Name), IsError: true}
-				} else {
-					r, execErr := tool.Execute(tc.Input)
-					if execErr != nil {
-						result = &t.ToolResult{ToolUseID: tc.ID, Content: fmt.Sprintf("Tool error: %s", execErr.Error()), IsError: true}
-					} else {
-						result = r
-						result.ToolUseID = tc.ID
-					}
-				}
-			}
-
-			afterTool := &HookData{AgentID: "main", ToolName: tc.Name, ToolArgs: tc.Input, ToolResult: result}
-			a.hooks.Fire(ctx, HookAfterToolCall, afterTool)
-			if afterTool.ToolResult != nil {
-				result = afterTool.ToolResult
-			}
-			emit(AgentEvent{Type: EventAgentToolEnd, ToolName: tc.Name, ToolArgs: tc.Input, ToolResult: result})
-
-			toolHead, _ := a.dag.GetHead()
-			toolContent := []t.ContentBlock{{Type: "tool_result", ToolUseID: result.ToolUseID, Content: result.Content, IsError: result.IsError}}
-			a.dag.AddNode(toolHead, t.RoleTool, toolContent, "", "", 0)
+		if a.config.ParallelTools && len(toolCalls) > 1 {
+			a.executeToolsParallel(ctx, toolCalls, emit)
+		} else {
+			a.executeToolsSequential(ctx, toolCalls, emit)
 		}
 
 		steerData := &HookData{AgentID: "main", Response: resp, Messages: nil}
@@ -421,5 +387,150 @@ func (a *Agent) drainSteering() int {
 		default:
 			return n
 		}
+	}
+}
+
+// parallelSafeTools lists tools whose Execute is side-effect-isolated and safe to run concurrently.
+var parallelSafeTools = map[string]bool{
+	"read": true, "glob": true, "grep": true, "bash": true,
+}
+
+// isParallelSafe returns true if the named tool can be executed concurrently.
+func isParallelSafe(name string) bool { return parallelSafeTools[name] }
+
+// maxParallelTools caps the number of concurrent tool executions (prevents resource exhaustion from e.g. many bash calls).
+const maxParallelTools = 4
+
+// preparedCall holds a tool call after before-hooks have been applied.
+type preparedCall struct {
+	tc      t.ContentBlock
+	tool    *t.Tool
+	blocked bool
+	reason  string
+}
+
+// executeToolsSequential runs tool calls one at a time (original behavior).
+func (a *Agent) executeToolsSequential(ctx context.Context, toolCalls []t.ContentBlock, emit func(AgentEvent)) {
+	for _, tc := range toolCalls {
+		if a.steeringMode == "aggressive" && a.drainSteering() > 0 {
+			break
+		}
+		toolData := &HookData{AgentID: "main", ToolName: tc.Name, ToolArgs: tc.Input, Meta: map[string]any{}}
+		a.hooks.Fire(ctx, HookBeforeToolCall, toolData)
+		tc.Name = toolData.ToolName
+		tc.Input = toolData.ToolArgs
+		emit(AgentEvent{Type: EventAgentToolStart, ToolName: tc.Name, ToolArgs: tc.Input})
+
+		var result *t.ToolResult
+		if toolData.Block {
+			result = &t.ToolResult{ToolUseID: tc.ID, Content: fmt.Sprintf("[BLOCKED] %s", toolData.BlockReason), IsError: true}
+		} else {
+			tool := a.findTool(tc.Name)
+			if tool == nil {
+				result = &t.ToolResult{ToolUseID: tc.ID, Content: fmt.Sprintf("Tool '%s' not found", tc.Name), IsError: true}
+			} else {
+				r, execErr := tool.Execute(tc.Input)
+				if execErr != nil {
+					result = &t.ToolResult{ToolUseID: tc.ID, Content: fmt.Sprintf("Tool error: %s", execErr.Error()), IsError: true}
+				} else {
+					result = r
+					result.ToolUseID = tc.ID
+				}
+			}
+		}
+
+		afterTool := &HookData{AgentID: "main", ToolName: tc.Name, ToolArgs: tc.Input, ToolResult: result}
+		a.hooks.Fire(ctx, HookAfterToolCall, afterTool)
+		if afterTool.ToolResult != nil {
+			result = afterTool.ToolResult
+		}
+		emit(AgentEvent{Type: EventAgentToolEnd, ToolName: tc.Name, ToolArgs: tc.Input, ToolResult: result})
+
+		toolHead, _ := a.dag.GetHead()
+		toolContent := []t.ContentBlock{{Type: "tool_result", ToolUseID: result.ToolUseID, Content: result.Content, IsError: result.IsError}}
+		a.dag.AddNode(toolHead, t.RoleTool, toolContent, "", "", 0)
+	}
+}
+
+// executeToolsParallel runs tool calls concurrently where safe.
+// Phase 1: before-hooks (sequential — hooks may mutate or block)
+// Phase 2: execute (parallel for safe tools, sequential for unsafe)
+// Phase 3: after-hooks + DAG writes (sequential — preserves ordering)
+func (a *Agent) executeToolsParallel(ctx context.Context, toolCalls []t.ContentBlock, emit func(AgentEvent)) {
+	// Check aggressive steering once before the batch
+	if a.steeringMode == "aggressive" && a.drainSteering() > 0 {
+		return
+	}
+
+	// Phase 1: before-hooks, sequential
+	prepared := make([]preparedCall, len(toolCalls))
+	for i, tc := range toolCalls {
+		toolData := &HookData{AgentID: "main", ToolName: tc.Name, ToolArgs: tc.Input, Meta: map[string]any{}}
+		a.hooks.Fire(ctx, HookBeforeToolCall, toolData)
+		tc.Name = toolData.ToolName
+		tc.Input = toolData.ToolArgs
+		emit(AgentEvent{Type: EventAgentToolStart, ToolName: tc.Name, ToolArgs: tc.Input})
+
+		p := preparedCall{tc: tc, blocked: toolData.Block, reason: toolData.BlockReason}
+		if !p.blocked {
+			p.tool = a.findTool(tc.Name)
+		}
+		prepared[i] = p
+	}
+
+	// Phase 2: execute
+	results := make([]*t.ToolResult, len(prepared))
+	var wg sync.WaitGroup
+	sem := make(chan struct{}, maxParallelTools)
+
+	for i, pc := range prepared {
+		if pc.blocked {
+			results[i] = &t.ToolResult{ToolUseID: pc.tc.ID, Content: fmt.Sprintf("[BLOCKED] %s", pc.reason), IsError: true}
+			continue
+		}
+		if pc.tool == nil {
+			results[i] = &t.ToolResult{ToolUseID: pc.tc.ID, Content: fmt.Sprintf("Tool '%s' not found", pc.tc.Name), IsError: true}
+			continue
+		}
+
+		if isParallelSafe(pc.tc.Name) {
+			wg.Add(1)
+			go func(idx int, p preparedCall) {
+				defer wg.Done()
+				sem <- struct{}{}
+				defer func() { <-sem }()
+				r, err := p.tool.Execute(p.tc.Input)
+				if err != nil {
+					results[idx] = &t.ToolResult{ToolUseID: p.tc.ID, Content: fmt.Sprintf("Tool error: %s", err), IsError: true}
+				} else {
+					r.ToolUseID = p.tc.ID
+					results[idx] = r
+				}
+			}(i, pc)
+		} else {
+			// Unsafe tools (write, edit) run inline to avoid file conflicts
+			r, err := pc.tool.Execute(pc.tc.Input)
+			if err != nil {
+				results[i] = &t.ToolResult{ToolUseID: pc.tc.ID, Content: fmt.Sprintf("Tool error: %s", err), IsError: true}
+			} else {
+				r.ToolUseID = pc.tc.ID
+				results[i] = r
+			}
+		}
+	}
+	wg.Wait()
+
+	// Phase 3: after-hooks + DAG writes, sequential
+	for i, pc := range prepared {
+		afterTool := &HookData{AgentID: "main", ToolName: pc.tc.Name, ToolArgs: pc.tc.Input, ToolResult: results[i]}
+		a.hooks.Fire(ctx, HookAfterToolCall, afterTool)
+		if afterTool.ToolResult != nil {
+			results[i] = afterTool.ToolResult
+		}
+		emit(AgentEvent{Type: EventAgentToolEnd, ToolName: pc.tc.Name, ToolArgs: pc.tc.Input, ToolResult: results[i]})
+
+		toolHead, _ := a.dag.GetHead()
+		toolContent := []t.ContentBlock{{Type: "tool_result", ToolUseID: results[i].ToolUseID, Content: results[i].Content, IsError: results[i].IsError}}
+		a.dag.AddNode(toolHead, t.RoleTool, toolContent, "", "", 0)
 	}
 }

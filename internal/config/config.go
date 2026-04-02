@@ -64,6 +64,7 @@ type AgentConfig struct {
 	SmartRoutingModel string `json:"smartRoutingModel"`
 	SteeringMode      string `json:"steeringMode,omitempty"` // "mild" (default) or "aggressive"
 	PersistThinking   bool   `json:"persistThinking"`        // store thinking blocks as DAG nodes
+	ParallelTools     bool   `json:"parallelTools"`          // execute safe tool calls concurrently
 	Thinking          string `json:"thinking,omitempty"`      // thinking level: "", "low", "mid", "high", "max" (Anthropic only)
 	ThinkingBudget    int    `json:"thinkingBudget,omitempty"` // explicit budget_tokens override (takes precedence over thinking level)
 	AzureResource    string `json:"azureResource,omitempty"`   // Azure OpenAI resource name

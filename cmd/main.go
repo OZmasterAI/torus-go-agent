@@ -331,6 +331,7 @@ func main() {
 		SmartRouting:      cfg.Agent.SmartRouting,
 		SmartRoutingModel: cfg.Agent.SmartRoutingModel,
 		PersistThinking:   cfg.Agent.PersistThinking,
+		ParallelTools:     cfg.Agent.ParallelTools,
 	}, router, hooks, dag)
 
 	// Wire smart routing if configured

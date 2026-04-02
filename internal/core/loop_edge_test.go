@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"path/filepath"
+	"sync"
 	"testing"
+	"time"
 
 	typ "torus_go_agent/internal/types"
 )
@@ -918,6 +920,222 @@ func TestLoopEdge_CompressionBeforeCompaction(t *testing.T) {
 				}
 			}
 			t.Error("pre_compact fired before before_context_build — compression must run first")
+		}
+	}
+}
+
+// TestLoopEdge_ParallelToolExecution verifies that when ParallelTools is enabled,
+// multiple safe tool calls execute concurrently. Each tool sleeps 100ms; sequential
+// would take >=300ms. Parallel should complete in ~100ms.
+func TestLoopEdge_ParallelToolExecution(t *testing.T) {
+	sleepDuration := 100 * time.Millisecond
+	makeSleepTool := func(name, result string) typ.Tool {
+		return typ.Tool{
+			Name:        name,
+			Description: name,
+			Execute: func(args map[string]interface{}) (*typ.ToolResult, error) {
+				time.Sleep(sleepDuration)
+				return &typ.ToolResult{Content: result}, nil
+			},
+		}
+	}
+
+	dag := helperNewTestDAG(t)
+	cfg := typ.AgentConfig{
+		Provider:      typ.ProviderConfig{Name: "mock", Model: "mock-model-1", MaxTokens: 512},
+		MaxTurns:      1,
+		ParallelTools: true,
+		Tools: []typ.Tool{
+			makeSleepTool("read", "file contents"),
+			makeSleepTool("glob", "*.go"),
+			makeSleepTool("grep", "match"),
+		},
+	}
+	hooks := NewHookRegistry()
+	agent := NewAgent(cfg, nil, hooks, dag)
+	agent.SetCompaction(CompactionConfig{Mode: CompactionOff})
+
+	mp := &multiToolProvider{
+		toolCalls: []struct {
+			id   string
+			name string
+			args map[string]interface{}
+		}{
+			{id: "id-1", name: "read", args: map[string]interface{}{"path": "/tmp/a"}},
+			{id: "id-2", name: "glob", args: map[string]interface{}{"pattern": "*.go"}},
+			{id: "id-3", name: "grep", args: map[string]interface{}{"pattern": "foo"}},
+		},
+	}
+	agent.provider = mp
+
+	start := time.Now()
+	evs := collectEvents(agent.RunStream(context.Background(), "test parallel"))
+	elapsed := time.Since(start)
+
+	// All 3 tools must have completed
+	toolEnds := findEvents(evs, EventAgentToolEnd)
+	if len(toolEnds) < 3 {
+		t.Fatalf("expected 3 ToolEnd events, got %d", len(toolEnds))
+	}
+
+	// Parallel: ~100ms + overhead. Sequential would be ~300ms. Use 250ms as threshold.
+	if elapsed > 250*time.Millisecond {
+		t.Errorf("parallel execution took %v, expected < 250ms (sequential would be ~300ms)", elapsed)
+	}
+}
+
+// TestLoopEdge_ParallelToolsDisabled_RunsSequentially verifies that with
+// ParallelTools=false (default), tools still run sequentially.
+func TestLoopEdge_ParallelToolsDisabled_RunsSequentially(t *testing.T) {
+	dag := helperNewTestDAG(t)
+	cfg := typ.AgentConfig{
+		Provider:      typ.ProviderConfig{Name: "mock", Model: "mock-model-1", MaxTokens: 512},
+		MaxTurns:      3,
+		ParallelTools: false,
+		Tools: []typ.Tool{
+			{Name: "tool_a", Description: "A", Execute: func(args map[string]interface{}) (*typ.ToolResult, error) {
+				return &typ.ToolResult{Content: "a"}, nil
+			}},
+			{Name: "tool_b", Description: "B", Execute: func(args map[string]interface{}) (*typ.ToolResult, error) {
+				return &typ.ToolResult{Content: "b"}, nil
+			}},
+		},
+	}
+	hooks := NewHookRegistry()
+	agent := NewAgent(cfg, nil, hooks, dag)
+	agent.SetCompaction(CompactionConfig{Mode: CompactionOff})
+
+	mp := &multiToolProvider{
+		toolCalls: []struct {
+			id   string
+			name string
+			args map[string]interface{}
+		}{
+			{id: "id-1", name: "tool_a", args: map[string]interface{}{}},
+			{id: "id-2", name: "tool_b", args: map[string]interface{}{}},
+		},
+	}
+	agent.provider = mp
+
+	evs := collectEvents(agent.RunStream(context.Background(), "test sequential"))
+	toolEnds := findEvents(evs, EventAgentToolEnd)
+	if len(toolEnds) < 2 {
+		t.Fatalf("expected 2 ToolEnd events, got %d", len(toolEnds))
+	}
+}
+
+// TestLoopEdge_ParallelToolExecution_UnsafeRunsInline verifies that unsafe tools
+// (write, edit) run sequentially even when ParallelTools is enabled.
+func TestLoopEdge_ParallelToolExecution_UnsafeRunsInline(t *testing.T) {
+	var mu sync.Mutex
+	var order []string
+
+	makeTrackingTool := func(name string) typ.Tool {
+		return typ.Tool{
+			Name:        name,
+			Description: name,
+			Execute: func(args map[string]interface{}) (*typ.ToolResult, error) {
+				mu.Lock()
+				order = append(order, name)
+				mu.Unlock()
+				return &typ.ToolResult{Content: name + " done"}, nil
+			},
+		}
+	}
+
+	dag := helperNewTestDAG(t)
+	cfg := typ.AgentConfig{
+		Provider:      typ.ProviderConfig{Name: "mock", Model: "mock-model-1", MaxTokens: 512},
+		MaxTurns:      1,
+		ParallelTools: true,
+		Tools: []typ.Tool{
+			makeTrackingTool("read"),
+			makeTrackingTool("write"),
+			makeTrackingTool("edit"),
+		},
+	}
+	hooks := NewHookRegistry()
+	agent := NewAgent(cfg, nil, hooks, dag)
+	agent.SetCompaction(CompactionConfig{Mode: CompactionOff})
+
+	mp := &multiToolProvider{
+		toolCalls: []struct {
+			id   string
+			name string
+			args map[string]interface{}
+		}{
+			{id: "id-1", name: "read", args: map[string]interface{}{}},
+			{id: "id-2", name: "write", args: map[string]interface{}{}},
+			{id: "id-3", name: "edit", args: map[string]interface{}{}},
+		},
+	}
+	agent.provider = mp
+
+	evs := collectEvents(agent.RunStream(context.Background(), "test mixed"))
+	toolEnds := findEvents(evs, EventAgentToolEnd)
+	if len(toolEnds) < 3 {
+		t.Fatalf("expected 3 ToolEnd events, got %d", len(toolEnds))
+	}
+
+	mu.Lock()
+	if len(order) != 3 {
+		t.Errorf("expected 3 tool executions, got %d", len(order))
+	}
+	mu.Unlock()
+}
+
+// TestLoopEdge_ParallelToolExecution_HookBlocksOne verifies that a before-hook
+// can block individual tools in parallel mode.
+func TestLoopEdge_ParallelToolExecution_HookBlocksOne(t *testing.T) {
+	dag := helperNewTestDAG(t)
+	cfg := typ.AgentConfig{
+		Provider:      typ.ProviderConfig{Name: "mock", Model: "mock-model-1", MaxTokens: 512},
+		MaxTurns:      3,
+		ParallelTools: true,
+		Tools: []typ.Tool{
+			{Name: "read", Description: "read", Execute: func(args map[string]interface{}) (*typ.ToolResult, error) {
+				return &typ.ToolResult{Content: "ok"}, nil
+			}},
+			{Name: "glob", Description: "glob", Execute: func(args map[string]interface{}) (*typ.ToolResult, error) {
+				return &typ.ToolResult{Content: "ok"}, nil
+			}},
+		},
+	}
+	hooks := NewHookRegistry()
+	hooks.Register(HookBeforeToolCall, "block_glob", func(_ context.Context, data *HookData) error {
+		if data.ToolName == "glob" {
+			data.Block = true
+			data.BlockReason = "glob blocked by policy"
+		}
+		return nil
+	})
+	agent := NewAgent(cfg, nil, hooks, dag)
+	agent.SetCompaction(CompactionConfig{Mode: CompactionOff})
+
+	mp := &multiToolProvider{
+		toolCalls: []struct {
+			id   string
+			name string
+			args map[string]interface{}
+		}{
+			{id: "id-1", name: "read", args: map[string]interface{}{}},
+			{id: "id-2", name: "glob", args: map[string]interface{}{}},
+		},
+	}
+	agent.provider = mp
+
+	evs := collectEvents(agent.RunStream(context.Background(), "test hook block"))
+	toolEnds := findEvents(evs, EventAgentToolEnd)
+	if len(toolEnds) < 2 {
+		t.Fatalf("expected 2 ToolEnd events, got %d", len(toolEnds))
+	}
+
+	for _, ev := range toolEnds {
+		if ev.ToolName == "glob" && !ev.ToolResult.IsError {
+			t.Error("glob should have been blocked")
+		}
+		if ev.ToolName == "read" && ev.ToolResult.IsError {
+			t.Error("read should not have been blocked")
 		}
 	}
 }

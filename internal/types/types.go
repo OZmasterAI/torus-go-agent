@@ -127,6 +127,7 @@ type AgentConfig struct {
 	SmartRouting      bool           `json:"smart_routing"`
 	SmartRoutingModel string         `json:"smart_routing_model,omitempty"`
 	PersistThinking   bool           `json:"persist_thinking"`
+	ParallelTools     bool           `json:"parallel_tools"`
 }
 
 // Provider is the interface all LLM providers implement.
