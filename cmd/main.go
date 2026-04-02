@@ -127,11 +127,16 @@ func main() {
 		cfg.Agent.ForceStream = setup.Config.ForceStream
 	}
 
-	soul := config.LoadTorus(cfgDir)
-	soul = strings.ReplaceAll(soul, "{{MODEL}}", cfg.Agent.Provider+"/"+cfg.Agent.Model)
-	if cwd, err := os.Getwd(); err == nil {
-		soul = strings.ReplaceAll(soul, "{{CWD}}", cwd)
+	// Build system prompt from multi-tier instruction files.
+	initCwd, _ := os.Getwd()
+	initFiles := core.LoadAndParseAll(initCwd, core.LoadReasonSessionStart)
+	soul := core.BuildPrompt(initFiles, nil)
+	if soul == "" {
+		// Fallback to legacy config/ location if no instruction files discovered.
+		soul = config.LoadTorus(cfgDir)
 	}
+	soul = strings.ReplaceAll(soul, "{{MODEL}}", cfg.Agent.Provider+"/"+cfg.Agent.Model)
+	soul = strings.ReplaceAll(soul, "{{CWD}}", initCwd)
 	schema := config.LoadSchema(cfgDir)
 	key := cfg.APIKey()
 	if key == "" && cfg.Agent.Provider == "anthropic" {
@@ -337,22 +342,19 @@ func main() {
 		ForceStream:       cfg.Agent.ForceStream,
 	}, router, hooks, dag)
 
-	// Hot-reload system prompt from multi-tier instruction files.
-	cwd, _ := os.Getwd()
-	instructionFiles := core.LoadAndParseAll(cwd, core.LoadReasonSessionStart)
+	// Hot-reload: watch all discovered instruction files.
 	var watchPaths []string
-	for _, f := range instructionFiles {
+	for _, f := range initFiles {
 		watchPaths = append(watchPaths, f.Path)
 	}
-	// Always watch the config-dir TORUS.md even if not yet created.
 	if torusPath := filepath.Join(cfgDir, "TORUS.md"); !contains(watchPaths, torusPath) {
 		watchPaths = append(watchPaths, torusPath)
 	}
 	reloader := core.NewPromptReloader(agent, watchPaths, 5*time.Second, func() string {
-		files := core.LoadAndParseAll(cwd, core.LoadReasonFileChange)
+		files := core.LoadAndParseAll(initCwd, core.LoadReasonFileChange)
 		s := core.BuildPrompt(files, nil)
 		s = strings.ReplaceAll(s, "{{MODEL}}", cfg.Agent.Provider+"/"+cfg.Agent.Model)
-		s = strings.ReplaceAll(s, "{{CWD}}", cwd)
+		s = strings.ReplaceAll(s, "{{CWD}}", initCwd)
 		return s
 	})
 	reloader.Start()

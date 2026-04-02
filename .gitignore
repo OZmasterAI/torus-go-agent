@@ -11,7 +11,8 @@ crash.log
 *.test
 .claude-state.json
 tui/node_modules/
-.torus/
+.torus/*
+!.torus/rules/
 trigger_compact.py
 .agent/
 .agents/
