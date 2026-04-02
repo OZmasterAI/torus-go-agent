@@ -15,6 +15,10 @@
     "contextWindow": 196608,
     "maxTokens": 196608
   },
+  "nousresearch/hermes-3-llama-3.1-405b:free": {
+    "contextWindow": 131072,
+    "maxTokens": 8192
+  },
   "nvidia/free": {
     "contextWindow": 131072,
     "maxTokens": 8192
