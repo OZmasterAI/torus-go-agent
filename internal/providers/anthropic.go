@@ -245,10 +245,16 @@ func buildAnthropicTools(tools []t.Tool) []anthropicTool {
 	return apiTools
 }
 
-// buildAnthropicSystem builds the system prompt with OAuth identity prefix and cache control.
-func (p *AnthropicProvider) buildAnthropicSystem(systemPrompt string) any {
+// buildAnthropicSystem builds the system prompt with OAuth attribution header, identity prefix, and cache control.
+func (p *AnthropicProvider) buildAnthropicSystem(systemPrompt string, messages []t.Message) any {
 	var systemBlocks []systemBlock
 	if IsOAuthToken(p.APIKey) {
+		// Attribution header at index 0, no cache_control (matches official client).
+		fp := computeFingerprint(messages, cchVersion)
+		systemBlocks = append(systemBlocks, systemBlock{
+			Type: "text",
+			Text: buildAttributionHeader(fp),
+		})
 		systemBlocks = append(systemBlocks, systemBlock{
 			Type:         "text",
 			Text:         "You are Claude Code, Anthropic's official CLI for Claude.",
@@ -299,7 +305,7 @@ func (p *AnthropicProvider) Complete(ctx context.Context, systemPrompt string, m
 	req := anthropicRequest{
 		Model:     p.Model,
 		MaxTokens: maxTokens,
-		System:    p.buildAnthropicSystem(systemPrompt),
+		System:    p.buildAnthropicSystem(systemPrompt, messages),
 		Messages:  apiMsgs,
 		Tools:     buildAnthropicTools(tools),
 	}
@@ -310,6 +316,9 @@ func (p *AnthropicProvider) Complete(ctx context.Context, systemPrompt string, m
 	body, err := json.Marshal(req)
 	if err != nil {
 		return nil, fmt.Errorf("marshal request: %w", err)
+	}
+	if IsOAuthToken(p.APIKey) {
+		body = applyCCH(body)
 	}
 
 	var respBody []byte
@@ -465,7 +474,7 @@ func (p *AnthropicProvider) StreamComplete(ctx context.Context, systemPrompt str
 	req := anthropicRequest{
 		Model:     p.Model,
 		MaxTokens: maxTokens,
-		System:    p.buildAnthropicSystem(systemPrompt),
+		System:    p.buildAnthropicSystem(systemPrompt, messages),
 		Messages:  apiMsgs,
 		Tools:     buildAnthropicTools(tools),
 		Stream:    true,
@@ -477,6 +486,9 @@ func (p *AnthropicProvider) StreamComplete(ctx context.Context, systemPrompt str
 	body, err := json.Marshal(req)
 	if err != nil {
 		return nil, fmt.Errorf("marshal request: %w", err)
+	}
+	if IsOAuthToken(p.APIKey) {
+		body = applyCCH(body)
 	}
 
 	var resp *http.Response
