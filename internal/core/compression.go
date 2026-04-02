@@ -522,6 +522,100 @@ func UnifiedCompress(messages []t.Message, cfg UnifiedCompressConfig) []t.Messag
 	return result
 }
 
+// ── MicroCompact ────────────────────────────────────────────────────────────
+
+// microCompactThreshold is the minimum tool result size (chars) worth truncating.
+const microCompactThreshold = 500
+
+// MicroCompact truncates stale tool results outside the keepLast window to a
+// brief summary line. Runs every turn before heavier compression — zero LLM
+// cost, just string ops. Messages inside the keepLast window and the system
+// prompt (index 0) are never touched.
+func MicroCompact(messages []t.Message, keepLast int) []t.Message {
+	if keepLast <= 0 {
+		keepLast = 10
+	}
+	n := len(messages)
+	if n <= keepLast+1 {
+		return messages
+	}
+
+	// Build ToolUseID → tool name map from all messages
+	toolNames := make(map[string]string)
+	for _, m := range messages {
+		for _, b := range m.Content {
+			if b.Type == "tool_use" && b.ID != "" && b.Name != "" {
+				toolNames[b.ID] = b.Name
+			}
+		}
+	}
+
+	boundary := n - keepLast
+	result := make([]t.Message, n)
+	result[0] = messages[0] // system prompt untouched
+	copy(result[boundary:], messages[boundary:])
+
+	for i := 1; i < boundary; i++ {
+		msg := messages[i]
+		if !hasToolResult(msg) {
+			result[i] = msg
+			continue
+		}
+		var blocks []t.ContentBlock
+		for _, b := range msg.Content {
+			if b.Type == "tool_result" && len(b.Content) > microCompactThreshold {
+				blocks = append(blocks, microCompactBlock(b, toolNames))
+			} else {
+				blocks = append(blocks, b)
+			}
+		}
+		result[i] = t.Message{Role: msg.Role, Content: blocks}
+	}
+
+	return result
+}
+
+// microCompactBlock replaces a large tool_result with first 2 lines + a summary.
+func microCompactBlock(b t.ContentBlock, toolNames map[string]string) t.ContentBlock {
+	name := toolNames[b.ToolUseID]
+	if name == "" {
+		name = "tool"
+	}
+	lines := strings.Split(b.Content, "\n")
+	totalLines := len(lines)
+	totalChars := len(b.Content)
+
+	var preview []string
+	for _, line := range lines {
+		if strings.TrimSpace(line) != "" {
+			preview = append(preview, line)
+			if len(preview) >= 2 {
+				break
+			}
+		}
+	}
+
+	summary := strings.Join(preview, "\n")
+	summary += fmt.Sprintf("\n[%s: %d lines, %d chars — truncated by microcompact]", name, totalLines, totalChars)
+
+	return t.ContentBlock{
+		Type:      "tool_result",
+		ToolUseID: b.ToolUseID,
+		Content:   summary,
+		IsError:   b.IsError,
+	}
+}
+
+// hasToolResult returns true if the message contains any tool_result blocks.
+func hasToolResult(m t.Message) bool {
+	for _, b := range m.Content {
+		if b.Type == "tool_result" {
+			return true
+		}
+	}
+	return false
+}
+
 // continuousCompress is the V1 implementation — kept as internal fallback.
 // Production uses ContinuousCompressV2. Unexported to prevent external use.
 func continuousCompress(messages []t.Message, keepLast, minMessages int) []t.Message {

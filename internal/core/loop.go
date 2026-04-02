@@ -127,6 +127,7 @@ func (a *Agent) runLoop(ctx context.Context, userMessage string, ch chan<- Agent
 			return
 		}
 		messages = sanitizeMessages(messages)
+		messages = MicroCompact(messages, a.compaction.KeepLastN)
 
 		// Compression hooks fire first (squeeze before compaction)
 		ctxData := &HookData{AgentID: "main", Messages: messages}
