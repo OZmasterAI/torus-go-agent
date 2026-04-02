@@ -27,11 +27,28 @@ func RunSequential(
 		if result != "" {
 			cfg.Task = cfg.Task + "\n\n[Previous agent output]:\n" + result
 		}
+		if parentAgent != nil {
+			parentAgent.Hooks().Fire(ctx, core.HookOnTaskCreated, &core.HookData{
+				AgentID: cfg.AgentType,
+				Meta:    map[string]any{"agent_type": cfg.AgentType, "task": cfg.Task},
+			})
+		}
 		id, err := subMgr.SpawnWithProvider(parentAgent, provider, systemPrompt, cfg)
 		if err != nil {
 			return result, err
 		}
 		res := subMgr.Wait(id)
+		if parentAgent != nil {
+			parentAgent.Hooks().Fire(ctx, core.HookOnTaskCompleted, &core.HookData{
+				AgentID: cfg.AgentType,
+				Meta: map[string]any{
+					"agent_type": cfg.AgentType,
+					"text":       res.Text,
+					"error":      res.Error,
+					"duration":   res.Duration.String(),
+				},
+			})
+		}
 		subMgr.DeleteResult(id)
 		if res.Error != nil {
 			return result, res.Error
@@ -53,6 +70,12 @@ func RunParallel(
 ) ([]SubAgentResult, error) {
 	ids := make([]string, 0, len(agents))
 	for _, cfg := range agents {
+		if parentAgent != nil {
+			parentAgent.Hooks().Fire(ctx, core.HookOnTaskCreated, &core.HookData{
+				AgentID: cfg.AgentType,
+				Meta:    map[string]any{"agent_type": cfg.AgentType, "task": cfg.Task},
+			})
+		}
 		id, err := subMgr.SpawnWithProvider(parentAgent, provider, systemPrompt, cfg)
 		if err != nil {
 			return nil, err
@@ -67,6 +90,16 @@ func RunParallel(
 		go func(idx int, agentID string) {
 			defer wg.Done()
 			res := subMgr.Wait(agentID)
+			if parentAgent != nil {
+				parentAgent.Hooks().Fire(ctx, core.HookOnTaskCompleted, &core.HookData{
+					AgentID: agentID,
+					Meta: map[string]any{
+						"text":     res.Text,
+						"error":    res.Error,
+						"duration": res.Duration.String(),
+					},
+				})
+			}
 			results[idx] = *res
 		}(i, id)
 	}
@@ -97,11 +130,28 @@ func RunLoop(
 		if result != "" {
 			iterCfg.Task = cfg.Task + "\n\n[Previous iteration output]:\n" + result
 		}
+		if parentAgent != nil {
+			parentAgent.Hooks().Fire(ctx, core.HookOnTaskCreated, &core.HookData{
+				AgentID: iterCfg.AgentType,
+				Meta:    map[string]any{"agent_type": iterCfg.AgentType, "task": iterCfg.Task},
+			})
+		}
 		id, err := subMgr.SpawnWithProvider(parentAgent, provider, systemPrompt, iterCfg)
 		if err != nil {
 			return result, err
 		}
 		res := subMgr.Wait(id)
+		if parentAgent != nil {
+			parentAgent.Hooks().Fire(ctx, core.HookOnTaskCompleted, &core.HookData{
+				AgentID: iterCfg.AgentType,
+				Meta: map[string]any{
+					"agent_type": iterCfg.AgentType,
+					"text":       res.Text,
+					"error":      res.Error,
+					"duration":   res.Duration.String(),
+				},
+			})
+		}
 		subMgr.DeleteResult(id)
 		if res.Error != nil {
 			return result, res.Error

@@ -1477,3 +1477,209 @@ func TestLoopEdge_ForceStreamOverridesRun(t *testing.T) {
 		t.Errorf("Complete called %d times, want 0", tp.completeCalls)
 	}
 }
+
+// failingToolProvider returns a tool_use on the first call, then text on the second.
+type failingToolProvider struct {
+	calls int
+}
+
+func (f *failingToolProvider) Name() string    { return "failing" }
+func (f *failingToolProvider) ModelID() string { return "failing-model" }
+func (f *failingToolProvider) Complete(_ context.Context, _ string, _ []typ.Message, _ []typ.Tool, _ int) (*typ.AssistantMessage, error) {
+	f.calls++
+	if f.calls == 1 {
+		return &typ.AssistantMessage{
+			Message: typ.Message{
+				Role: typ.RoleAssistant,
+				Content: []typ.ContentBlock{
+					{Type: "tool_use", ID: "fail-id-1", Name: "failing_tool", Input: map[string]interface{}{"key": "val"}},
+				},
+			},
+			Model: "failing-model", StopReason: "tool_use",
+			Usage: typ.Usage{InputTokens: 10, OutputTokens: 5, TotalTokens: 15},
+		}, nil
+	}
+	return &typ.AssistantMessage{
+		Message: typ.Message{
+			Role:    typ.RoleAssistant,
+			Content: []typ.ContentBlock{{Type: "text", Text: "done after failure"}},
+		},
+		Model: "failing-model", StopReason: "end_turn",
+		Usage: typ.Usage{InputTokens: 10, OutputTokens: 5, TotalTokens: 15},
+	}, nil
+}
+func (f *failingToolProvider) StreamComplete(_ context.Context, _ string, _ []typ.Message, _ []typ.Tool, _ int) (<-chan typ.StreamEvent, error) {
+	f.calls++
+	ch := make(chan typ.StreamEvent, 2)
+	go func() {
+		defer close(ch)
+		if f.calls == 1 {
+			resp := &typ.AssistantMessage{
+				Message: typ.Message{
+					Role: typ.RoleAssistant,
+					Content: []typ.ContentBlock{
+						{Type: "tool_use", ID: "fail-id-1", Name: "failing_tool", Input: map[string]interface{}{"key": "val"}},
+					},
+				},
+				Model: "failing-model", StopReason: "tool_use",
+				Usage: typ.Usage{InputTokens: 10, OutputTokens: 5, TotalTokens: 15},
+			}
+			ch <- typ.StreamEvent{Type: typ.EventMessageStop, Response: resp}
+		} else {
+			resp := &typ.AssistantMessage{
+				Message: typ.Message{
+					Role:    typ.RoleAssistant,
+					Content: []typ.ContentBlock{{Type: "text", Text: "done after failure"}},
+				},
+				Model: "failing-model", StopReason: "end_turn",
+				Usage: typ.Usage{InputTokens: 10, OutputTokens: 5, TotalTokens: 15},
+			}
+			ch <- typ.StreamEvent{Type: typ.EventMessageStop, Response: resp}
+		}
+	}()
+	return ch, nil
+}
+
+func TestLoopEdge_PostToolUseFailure(t *testing.T) {
+	dag := helperNewTestDAG(t)
+	cfg := typ.AgentConfig{
+		Provider: typ.ProviderConfig{Name: "mock", Model: "mock-model-1", MaxTokens: 512},
+		MaxTurns: 5,
+		Tools: []typ.Tool{
+			{
+				Name: "failing_tool", Description: "always fails",
+				Execute: func(args map[string]interface{}) (*typ.ToolResult, error) {
+					return &typ.ToolResult{Content: "something went wrong", IsError: true}, nil
+				},
+			},
+		},
+	}
+	hooks := NewHookRegistry()
+	var failureHookFired bool
+	var capturedToolName string
+	hooks.Register(HookPostToolUseFailure, "test", func(_ context.Context, data *HookData) error {
+		failureHookFired = true
+		capturedToolName = data.ToolName
+		return nil
+	})
+	agent := NewAgent(cfg, &failingToolProvider{}, hooks, dag)
+	agent.SetCompaction(CompactionConfig{Mode: CompactionOff})
+	_, err := agent.Run(context.Background(), "test")
+	if err != nil {
+		t.Fatalf("Run failed: %v", err)
+	}
+	if !failureHookFired {
+		t.Error("HookPostToolUseFailure did not fire")
+	}
+	if capturedToolName != "failing_tool" {
+		t.Errorf("tool name = %q, want %q", capturedToolName, "failing_tool")
+	}
+}
+
+func TestLoopEdge_StopOverride(t *testing.T) {
+	dag := helperNewTestDAG(t)
+	cfg := typ.AgentConfig{
+		Provider: typ.ProviderConfig{Name: "mock", Model: "mock-model-1", MaxTokens: 512},
+		MaxTurns: 5,
+	}
+	hooks := NewHookRegistry()
+	stopCount := 0
+	hooks.Register(HookOnStop, "test", func(_ context.Context, data *HookData) error {
+		stopCount++
+		if stopCount == 1 {
+			data.Block = true
+			data.Messages = []typ.Message{{
+				Role:    typ.RoleUser,
+				Content: []typ.ContentBlock{{Type: "text", Text: "please continue"}},
+			}}
+		}
+		return nil
+	})
+	mp := &mockProvider{name: "mock", modelID: "mock-model-1", cannedText: "answer"}
+	agent := NewAgent(cfg, mp, hooks, dag)
+	agent.SetCompaction(CompactionConfig{Mode: CompactionOff})
+	evs := collectEvents(agent.RunStream(context.Background(), "test"))
+	if stopCount < 2 {
+		t.Errorf("HookOnStop fired %d times, want >= 2", stopCount)
+	}
+	turnStarts := findEvents(evs, EventAgentTurnStart)
+	if len(turnStarts) < 2 {
+		t.Errorf("expected >= 2 TurnStart events, got %d", len(turnStarts))
+	}
+}
+
+func TestLoopEdge_Notify(t *testing.T) {
+	mp := &mockProvider{name: "mock", modelID: "mock-model-1", cannedText: "r"}
+	agent, _ := newTestAgent(t, mp)
+	var fired bool
+	var meta map[string]any
+	agent.Hooks().Register(HookOnNotification, "test", func(_ context.Context, data *HookData) error {
+		fired = true
+		meta = data.Meta
+		return nil
+	})
+	agent.Notify(context.Background(), "deploy done", map[string]any{"env": "staging"})
+	if !fired {
+		t.Fatal("HookOnNotification did not fire")
+	}
+	if meta["message"] != "deploy done" {
+		t.Errorf("meta[message] = %v, want %q", meta["message"], "deploy done")
+	}
+}
+
+func TestLoopEdge_SessionStartEnd(t *testing.T) {
+	mp := &mockProvider{name: "mock", modelID: "mock-model-1", cannedText: "session test"}
+	agent, _ := newTestAgent(t, mp)
+	var startFired, endFired bool
+	agent.Hooks().Register(HookOnSessionStart, "test", func(_ context.Context, _ *HookData) error {
+		startFired = true
+		return nil
+	})
+	agent.Hooks().Register(HookOnSessionEnd, "test", func(_ context.Context, _ *HookData) error {
+		endFired = true
+		return nil
+	})
+	_, err := agent.Run(context.Background(), "hello")
+	if err != nil {
+		t.Fatalf("Run failed: %v", err)
+	}
+	if !startFired {
+		t.Error("HookOnSessionStart did not fire")
+	}
+	if !endFired {
+		t.Error("HookOnSessionEnd did not fire")
+	}
+}
+
+func TestLoopEdge_SessionEndFiresOnError(t *testing.T) {
+	mp := &mockProvider{name: "mock", modelID: "mock-model-1", streamErr: errors.New("down"), completeErr: errors.New("down")}
+	agent, _ := newTestAgent(t, mp)
+	var endFired bool
+	agent.Hooks().Register(HookOnSessionEnd, "test", func(_ context.Context, _ *HookData) error {
+		endFired = true
+		return nil
+	})
+	_, _ = agent.Run(context.Background(), "will fail")
+	if !endFired {
+		t.Error("HookOnSessionEnd should fire on error via defer")
+	}
+}
+
+func TestLoopEdge_SetConfig(t *testing.T) {
+	mp := &mockProvider{name: "mock", modelID: "mock-model-1", cannedText: "r"}
+	agent, _ := newTestAgent(t, mp)
+	var fired bool
+	var key string
+	agent.Hooks().Register(HookOnConfigChange, "test", func(_ context.Context, data *HookData) error {
+		fired = true
+		key, _ = data.Meta["key"].(string)
+		return nil
+	})
+	agent.SetConfig(context.Background(), "max_turns", 10)
+	if !fired {
+		t.Error("HookOnConfigChange did not fire")
+	}
+	if key != "max_turns" {
+		t.Errorf("key = %q, want %q", key, "max_turns")
+	}
+}

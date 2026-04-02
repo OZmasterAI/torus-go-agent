@@ -49,6 +49,23 @@ func NewAgent(config t.AgentConfig, provider t.Provider, hooks *HookRegistry, da
 func (a *Agent) SetCompaction(cfg CompactionConfig) { a.compaction = cfg }
 func (a *Agent) GetCompaction() CompactionConfig     { return a.compaction }
 
+// Notify fires the on_notification hook with the given message and metadata.
+func (a *Agent) Notify(ctx context.Context, message string, meta map[string]any) {
+	if meta == nil {
+		meta = map[string]any{}
+	}
+	meta["message"] = message
+	a.hooks.Fire(ctx, HookOnNotification, &HookData{AgentID: "main", Meta: meta})
+}
+
+// SetConfig fires the on_config_change hook for runtime config mutations.
+func (a *Agent) SetConfig(ctx context.Context, key string, value any) {
+	a.hooks.Fire(ctx, HookOnConfigChange, &HookData{
+		AgentID: "main",
+		Meta:    map[string]any{"key": key, "value": value},
+	})
+}
+
 // Run processes a user message and returns the final text.
 // It uses Complete (non-streaming) by default, unless ForceStream is set.
 func (a *Agent) Run(ctx context.Context, userMessage string) (string, error) {
@@ -110,6 +127,8 @@ func (a *Agent) runLoop(ctx context.Context, userMessage string, ch chan<- Agent
 	}
 
 	a.hooks.Fire(ctx, HookOnAgentStart, &HookData{AgentID: "main"})
+	a.hooks.Fire(ctx, HookOnSessionStart, &HookData{AgentID: "main", Meta: map[string]any{"user_message": userMessage}})
+	defer a.hooks.Fire(ctx, HookOnSessionEnd, &HookData{AgentID: "main", Meta: map[string]any{"user_message": userMessage}})
 
 	head, _ := a.dag.GetHead()
 	userContent := []t.ContentBlock{{Type: "text", Text: userMessage}}
@@ -310,6 +329,21 @@ func (a *Agent) runLoop(ctx context.Context, userMessage string, ch chan<- Agent
 
 		if !HasToolUse(resp) {
 			finalText = ExtractText(resp)
+			// HookOnStop: can override stop decision via Block.
+			stopData := &HookData{AgentID: "main", Response: resp, Meta: map[string]any{"final_text": finalText}}
+			a.hooks.Fire(ctx, HookOnStop, stopData)
+			if stopData.Block {
+				if len(stopData.Messages) > 0 {
+					for _, msg := range stopData.Messages {
+						sHead, _ := a.dag.GetHead()
+						a.dag.AddNode(sHead, msg.Role, msg.Content, "", "", 0)
+					}
+				}
+				finalText = ""
+				emit(AgentEvent{Type: EventAgentTurnEnd, Turn: turn, Usage: &resp.Usage})
+				a.hooks.Fire(ctx, HookOnTurnEnd, &HookData{AgentID: "main", Response: resp})
+				continue
+			}
 			exitData := &HookData{AgentID: "main", Response: resp, Messages: nil, Meta: map[string]any{"final_text": finalText}}
 			a.hooks.Fire(ctx, HookBeforeLoopExit, exitData)
 			if exitData.Block && len(exitData.Messages) > 0 {
@@ -476,6 +510,9 @@ func (a *Agent) executeToolsSequential(ctx context.Context, toolCalls []t.Conten
 		if afterTool.ToolResult != nil {
 			result = afterTool.ToolResult
 		}
+		if result.IsError {
+			a.hooks.Fire(ctx, HookPostToolUseFailure, &HookData{AgentID: "main", ToolName: tc.Name, ToolArgs: tc.Input, ToolResult: result})
+		}
 		emit(AgentEvent{Type: EventAgentToolEnd, ToolName: tc.Name, ToolArgs: tc.Input, ToolResult: result})
 
 		toolHead, _ := a.dag.GetHead()
@@ -558,6 +595,9 @@ func (a *Agent) executeToolsParallel(ctx context.Context, toolCalls []t.ContentB
 		a.hooks.Fire(ctx, HookAfterToolCall, afterTool)
 		if afterTool.ToolResult != nil {
 			results[i] = afterTool.ToolResult
+		}
+		if results[i].IsError {
+			a.hooks.Fire(ctx, HookPostToolUseFailure, &HookData{AgentID: "main", ToolName: pc.tc.Name, ToolArgs: pc.tc.Input, ToolResult: results[i]})
 		}
 		emit(AgentEvent{Type: EventAgentToolEnd, ToolName: pc.tc.Name, ToolArgs: pc.tc.Input, ToolResult: results[i]})
 
@@ -708,6 +748,9 @@ func (a *Agent) finishEagerTools(ctx context.Context, toolCalls []t.ContentBlock
 		a.hooks.Fire(ctx, HookAfterToolCall, afterTool)
 		if afterTool.ToolResult != nil {
 			er.result = afterTool.ToolResult
+		}
+		if er.result.IsError {
+			a.hooks.Fire(ctx, HookPostToolUseFailure, &HookData{AgentID: "main", ToolName: er.name, ToolArgs: er.args, ToolResult: er.result})
 		}
 		emit(AgentEvent{Type: EventAgentToolEnd, ToolName: er.name, ToolArgs: er.args, ToolResult: er.result})
 

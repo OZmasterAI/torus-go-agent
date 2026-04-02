@@ -119,6 +119,16 @@ func (m *SubAgentManager) SpawnWithProvider(
 		return id, nil
 	}
 
+	// Fire SubagentStart hook -- can inject additional context.
+	startData := &core.HookData{
+		AgentID: id,
+		Meta:    map[string]any{"agent_type": cfg.AgentType, "task": cfg.Task, "branch": subBranchID},
+	}
+	parentAgent.Hooks().Fire(context.Background(), core.HookOnSubagentStart, startData)
+	if startData.AdditionalContext != "" {
+		systemPrompt = systemPrompt + "\n\n" + startData.AdditionalContext
+	}
+
 	go func() {
 		start := time.Now()
 
@@ -126,6 +136,11 @@ func (m *SubAgentManager) SpawnWithProvider(
 		parentAgent.Hooks().Fire(context.Background(), core.HookAfterSpawn, &core.HookData{
 			AgentID: id,
 			Meta:    map[string]any{"agent_type": cfg.AgentType, "task": cfg.Task, "branch": subBranchID},
+		})
+
+		parentAgent.Hooks().Fire(context.Background(), core.HookOnTaskCreated, &core.HookData{
+			AgentID: id,
+			Meta:    map[string]any{"agent_type": cfg.AgentType, "task": cfg.Task},
 		})
 
 		// Count tool calls.
@@ -153,6 +168,16 @@ func (m *SubAgentManager) SpawnWithProvider(
 			Duration:  time.Since(start),
 			ToolCalls: toolCallCount,
 		}
+
+		parentAgent.Hooks().Fire(context.Background(), core.HookOnTaskCompleted, &core.HookData{
+			AgentID: id,
+			Meta: map[string]any{
+				"agent_type": cfg.AgentType,
+				"text":       text,
+				"error":      runErr,
+				"duration":   res.Duration.String(),
+			},
+		})
 
 		// Fire on_subagent_complete
 		parentAgent.Hooks().Fire(context.Background(), core.HookOnSubagentComplete, &core.HookData{

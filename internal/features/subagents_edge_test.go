@@ -643,3 +643,178 @@ func TestSubagentsEdge_RapidSpawnWait(t *testing.T) {
 func contains(s, substr string) bool {
 	return len(s) > 0 && len(substr) > 0 && (s == substr || len(s) > len(substr) && s[0:len(substr)] == substr || len(s) > len(substr))
 }
+
+func TestSubagentStart_ContextInjection(t *testing.T) {
+	m := NewSubAgentManager()
+
+	// Create a mock provider that captures the system prompt it receives.
+	var capturedSystemPrompt string
+	captureMock := &capturingMockProvider{
+		subagentMockProvider: subagentMockProvider{
+			name:       "capture",
+			modelID:    "capture-model",
+			cannedText: "injected context response",
+		},
+		onStreamComplete: func(sys string) {
+			capturedSystemPrompt = sys
+		},
+	}
+
+	parentMp := &subagentMockProvider{name: "parent", modelID: "parent-model", cannedText: "parent"}
+	parentAgent, _ := newSubagentTestAgent(t, parentMp)
+
+	// Register a SubagentStart hook that injects additional context.
+	parentAgent.Hooks().Register(core.HookOnSubagentStart, "inject_context", func(_ context.Context, data *core.HookData) error {
+		data.AdditionalContext = "INJECTED: You are a specialized builder agent."
+		return nil
+	})
+
+	basePrompt := "You are a helpful assistant."
+	id, err := m.SpawnWithProvider(parentAgent, captureMock, basePrompt, SubAgentConfig{
+		Task:      "build something",
+		AgentType: "builder",
+	})
+	if err != nil {
+		t.Fatalf("SpawnWithProvider failed: %v", err)
+	}
+
+	result := m.Wait(id)
+	if result == nil {
+		t.Fatal("Wait returned nil")
+	}
+
+	// The sub-agent should have received the base prompt + injected context.
+	wantSuffix := "INJECTED: You are a specialized builder agent."
+	if capturedSystemPrompt == "" {
+		t.Fatal("system prompt was not captured")
+	}
+	if len(capturedSystemPrompt) < len(wantSuffix) {
+		t.Fatalf("captured prompt too short: %q", capturedSystemPrompt)
+	}
+	if capturedSystemPrompt[len(capturedSystemPrompt)-len(wantSuffix):] != wantSuffix {
+		t.Errorf("system prompt should end with injected context.\ngot:  %q\nwant suffix: %q", capturedSystemPrompt, wantSuffix)
+	}
+	if capturedSystemPrompt[:len(basePrompt)] != basePrompt {
+		t.Errorf("system prompt should start with base prompt.\ngot prefix: %q\nwant: %q", capturedSystemPrompt[:len(basePrompt)], basePrompt)
+	}
+}
+
+func TestSubagentStart_NoContextInjection(t *testing.T) {
+	// Verify that when AdditionalContext is not set, the system prompt is unchanged.
+	m := NewSubAgentManager()
+
+	var capturedSystemPrompt string
+	captureMock := &capturingMockProvider{
+		subagentMockProvider: subagentMockProvider{
+			name:       "capture",
+			modelID:    "capture-model",
+			cannedText: "no injection",
+		},
+		onStreamComplete: func(sys string) {
+			capturedSystemPrompt = sys
+		},
+	}
+
+	parentMp := &subagentMockProvider{name: "parent", modelID: "parent-model", cannedText: "parent"}
+	parentAgent, _ := newSubagentTestAgent(t, parentMp)
+
+	// Register a SubagentStart hook that does NOT set AdditionalContext.
+	parentAgent.Hooks().Register(core.HookOnSubagentStart, "noop_hook", func(_ context.Context, data *core.HookData) error {
+		// Intentionally do nothing.
+		return nil
+	})
+
+	basePrompt := "You are a helpful assistant."
+	id, err := m.SpawnWithProvider(parentAgent, captureMock, basePrompt, SubAgentConfig{
+		Task:      "test task",
+		AgentType: "builder",
+	})
+	if err != nil {
+		t.Fatalf("SpawnWithProvider failed: %v", err)
+	}
+
+	result := m.Wait(id)
+	if result == nil {
+		t.Fatal("Wait returned nil")
+	}
+
+	// System prompt should be exactly the base prompt.
+	if capturedSystemPrompt != basePrompt {
+		t.Errorf("system prompt = %q, want %q (no injection expected)", capturedSystemPrompt, basePrompt)
+	}
+}
+
+func TestSubagent_TaskCreatedCompleted(t *testing.T) {
+	m := NewSubAgentManager()
+	mp := &subagentMockProvider{
+		name:       "test",
+		modelID:    "test-model",
+		cannedText: "task hook response",
+	}
+	parentAgent, _ := newSubagentTestAgent(t, mp)
+
+	var taskCreatedFired, taskCompletedFired bool
+	var createdAgentType, completedText string
+
+	parentAgent.Hooks().Register(core.HookOnTaskCreated, "test_task_created", func(_ context.Context, data *core.HookData) error {
+		taskCreatedFired = true
+		if at, ok := data.Meta["agent_type"].(string); ok {
+			createdAgentType = at
+		}
+		return nil
+	})
+	parentAgent.Hooks().Register(core.HookOnTaskCompleted, "test_task_completed", func(_ context.Context, data *core.HookData) error {
+		taskCompletedFired = true
+		if txt, ok := data.Meta["text"].(string); ok {
+			completedText = txt
+		}
+		return nil
+	})
+
+	id, err := m.SpawnWithProvider(parentAgent, mp, "system prompt", SubAgentConfig{
+		Task:      "test task",
+		AgentType: "builder",
+	})
+	if err != nil {
+		t.Fatalf("SpawnWithProvider failed: %v", err)
+	}
+
+	result := m.Wait(id)
+	if result == nil {
+		t.Fatal("Wait returned nil")
+	}
+
+	if !taskCreatedFired {
+		t.Error("HookOnTaskCreated did not fire")
+	}
+	if !taskCompletedFired {
+		t.Error("HookOnTaskCompleted did not fire")
+	}
+	if createdAgentType != "builder" {
+		t.Errorf("TaskCreated agent_type = %q, want %q", createdAgentType, "builder")
+	}
+	if completedText != "task hook response" {
+		t.Errorf("TaskCompleted text = %q, want %q", completedText, "task hook response")
+	}
+}
+
+// capturingMockProvider wraps subagentMockProvider and captures the system prompt
+// passed to StreamComplete.
+type capturingMockProvider struct {
+	subagentMockProvider
+	onStreamComplete func(systemPrompt string)
+}
+
+func (c *capturingMockProvider) Complete(ctx context.Context, sys string, msgs []typ.Message, tools []typ.Tool, maxTokens int) (*typ.AssistantMessage, error) {
+	if c.onStreamComplete != nil {
+		c.onStreamComplete(sys)
+	}
+	return c.subagentMockProvider.Complete(ctx, sys, msgs, tools, maxTokens)
+}
+
+func (c *capturingMockProvider) StreamComplete(ctx context.Context, sys string, msgs []typ.Message, tools []typ.Tool, maxTokens int) (<-chan typ.StreamEvent, error) {
+	if c.onStreamComplete != nil {
+		c.onStreamComplete(sys)
+	}
+	return c.subagentMockProvider.StreamComplete(ctx, sys, msgs, tools, maxTokens)
+}
