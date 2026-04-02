@@ -620,8 +620,14 @@ func (a *Agent) consumeStreamEager(ctx context.Context, streamCh <-chan t.Stream
 
 			if isParallelSafe(pt.name) {
 				go func(id string, tl *t.Tool, input map[string]any, er *eagerResult) {
-					sem <- struct{}{}
-					defer func() { <-sem }()
+					select {
+					case sem <- struct{}{}:
+						defer func() { <-sem }()
+					case <-ctx.Done():
+						er.result = &t.ToolResult{ToolUseID: id, Content: "cancelled", IsError: true}
+						close(er.done)
+						return
+					}
 					r, err := tl.Execute(input)
 					if err != nil {
 						er.result = &t.ToolResult{ToolUseID: id, Content: fmt.Sprintf("Tool error: %s", err), IsError: true}
