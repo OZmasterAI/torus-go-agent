@@ -2,6 +2,7 @@ package core
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"path/filepath"
 	"sync"
@@ -1136,6 +1137,210 @@ func TestLoopEdge_ParallelToolExecution_HookBlocksOne(t *testing.T) {
 		}
 		if ev.ToolName == "read" && ev.ToolResult.IsError {
 			t.Error("read should not have been blocked")
+		}
+	}
+}
+
+// streamingToolProvider emits per-block streaming events (ToolUseStart, InputDelta,
+// ContentBlockStop) so the eager path can dispatch tools before message_stop.
+type streamingToolProvider struct {
+	toolCalls []struct {
+		id   string
+		name string
+		args map[string]interface{}
+	}
+	callCount int // tracks how many StreamComplete calls (turn 0 = tools, turn 1+ = text)
+}
+
+func (s *streamingToolProvider) Name() string    { return "streaming-tool" }
+func (s *streamingToolProvider) ModelID() string { return "streaming-tool-model" }
+func (s *streamingToolProvider) Complete(_ context.Context, _ string, _ []typ.Message, _ []typ.Tool, _ int) (*typ.AssistantMessage, error) {
+	return nil, errors.New("complete not implemented")
+}
+func (s *streamingToolProvider) StreamComplete(_ context.Context, _ string, msgs []typ.Message, _ []typ.Tool, _ int) (<-chan typ.StreamEvent, error) {
+	s.callCount++
+	ch := make(chan typ.StreamEvent, 32)
+
+	// After tool results come back, return final text
+	if s.callCount > 1 {
+		go func() {
+			defer close(ch)
+			ch <- typ.StreamEvent{Type: typ.EventTextDelta, Text: "done"}
+			resp := &typ.AssistantMessage{
+				Message: typ.Message{
+					Role:    typ.RoleAssistant,
+					Content: []typ.ContentBlock{{Type: "text", Text: "done"}},
+				},
+				Model:      "streaming-tool-model",
+				StopReason: "end_turn",
+				Usage:      typ.Usage{InputTokens: 5, OutputTokens: 2, TotalTokens: 7},
+			}
+			ch <- typ.StreamEvent{Type: typ.EventMessageStop, Response: resp}
+		}()
+		return ch, nil
+	}
+
+	// First call: stream tool_use blocks individually
+	go func() {
+		defer close(ch)
+		content := make([]typ.ContentBlock, len(s.toolCalls))
+		for i, tc := range s.toolCalls {
+			content[i] = typ.ContentBlock{
+				Type:  "tool_use",
+				ID:    tc.id,
+				Name:  tc.name,
+				Input: tc.args,
+			}
+			// Emit per-block events
+			ch <- typ.StreamEvent{
+				Type:         typ.EventToolUseStart,
+				ContentIndex: i,
+				ID:           tc.id,
+				Name:         tc.name,
+			}
+			argsJSON, _ := json.Marshal(tc.args)
+			ch <- typ.StreamEvent{
+				Type:         typ.EventInputDelta,
+				ContentIndex: i,
+				InputDelta:   string(argsJSON),
+			}
+			ch <- typ.StreamEvent{
+				Type:         typ.EventContentBlockStop,
+				ContentIndex: i,
+			}
+		}
+		resp := &typ.AssistantMessage{
+			Message: typ.Message{
+				Role:    typ.RoleAssistant,
+				Content: content,
+			},
+			Model:      "streaming-tool-model",
+			StopReason: "tool_use",
+			Usage:      typ.Usage{InputTokens: 10, OutputTokens: 5, TotalTokens: 15},
+		}
+		ch <- typ.StreamEvent{Type: typ.EventMessageStop, Response: resp}
+	}()
+	return ch, nil
+}
+
+// TestLoopEdge_EagerStreamingToolExecution verifies that when ParallelTools is
+// enabled and the provider streams per-block events, tools are dispatched during
+// streaming (before message_stop) and complete faster than sequential execution.
+func TestLoopEdge_EagerStreamingToolExecution(t *testing.T) {
+	sleepDuration := 100 * time.Millisecond
+	makeSleepTool := func(name, result string) typ.Tool {
+		return typ.Tool{
+			Name:        name,
+			Description: name,
+			Execute: func(args map[string]interface{}) (*typ.ToolResult, error) {
+				time.Sleep(sleepDuration)
+				return &typ.ToolResult{Content: result}, nil
+			},
+		}
+	}
+
+	dag := helperNewTestDAG(t)
+	cfg := typ.AgentConfig{
+		Provider:      typ.ProviderConfig{Name: "mock", Model: "mock-model-1", MaxTokens: 512},
+		MaxTurns:      3,
+		ParallelTools: true,
+		Tools: []typ.Tool{
+			makeSleepTool("read", "file contents"),
+			makeSleepTool("glob", "*.go"),
+			makeSleepTool("grep", "match"),
+		},
+	}
+
+	mp := &streamingToolProvider{
+		toolCalls: []struct {
+			id   string
+			name string
+			args map[string]interface{}
+		}{
+			{id: "eager-1", name: "read", args: map[string]interface{}{"path": "/tmp/test"}},
+			{id: "eager-2", name: "glob", args: map[string]interface{}{"pattern": "*.go"}},
+			{id: "eager-3", name: "grep", args: map[string]interface{}{"pattern": "foo"}},
+		},
+	}
+
+	hooks := NewHookRegistry()
+	agent := NewAgent(cfg, mp, hooks, dag)
+	agent.SetCompaction(CompactionConfig{Mode: CompactionOff})
+
+	start := time.Now()
+	evs := collectEvents(agent.RunStream(context.Background(), "test eager streaming"))
+	elapsed := time.Since(start)
+
+	// Verify all 3 tool starts and ends fired
+	toolStarts := findEvents(evs, EventAgentToolStart)
+	toolEnds := findEvents(evs, EventAgentToolEnd)
+	if len(toolStarts) != 3 {
+		t.Fatalf("expected 3 ToolStart events, got %d", len(toolStarts))
+	}
+	if len(toolEnds) != 3 {
+		t.Fatalf("expected 3 ToolEnd events, got %d", len(toolEnds))
+	}
+
+	// Verify results are correct
+	for _, ev := range toolEnds {
+		if ev.ToolResult == nil {
+			t.Errorf("ToolEnd for %s has nil result", ev.ToolName)
+		} else if ev.ToolResult.IsError {
+			t.Errorf("ToolEnd for %s is error: %s", ev.ToolName, ev.ToolResult.Content)
+		}
+	}
+
+	// Parallel eager execution: 3 tools x 100ms each should complete in ~100ms, not ~300ms
+	if elapsed > 250*time.Millisecond {
+		t.Errorf("eager streaming execution took %v, expected < 250ms (sequential would be ~300ms)", elapsed)
+	}
+}
+
+// TestLoopEdge_EagerStreamingFallback verifies that when ParallelTools is enabled
+// but the provider doesn't emit per-block events, the code falls back to the
+// normal parallel execution path.
+func TestLoopEdge_EagerStreamingFallback(t *testing.T) {
+	dag := helperNewTestDAG(t)
+	cfg := typ.AgentConfig{
+		Provider:      typ.ProviderConfig{Name: "mock", Model: "mock-model-1", MaxTokens: 512},
+		MaxTurns:      1,
+		ParallelTools: true,
+		Tools: []typ.Tool{
+			{Name: "read", Description: "read", Execute: func(args map[string]interface{}) (*typ.ToolResult, error) {
+				return &typ.ToolResult{Content: "ok"}, nil
+			}},
+			{Name: "glob", Description: "glob", Execute: func(args map[string]interface{}) (*typ.ToolResult, error) {
+				return &typ.ToolResult{Content: "ok"}, nil
+			}},
+		},
+	}
+
+	// multiToolProvider does NOT emit per-block events — only message_stop
+	mp := &multiToolProvider{
+		toolCalls: []struct {
+			id   string
+			name string
+			args map[string]interface{}
+		}{
+			{id: "fb-1", name: "read", args: map[string]interface{}{"path": "/tmp"}},
+			{id: "fb-2", name: "glob", args: map[string]interface{}{"pattern": "*"}},
+		},
+	}
+
+	hooks := NewHookRegistry()
+	agent := NewAgent(cfg, mp, hooks, dag)
+	agent.SetCompaction(CompactionConfig{Mode: CompactionOff})
+
+	evs := collectEvents(agent.RunStream(context.Background(), "test fallback"))
+
+	// Should still execute both tools via the parallel path
+	toolEnds := findEvents(evs, EventAgentToolEnd)
+	if len(toolEnds) != 2 {
+		t.Fatalf("expected 2 ToolEnd events, got %d", len(toolEnds))
+	}
+	for _, ev := range toolEnds {
+		if ev.ToolResult == nil || ev.ToolResult.IsError {
+			t.Errorf("tool %s failed unexpectedly", ev.ToolName)
 		}
 	}
 }

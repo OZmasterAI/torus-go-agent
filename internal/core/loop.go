@@ -2,9 +2,11 @@ package core
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
+	"strings"
 	"sync"
 	"time"
 
@@ -213,6 +215,7 @@ func (a *Agent) runLoop(ctx context.Context, userMessage string, ch chan<- Agent
 
 		var resp *t.AssistantMessage
 		var llmErr error
+		var eagerResults map[string]*eagerResult
 		for attempt := 0; attempt <= 3; attempt++ {
 			if attempt > 0 {
 				delay := time.Duration(1<<uint(attempt)) * time.Second
@@ -240,7 +243,11 @@ func (a *Agent) runLoop(ctx context.Context, userMessage string, ch chan<- Agent
 				}
 				break
 			}
-			resp, llmErr = consumeStreamEmit(streamCh, emit)
+			if a.config.ParallelTools {
+				resp, eagerResults, llmErr = a.consumeStreamEager(ctx, streamCh, emit)
+			} else {
+				resp, llmErr = consumeStreamEmit(streamCh, emit)
+			}
 			if llmErr != nil {
 				var te *t.TransientError
 				if errors.As(llmErr, &te) {
@@ -305,7 +312,9 @@ func (a *Agent) runLoop(ctx context.Context, userMessage string, ch chan<- Agent
 		}
 
 		toolCalls := ExtractToolCalls(resp)
-		if a.config.ParallelTools && len(toolCalls) > 1 {
+		if len(eagerResults) > 0 {
+			a.finishEagerTools(ctx, toolCalls, eagerResults, emit)
+		} else if a.config.ParallelTools && len(toolCalls) > 1 {
 			a.executeToolsParallel(ctx, toolCalls, emit)
 		} else {
 			a.executeToolsSequential(ctx, toolCalls, emit)
@@ -532,6 +541,150 @@ func (a *Agent) executeToolsParallel(ctx context.Context, toolCalls []t.ContentB
 
 		toolHead, _ := a.dag.GetHead()
 		toolContent := []t.ContentBlock{{Type: "tool_result", ToolUseID: results[i].ToolUseID, Content: results[i].Content, IsError: results[i].IsError}}
+		a.dag.AddNode(toolHead, t.RoleTool, toolContent, "", "", 0)
+	}
+}
+
+// eagerResult holds a tool result dispatched during streaming.
+type eagerResult struct {
+	name   string
+	args   map[string]any
+	result *t.ToolResult
+	done   chan struct{} // closed when result is ready
+}
+
+// consumeStreamEager processes the stream and starts tool execution as content blocks complete.
+// Tool_use blocks are dispatched immediately on content_block_stop, overlapping with continued streaming.
+// Returns the AssistantMessage, a map of eager results keyed by tool_use ID, and any error.
+func (a *Agent) consumeStreamEager(ctx context.Context, streamCh <-chan t.StreamEvent, emit func(AgentEvent)) (*t.AssistantMessage, map[string]*eagerResult, error) {
+	var resp *t.AssistantMessage
+	type pendingTool struct {
+		id   string
+		name string
+		buf  strings.Builder
+	}
+	pending := make(map[int]*pendingTool) // content index -> in-flight tool block
+	results := make(map[string]*eagerResult)
+	sem := make(chan struct{}, maxParallelTools)
+
+	for ev := range streamCh {
+		switch ev.Type {
+		case t.EventTextDelta:
+			emit(AgentEvent{Type: EventAgentTextDelta, Text: ev.Text})
+		case t.EventThinkingDelta:
+			emit(AgentEvent{Type: EventAgentThinkingDelta, Text: ev.Text})
+
+		case t.EventToolUseStart:
+			pending[ev.ContentIndex] = &pendingTool{id: ev.ID, name: ev.Name}
+
+		case t.EventInputDelta:
+			if pt, ok := pending[ev.ContentIndex]; ok {
+				pt.buf.WriteString(ev.InputDelta)
+			}
+
+		case t.EventContentBlockStop:
+			pt, ok := pending[ev.ContentIndex]
+			if !ok {
+				continue // text or thinking block — nothing to dispatch
+			}
+			delete(pending, ev.ContentIndex)
+
+			var args map[string]any
+			if s := pt.buf.String(); s != "" {
+				_ = json.Unmarshal([]byte(s), &args)
+			}
+
+			// Before-hook (runs inline — hooks are fast, ≤5s timeout)
+			toolData := &HookData{AgentID: "main", ToolName: pt.name, ToolArgs: args, Meta: map[string]any{}}
+			a.hooks.Fire(ctx, HookBeforeToolCall, toolData)
+			pt.name = toolData.ToolName
+			args = toolData.ToolArgs
+
+			emit(AgentEvent{Type: EventAgentToolStart, ToolName: pt.name, ToolArgs: args})
+
+			er := &eagerResult{name: pt.name, args: args, done: make(chan struct{})}
+			results[pt.id] = er
+
+			if toolData.Block {
+				er.result = &t.ToolResult{ToolUseID: pt.id, Content: fmt.Sprintf("[BLOCKED] %s", toolData.BlockReason), IsError: true}
+				close(er.done)
+				continue
+			}
+
+			tool := a.findTool(pt.name)
+			if tool == nil {
+				er.result = &t.ToolResult{ToolUseID: pt.id, Content: fmt.Sprintf("Tool '%s' not found", pt.name), IsError: true}
+				close(er.done)
+				continue
+			}
+
+			if isParallelSafe(pt.name) {
+				go func(id string, tl *t.Tool, input map[string]any, er *eagerResult) {
+					sem <- struct{}{}
+					defer func() { <-sem }()
+					r, err := tl.Execute(input)
+					if err != nil {
+						er.result = &t.ToolResult{ToolUseID: id, Content: fmt.Sprintf("Tool error: %s", err), IsError: true}
+					} else {
+						r.ToolUseID = id
+						er.result = r
+					}
+					close(er.done)
+				}(pt.id, tool, args, er)
+			} else {
+				// Unsafe tools (write, edit) run inline to avoid file conflicts
+				r, err := tool.Execute(args)
+				if err != nil {
+					er.result = &t.ToolResult{ToolUseID: pt.id, Content: fmt.Sprintf("Tool error: %s", err), IsError: true}
+				} else {
+					r.ToolUseID = pt.id
+					er.result = r
+				}
+				close(er.done)
+			}
+
+		case t.EventError:
+			for _, er := range results {
+				<-er.done
+			}
+			return nil, nil, ev.Error
+
+		case t.EventMessageStop:
+			resp = ev.Response
+		}
+	}
+
+	// Wait for all in-flight tool executions
+	for _, er := range results {
+		<-er.done
+	}
+
+	if resp == nil {
+		return nil, nil, fmt.Errorf("stream ended without response")
+	}
+	return resp, results, nil
+}
+
+// finishEagerTools runs after-hooks and writes DAG nodes for tools that were dispatched during streaming.
+// Processes in the order from ExtractToolCalls to preserve DAG ordering.
+func (a *Agent) finishEagerTools(ctx context.Context, toolCalls []t.ContentBlock, eagerResults map[string]*eagerResult, emit func(AgentEvent)) {
+	for _, tc := range toolCalls {
+		er, ok := eagerResults[tc.ID]
+		if !ok {
+			// Tool wasn't dispatched eagerly (shouldn't happen) — execute normally
+			a.executeToolsSequential(ctx, []t.ContentBlock{tc}, emit)
+			continue
+		}
+
+		afterTool := &HookData{AgentID: "main", ToolName: er.name, ToolArgs: er.args, ToolResult: er.result}
+		a.hooks.Fire(ctx, HookAfterToolCall, afterTool)
+		if afterTool.ToolResult != nil {
+			er.result = afterTool.ToolResult
+		}
+		emit(AgentEvent{Type: EventAgentToolEnd, ToolName: er.name, ToolArgs: er.args, ToolResult: er.result})
+
+		toolHead, _ := a.dag.GetHead()
+		toolContent := []t.ContentBlock{{Type: "tool_result", ToolUseID: er.result.ToolUseID, Content: er.result.Content, IsError: er.result.IsError}}
 		a.dag.AddNode(toolHead, t.RoleTool, toolContent, "", "", 0)
 	}
 }
