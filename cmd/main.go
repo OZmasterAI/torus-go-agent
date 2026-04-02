@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/joho/godotenv"
 
@@ -335,6 +336,19 @@ func main() {
 		ParallelTools:     cfg.Agent.ParallelTools,
 		ForceStream:       cfg.Agent.ForceStream,
 	}, router, hooks, dag)
+
+	// Hot-reload system prompt when TORUS.md changes.
+	torusPath := filepath.Join(cfgDir, "TORUS.md")
+	reloader := core.NewPromptReloader(agent, []string{torusPath}, 5*time.Second, func() string {
+		s := config.LoadTorus(cfgDir)
+		s = strings.ReplaceAll(s, "{{MODEL}}", cfg.Agent.Provider+"/"+cfg.Agent.Model)
+		if cwd, err := os.Getwd(); err == nil {
+			s = strings.ReplaceAll(s, "{{CWD}}", cwd)
+		}
+		return s
+	})
+	reloader.Start()
+	defer reloader.Stop()
 
 	// Wire smart routing if configured
 	if cfg.Agent.SmartRouting && cfg.Agent.SmartRoutingModel != "" {
