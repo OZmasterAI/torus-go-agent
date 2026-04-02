@@ -351,6 +351,7 @@ type StartupConfigOverrides struct {
 	PersistThinking        bool
 	Thinking               string
 	ThinkingBudget         int
+	ForceStream            bool
 }
 
 func defaultStartupOverrides() *StartupConfigOverrides {
@@ -385,6 +386,7 @@ func overridesFromAgentConfig(a config.AgentConfig) *StartupConfigOverrides {
 		PersistThinking:        a.PersistThinking,
 		Thinking:               a.Thinking,
 		ThinkingBudget:         a.ThinkingBudget,
+		ForceStream:            a.ForceStream,
 	}
 }
 
@@ -417,6 +419,7 @@ var startupConfigFields = []startupConfigField{
 	{"ThinkingBudget", "int", nil},                                         // 17
 	{"MaxTokens", "int", nil},                                              // 18
 	{"ContextWindow", "int", nil},                                          // 19
+	{"ForceStream", "bool", nil},                                           // 20
 }
 
 // formatStartupProviderModel formats "provider:model" as "model (provider)" for display.
@@ -499,6 +502,11 @@ func (o *StartupConfigOverrides) getValue(idx int) string {
 			return "default"
 		}
 		return fmt.Sprintf("%d", o.ContextWindow)
+	case 20:
+		if o.ForceStream {
+			return "true"
+		}
+		return "false"
 	}
 	return ""
 }
@@ -546,6 +554,8 @@ func (o *StartupConfigOverrides) setValue(idx int, val string) {
 		o.MaxTokens = n
 	case 19:
 		o.ContextWindow = n
+	case 20:
+		o.ForceStream = val == "true"
 	}
 }
 
@@ -559,6 +569,8 @@ func (o *StartupConfigOverrides) toggleBool(idx int) {
 		o.SmartRouting = !o.SmartRouting
 	case 15:
 		o.PersistThinking = !o.PersistThinking
+	case 20:
+		o.ForceStream = !o.ForceStream
 	}
 }
 

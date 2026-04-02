@@ -123,6 +123,7 @@ func main() {
 		cfg.Agent.Thinking = setup.Config.Thinking
 		cfg.Agent.ThinkingBudget = setup.Config.ThinkingBudget
 		cfg.Agent.RewardScoring = setup.Config.RewardScoring
+		cfg.Agent.ForceStream = setup.Config.ForceStream
 	}
 
 	soul := config.LoadTorus(cfgDir)
@@ -332,6 +333,7 @@ func main() {
 		SmartRoutingModel: cfg.Agent.SmartRoutingModel,
 		PersistThinking:   cfg.Agent.PersistThinking,
 		ParallelTools:     cfg.Agent.ParallelTools,
+		ForceStream:       cfg.Agent.ForceStream,
 	}, router, hooks, dag)
 
 	// Wire smart routing if configured

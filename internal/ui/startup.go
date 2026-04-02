@@ -353,6 +353,7 @@ type AgentConfigOverrides struct {
 	Thinking               string
 	ThinkingBudget         int
 	RewardScoring          bool
+	ForceStream            bool
 }
 
 func defaultOverrides() *AgentConfigOverrides {
@@ -388,6 +389,7 @@ func overridesFromConfig(a config.AgentConfig) *AgentConfigOverrides {
 		Thinking:               a.Thinking,
 		ThinkingBudget:         a.ThinkingBudget,
 		RewardScoring:          a.RewardScoring,
+		ForceStream:            a.ForceStream,
 	}
 }
 
@@ -433,6 +435,7 @@ var configFields = []configField{
 	{"ThinkingBudget", "int", nil},         // 17
 	{"MaxTokens", "int", nil},              // 18
 	{"ContextWindow", "int", nil},          // 19
+	{"ForceStream", "bool", nil},           // 20
 }
 
 func (o *AgentConfigOverrides) getValue(idx int) string {
@@ -507,6 +510,11 @@ func (o *AgentConfigOverrides) getValue(idx int) string {
 			return "default"
 		}
 		return fmt.Sprintf("%d", o.ContextWindow)
+	case 20:
+		if o.ForceStream {
+			return "true"
+		}
+		return "false"
 	}
 	return ""
 }
@@ -557,6 +565,8 @@ func (o *AgentConfigOverrides) setValue(idx int, val string) {
 		o.MaxTokens = n
 	case 19:
 		o.ContextWindow = n
+	case 20:
+		o.ForceStream = val == "true"
 	}
 }
 
@@ -570,6 +580,8 @@ func (o *AgentConfigOverrides) toggleBool(idx int) {
 		o.SmartRouting = !o.SmartRouting
 	case 15:
 		o.PersistThinking = !o.PersistThinking
+	case 20:
+		o.ForceStream = !o.ForceStream
 	}
 }
 

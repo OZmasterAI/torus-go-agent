@@ -73,6 +73,7 @@ type AgentConfig struct {
 	VertexProject    string `json:"vertexProject,omitempty"`   // Google Cloud project ID
 	VertexRegion     string `json:"vertexRegion,omitempty"`    // Google Cloud region (e.g. "us-central1")
 	RewardScoring    bool   `json:"rewardScoring,omitempty"`   // enable async reward-model scoring for nvidia/free router
+	ForceStream      bool   `json:"forceStream,omitempty"`     // force streaming even for non-interactive (Run) calls
 }
 
 // DataConfig holds data directory settings.
