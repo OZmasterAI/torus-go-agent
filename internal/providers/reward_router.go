@@ -114,6 +114,9 @@ func (rr *RewardRouter) StreamComplete(ctx context.Context, systemPrompt string,
 // the per-model statistics. After every updateEvery scores, router weights
 // are recalculated so higher-scoring models receive more traffic.
 func (rr *RewardRouter) scoreAndUpdate(userPrompt, assistantText, modelKey string) {
+	if rr.rewardModel == nil {
+		return
+	}
 	// Build the scoring request -- just user + assistant messages
 	ctx, cancel := context.WithTimeout(rr.ctx, 10*time.Second)
 	defer cancel()

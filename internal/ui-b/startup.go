@@ -387,6 +387,7 @@ func overridesFromAgentConfig(a config.AgentConfig) *StartupConfigOverrides {
 		PersistThinking:        a.PersistThinking,
 		Thinking:               a.Thinking,
 		ThinkingBudget:         a.ThinkingBudget,
+		RewardScoring:          a.RewardScoring,
 		ForceStream:            a.ForceStream,
 	}
 }
@@ -421,6 +422,7 @@ var startupConfigFields = []startupConfigField{
 	{"MaxTokens", "int", nil},                                              // 18
 	{"ContextWindow", "int", nil},                                          // 19
 	{"ForceStream", "bool", nil},                                           // 20
+	{"RewardScoring", "bool", nil},                                         // 21
 }
 
 // formatStartupProviderModel formats "provider:model" as "model (provider)" for display.

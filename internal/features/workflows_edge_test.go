@@ -382,10 +382,14 @@ func TestWorkflowsEdge_RunLoopNilShouldStop(t *testing.T) {
 	// nil shouldStop means loop runs until maxIterations
 	result, err := RunLoop(ctx, nil, provider, "system prompt", cfg, mgr, nil, nil, 2)
 
-	// Should handle nil shouldStop gracefully
-	// Will error due to no parent agent, but should not panic
-	_ = result
-	_ = err
+	// Should handle nil shouldStop gracefully.
+	// Will error due to no parent agent, but should not panic.
+	if err == nil {
+		t.Fatal("expected error with nil parent agent")
+	}
+	if result != "" {
+		t.Errorf("expected empty result on failure, got: %q", result)
+	}
 }
 
 // TestWorkflowsEdge_RunSequentialNilProvider tests RunSequential with nil provider (should error in spawn)
@@ -462,10 +466,13 @@ func TestWorkflowsEdge_RunSequentialOutputChaining(t *testing.T) {
 
 	result, err := RunSequential(ctx, nil, provider, "system prompt", agents, mgr, nil)
 
-	// Since spawn will fail without parent agent, we expect error
-	// But if it succeeded, output would be chained
-	_ = result
-	_ = err
+	// Spawn fails without parent agent.
+	if err == nil {
+		t.Fatal("expected error with nil parent agent")
+	}
+	if result != "" {
+		t.Errorf("expected empty result on failure, got: %q", result)
+	}
 }
 
 // TestWorkflowsEdge_RunLoopOutputAccumulation tests that RunLoop accumulates outputs across iterations
@@ -484,9 +491,13 @@ func TestWorkflowsEdge_RunLoopOutputAccumulation(t *testing.T) {
 
 	result, err := RunLoop(ctx, nil, provider, "system prompt", cfg, mgr, nil, shouldStop, 10)
 
-	// Will error due to no parent agent, but structure should be correct
-	_ = result
-	_ = err
+	// Will error due to no parent agent.
+	if err == nil {
+		t.Fatal("expected error with nil parent agent")
+	}
+	if result != "" {
+		t.Errorf("expected empty result on failure, got: %q", result)
+	}
 }
 
 // --- Edge Case: Concurrent Workflow Execution ---
