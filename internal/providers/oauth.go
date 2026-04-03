@@ -201,7 +201,7 @@ func postTokenRequest(payload map[string]string) (*OAuthCredentials, error) {
 	return &OAuthCredentials{
 		Access:    tokenResp.AccessToken,
 		Refresh:   tokenResp.RefreshToken,
-		ExpiresAt: time.Now().UnixMilli() + tokenResp.ExpiresIn*1000 - tokenRefreshBuffer,
+		ExpiresAt: time.Now().UnixMilli() + tokenResp.ExpiresIn*1000,
 	}, nil
 }
 

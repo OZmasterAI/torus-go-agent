@@ -132,7 +132,10 @@ func (a *Agent) runLoop(ctx context.Context, userMessage string, ch chan<- Agent
 	a.hooks.Fire(ctx, HookOnSessionStart, &HookData{AgentID: "main", Meta: map[string]any{"user_message": userMessage}})
 	defer a.hooks.Fire(ctx, HookOnSessionEnd, &HookData{AgentID: "main", Meta: map[string]any{"user_message": userMessage}})
 
-	head, _ := a.dag.GetHead()
+	head, headErr := a.dag.GetHead()
+	if headErr != nil {
+		log.Printf("[dag] GetHead error: %v", headErr)
+	}
 	userContent := []t.ContentBlock{{Type: "text", Text: userMessage}}
 	userNodeID, err := a.dag.AddNode(head, t.RoleUser, userContent, "", "", 0)
 	if err != nil {
@@ -146,7 +149,10 @@ func (a *Agent) runLoop(ctx context.Context, userMessage string, ch chan<- Agent
 		emit(AgentEvent{Type: EventAgentTurnStart, Turn: turn})
 		a.hooks.Fire(ctx, HookOnTurnStart, &HookData{AgentID: "main", Meta: map[string]any{"turn": turn}})
 
-		currentHead, _ := a.dag.GetHead()
+		currentHead, chErr := a.dag.GetHead()
+		if chErr != nil {
+			log.Printf("[dag] GetHead error: %v", chErr)
+		}
 		messages, err := a.dag.PromptFrom(currentHead)
 		if err != nil {
 			emit(AgentEvent{Type: EventAgentError, Error: fmt.Errorf("build context: %w", err)})
@@ -185,7 +191,10 @@ func (a *Agent) runLoop(ctx context.Context, userMessage string, ch chan<- Agent
 					}
 				}
 			} else {
-				currentHead, _ = a.dag.GetHead()
+				currentHead, compHeadErr := a.dag.GetHead()
+				if compHeadErr != nil {
+					log.Printf("[dag] GetHead error after compaction: %v", compHeadErr)
+				}
 				messages, err = a.dag.PromptFrom(currentHead)
 				if err != nil {
 					emit(AgentEvent{Type: EventAgentError, Error: fmt.Errorf("reload after compaction: %w", err)})
@@ -324,9 +333,13 @@ func (a *Agent) runLoop(ctx context.Context, userMessage string, ch chan<- Agent
 			emit(AgentEvent{Type: EventAgentError, Error: fmt.Errorf("add assistant node: %w", err)})
 			return
 		}
-		a.dag.SetAlias(nodeID, a.dag.NextAutoAlias())
+		if aliasErr := a.dag.SetAlias(nodeID, a.dag.NextAutoAlias()); aliasErr != nil {
+			log.Printf("[dag] SetAlias error: %v", aliasErr)
+		}
 		if a.config.PersistThinking && len(thinkingBlocks) > 0 {
-			a.dag.AddNode(nodeID, "thinking", thinkingBlocks, "", "", 0)
+			if _, thinkErr := a.dag.AddNode(nodeID, "thinking", thinkingBlocks, "", "", 0); thinkErr != nil {
+				log.Printf("[dag] AddNode thinking error: %v", thinkErr)
+			}
 		}
 
 		if !HasToolUse(resp) {
@@ -337,8 +350,13 @@ func (a *Agent) runLoop(ctx context.Context, userMessage string, ch chan<- Agent
 			if stopData.Block {
 				if len(stopData.Messages) > 0 {
 					for _, msg := range stopData.Messages {
-						sHead, _ := a.dag.GetHead()
-						a.dag.AddNode(sHead, msg.Role, msg.Content, "", "", 0)
+						sHead, shErr := a.dag.GetHead()
+						if shErr != nil {
+							log.Printf("[dag] GetHead error: %v", shErr)
+						}
+						if _, snErr := a.dag.AddNode(sHead, msg.Role, msg.Content, "", "", 0); snErr != nil {
+							log.Printf("[dag] AddNode error: %v", snErr)
+						}
 					}
 				}
 				finalText = ""
@@ -350,8 +368,13 @@ func (a *Agent) runLoop(ctx context.Context, userMessage string, ch chan<- Agent
 			a.hooks.Fire(ctx, HookBeforeLoopExit, exitData)
 			if exitData.Block && len(exitData.Messages) > 0 {
 				for _, msg := range exitData.Messages {
-					fHead, _ := a.dag.GetHead()
-					a.dag.AddNode(fHead, msg.Role, msg.Content, "", "", 0)
+					fHead, fhErr := a.dag.GetHead()
+					if fhErr != nil {
+						log.Printf("[dag] GetHead error: %v", fhErr)
+					}
+					if _, fnErr := a.dag.AddNode(fHead, msg.Role, msg.Content, "", "", 0); fnErr != nil {
+						log.Printf("[dag] AddNode error: %v", fnErr)
+					}
 				}
 				finalText = ""
 				emit(AgentEvent{Type: EventAgentTurnEnd, Turn: turn, Usage: &resp.Usage})
@@ -382,8 +405,13 @@ func (a *Agent) runLoop(ctx context.Context, userMessage string, ch chan<- Agent
 		a.hooks.Fire(ctx, HookAfterToolResult, steerData)
 		if len(steerData.Messages) > 0 {
 			for _, msg := range steerData.Messages {
-				sHead, _ := a.dag.GetHead()
-				a.dag.AddNode(sHead, msg.Role, msg.Content, "", "", 0)
+				sHead, shErr := a.dag.GetHead()
+				if shErr != nil {
+					log.Printf("[dag] GetHead error: %v", shErr)
+				}
+				if _, snErr := a.dag.AddNode(sHead, msg.Role, msg.Content, "", "", 0); snErr != nil {
+					log.Printf("[dag] AddNode error: %v", snErr)
+				}
 			}
 		}
 		a.drainSteering()
@@ -505,8 +533,13 @@ func (a *Agent) drainSteering() int {
 	for {
 		select {
 		case msg := <-a.Steering:
-			head, _ := a.dag.GetHead()
-			a.dag.AddNode(head, msg.Role, msg.Content, "", "", 0)
+			head, headErr := a.dag.GetHead()
+			if headErr != nil {
+				log.Printf("[dag] GetHead error: %v", headErr)
+			}
+			if _, addErr := a.dag.AddNode(head, msg.Role, msg.Content, "", "", 0); addErr != nil {
+				log.Printf("[dag] AddNode error: %v", addErr)
+			}
 			n++
 		default:
 			return n
@@ -575,9 +608,14 @@ func (a *Agent) executeToolsSequential(ctx context.Context, toolCalls []t.Conten
 		}
 		emit(AgentEvent{Type: EventAgentToolEnd, ToolName: tc.Name, ToolArgs: tc.Input, ToolResult: result})
 
-		toolHead, _ := a.dag.GetHead()
+		toolHead, thErr := a.dag.GetHead()
+		if thErr != nil {
+			log.Printf("[dag] GetHead error: %v", thErr)
+		}
 		toolContent := []t.ContentBlock{{Type: "tool_result", ToolUseID: result.ToolUseID, Content: result.Content, IsError: result.IsError}}
-		a.dag.AddNode(toolHead, t.RoleTool, toolContent, "", "", 0)
+		if _, tnErr := a.dag.AddNode(toolHead, t.RoleTool, toolContent, "", "", 0); tnErr != nil {
+			log.Printf("[dag] AddNode error: %v", tnErr)
+		}
 	}
 }
 
@@ -662,9 +700,14 @@ func (a *Agent) executeToolsParallel(ctx context.Context, toolCalls []t.ContentB
 		}
 		emit(AgentEvent{Type: EventAgentToolEnd, ToolName: pc.tc.Name, ToolArgs: pc.tc.Input, ToolResult: results[i]})
 
-		toolHead, _ := a.dag.GetHead()
+		toolHead, thErr := a.dag.GetHead()
+		if thErr != nil {
+			log.Printf("[dag] GetHead error: %v", thErr)
+		}
 		toolContent := []t.ContentBlock{{Type: "tool_result", ToolUseID: results[i].ToolUseID, Content: results[i].Content, IsError: results[i].IsError}}
-		a.dag.AddNode(toolHead, t.RoleTool, toolContent, "", "", 0)
+		if _, tnErr := a.dag.AddNode(toolHead, t.RoleTool, toolContent, "", "", 0); tnErr != nil {
+			log.Printf("[dag] AddNode error: %v", tnErr)
+		}
 	}
 }
 
@@ -817,8 +860,13 @@ func (a *Agent) finishEagerTools(ctx context.Context, toolCalls []t.ContentBlock
 		}
 		emit(AgentEvent{Type: EventAgentToolEnd, ToolName: er.name, ToolArgs: er.args, ToolResult: er.result})
 
-		toolHead, _ := a.dag.GetHead()
+		toolHead, thErr := a.dag.GetHead()
+		if thErr != nil {
+			log.Printf("[dag] GetHead error: %v", thErr)
+		}
 		toolContent := []t.ContentBlock{{Type: "tool_result", ToolUseID: er.result.ToolUseID, Content: er.result.Content, IsError: er.result.IsError}}
-		a.dag.AddNode(toolHead, t.RoleTool, toolContent, "", "", 0)
+		if _, tnErr := a.dag.AddNode(toolHead, t.RoleTool, toolContent, "", "", 0); tnErr != nil {
+			log.Printf("[dag] AddNode error: %v", tnErr)
+		}
 	}
 }

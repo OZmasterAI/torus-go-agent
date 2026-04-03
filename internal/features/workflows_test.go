@@ -114,11 +114,11 @@ func TestRunLoop_ReturnsEmptyOnNoIterations(t *testing.T) {
 
 	result, err := RunLoop(ctx, nil, provider, "system", cfg, mgr, nil, shouldStop, 1)
 
-	// Loop should not spawn any agents since shouldStop is called after first iteration
-	// But actually, looking at RunLoop code, shouldStop is checked AFTER the first spawn completes
-	// So we expect the first iteration to run but then stop
+	// Loop attempts to spawn with nil parent agent, so we expect an error.
+	if err == nil {
+		t.Fatal("expected error with nil parent agent")
+	}
 	_ = result
-	_ = err
 }
 
 // TestRunSequential_CallsSpawnWithProvider verifies RunSequential calls SpawnWithProvider for each agent.
@@ -169,7 +169,10 @@ func TestRunParallel_ReturnsCorrectSliceLength(t *testing.T) {
 	if results != nil && len(results) != len(agents) {
 		t.Errorf("expected %d results, got %d", len(agents), len(results))
 	}
-	_ = err
+	// nil parent agent means spawn fails; we expect an error.
+	if err == nil {
+		t.Fatal("expected error with nil parent agent")
+	}
 }
 
 // TestRunLoop_HasCorrectSignature verifies RunLoop accepts all expected parameters.
@@ -179,20 +182,26 @@ func TestRunLoop_HasCorrectSignature(t *testing.T) {
 	provider := &mockProvider{name: "test", modelID: "test-model", cannedText: "response"}
 	cfg := SubAgentConfig{Task: "task", AgentType: "builder"}
 
-	// Test with nil shouldStop
+	// Test with nil shouldStop -- nil parent agent means error expected.
 	_, err := RunLoop(ctx, nil, provider, "system", cfg, mgr, nil, nil, 1)
-	_ = err
+	if err == nil {
+		t.Fatal("expected error with nil parent agent and nil shouldStop")
+	}
 
 	// Test with shouldStop callback
 	shouldStop := func(result string, iteration int) bool {
 		return false
 	}
 	_, err = RunLoop(ctx, nil, provider, "system", cfg, mgr, nil, shouldStop, 5)
-	_ = err
+	if err == nil {
+		t.Fatal("expected error with nil parent agent and shouldStop callback")
+	}
 
 	// Test with maxIterations=0 (unlimited)
 	_, err = RunLoop(ctx, nil, provider, "system", cfg, mgr, nil, shouldStop, 0)
-	_ = err
+	if err == nil {
+		t.Fatal("expected error with nil parent agent and maxIterations=0")
+	}
 }
 
 // BenchmarkRunSequential_EmptyAgents benchmarks RunSequential with no agents.
@@ -290,8 +299,10 @@ func TestRunSequential_TaskAppending(t *testing.T) {
 	// Function will attempt to execute; verify it processes all agents
 	_, err := RunSequential(ctx, nil, provider, "system", agents, mgr, nil)
 
-	// Error expected since we have no parent agent, but the structure should be correct
-	_ = err
+	// Error expected since we have no parent agent.
+	if err == nil {
+		t.Fatal("expected error with nil parent agent")
+	}
 }
 
 // TestRunLoop_IterationControl tests the iteration control logic

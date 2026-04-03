@@ -205,6 +205,8 @@ func toGeminiContents(messages []t.Message) []geminiContent {
 			for _, b := range m.Content {
 				if b.Text != "" {
 					gc.Parts = append(gc.Parts, geminiPart{Text: b.Text})
+				} else if b.Type != "" {
+					log.Printf("[gemini] warning: dropping unsupported content block type %q in user message", b.Type)
 				}
 			}
 		}

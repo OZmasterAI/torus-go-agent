@@ -58,10 +58,14 @@ func TestWorkflowsEdge_RunLoopEmptyTask(t *testing.T) {
 
 	result, err := RunLoop(ctx, nil, provider, "system prompt", cfg, mgr, nil, nil, 1)
 
-	// Empty task should be allowed; it will attempt to spawn with empty task
-	// The error here is expected since we don't have a real parent agent
-	_ = result
-	_ = err
+	// Empty task should be allowed; it will attempt to spawn with empty task.
+	// The error here is expected since we don't have a real parent agent.
+	if err == nil {
+		t.Fatal("expected error with nil parent agent")
+	}
+	if result != "" {
+		t.Errorf("expected empty result with nil parent agent, got: %q", result)
+	}
 }
 
 // --- Edge Case: Step Failures & Error Handling ---
@@ -86,12 +90,13 @@ func TestWorkflowsEdge_RunSequentialFirstStepFails(t *testing.T) {
 
 	result, err := RunSequential(ctx, nil, failingProvider, "system prompt", agents, mgr, nil)
 
-	// Since spawning fails, we should get an error
-	// The result should be empty or whatever partial result we have
-	if result != "" && err == nil {
-		t.Errorf("RunSequential with failing provider should either error or return empty, got result: %q, err: %v", result, err)
+	// Spawning with nil parent agent fails; we expect an error.
+	if err == nil {
+		t.Fatal("expected error with nil parent agent and failing provider")
 	}
-	_ = err
+	if result != "" {
+		t.Errorf("expected empty result on failure, got: %q", result)
+	}
 }
 
 // TestWorkflowsEdge_RunParallelPartialFailure tests RunParallel when some agents fail
@@ -170,12 +175,13 @@ func TestWorkflowsEdge_RunLoopMaxIterationsExceeded(t *testing.T) {
 	maxIter := 5
 	result, err := RunLoop(ctx, nil, provider, "system prompt", cfg, mgr, nil, shouldStop, maxIter)
 
-	// shouldStop should be called up to maxIter times
-	// Since we can't actually spawn (no parent agent), we expect an error
-	if err == nil && callCount == 0 {
-		t.Error("RunLoop should attempt iterations")
+	// No parent agent means spawn fails on first iteration.
+	if err == nil {
+		t.Fatal("expected error with nil parent agent")
 	}
-	_ = result
+	if result != "" {
+		t.Errorf("expected empty result on failure, got: %q", result)
+	}
 }
 
 // TestWorkflowsEdge_RunLoopZeroMaxIterations tests RunLoop with unlimited iterations (maxIterations=0)
@@ -195,12 +201,13 @@ func TestWorkflowsEdge_RunLoopZeroMaxIterations(t *testing.T) {
 	// maxIterations=0 means unlimited (until shouldStop returns true)
 	result, err := RunLoop(ctx, nil, provider, "system prompt", cfg, mgr, nil, shouldStop, 0)
 
-	// We expect iteration count to be capped by shouldStop
-	if iterCount > 3 {
-		t.Errorf("RunLoop should respect shouldStop callback, iterCount: %d", iterCount)
+	// No parent agent means spawn fails on first iteration.
+	if err == nil {
+		t.Fatal("expected error with nil parent agent")
 	}
-	_ = result
-	_ = err
+	if result != "" {
+		t.Errorf("expected empty result on failure, got: %q", result)
+	}
 }
 
 // --- Edge Case: Workflow Cancellation ---

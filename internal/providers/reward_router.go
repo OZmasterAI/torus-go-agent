@@ -21,6 +21,8 @@ type RewardRouter struct {
 	mu          sync.RWMutex
 	totalScored int
 	updateEvery int // recalculate weights every N scored responses (default 10)
+	ctx         context.Context
+	cancel      context.CancelFunc
 }
 
 type modelStats struct {
@@ -35,11 +37,14 @@ type modelStats struct {
 func NewRewardRouter(router *Router, apiKey string) *RewardRouter {
 	reward := NewNvidiaProvider(apiKey, "nvidia/llama-3.1-nemotron-70b-reward")
 	scores := make(map[string]*modelStats)
+	ctx, cancel := context.WithCancel(context.Background())
 	return &RewardRouter{
 		router:      router,
 		rewardModel: reward,
 		scores:      scores,
 		updateEvery: 10,
+		ctx:         ctx,
+		cancel:      cancel,
 	}
 }
 
@@ -48,6 +53,10 @@ func (rr *RewardRouter) Name() string { return rr.router.Name() }
 
 // ModelID returns the underlying router's model ID (satisfies types.Provider).
 func (rr *RewardRouter) ModelID() string { return rr.router.ModelID() }
+
+// Close cancels the internal context, which cascade-cancels all in-flight
+// scoring goroutines. Safe to call multiple times.
+func (rr *RewardRouter) Close() { rr.cancel() }
 
 // Complete delegates to the underlying router, then asynchronously scores the
 // response using the reward model. The response is returned immediately.
@@ -106,7 +115,7 @@ func (rr *RewardRouter) StreamComplete(ctx context.Context, systemPrompt string,
 // are recalculated so higher-scoring models receive more traffic.
 func (rr *RewardRouter) scoreAndUpdate(userPrompt, assistantText, modelKey string) {
 	// Build the scoring request -- just user + assistant messages
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(rr.ctx, 10*time.Second)
 	defer cancel()
 
 	msgs := []t.Message{
