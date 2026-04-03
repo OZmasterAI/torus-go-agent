@@ -351,6 +351,7 @@ type StartupConfigOverrides struct {
 	PersistThinking        bool
 	Thinking               string
 	ThinkingBudget         int
+	RewardScoring          bool
 	ForceStream            bool
 }
 

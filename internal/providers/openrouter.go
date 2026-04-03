@@ -541,7 +541,11 @@ func (p *OpenRouterProvider) parseOpenAISSE(ctx context.Context, resp *http.Resp
 		case <-ctx.Done():
 			if !aborted {
 				aborted = true
-				ch <- t.StreamEvent{Type: t.EventError, Error: fmt.Errorf("aborted: %w", ctx.Err())}
+				select {
+				case ch <- t.StreamEvent{Type: t.EventError, Error: fmt.Errorf("aborted: %w", ctx.Err())}:
+				default:
+					// channel full, receiver gone — drop the abort event
+				}
 			}
 			return false
 		}

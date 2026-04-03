@@ -401,13 +401,6 @@ func (m setupModel) savedOverrides() *AgentConfigOverrides {
 	return defaultOverrides()
 }
 
-// resolveModelSpecs is kept for future use but MaxTokens/ContextWindow
-// are now resolved in main.go after the startup screen, so the user can
-// override them. The settings screen shows "default" for these fields.
-func (m *setupModel) resolveModelSpecs() {
-	// No-op: MaxTokens/ContextWindow resolved in main.go
-}
-
 type configField struct {
 	name    string
 	kind    string   // "bool", "int", "string", "cycle"
@@ -436,6 +429,7 @@ var configFields = []configField{
 	{"MaxTokens", "int", nil},              // 18
 	{"ContextWindow", "int", nil},          // 19
 	{"ForceStream", "bool", nil},           // 20
+	{"RewardScoring", "bool", nil},         // 21
 }
 
 func (o *AgentConfigOverrides) getValue(idx int) string {
@@ -515,6 +509,11 @@ func (o *AgentConfigOverrides) getValue(idx int) string {
 			return "true"
 		}
 		return "false"
+	case 21:
+		if o.RewardScoring {
+			return "true"
+		}
+		return "false"
 	}
 	return ""
 }
@@ -567,6 +566,8 @@ func (o *AgentConfigOverrides) setValue(idx int, val string) {
 		o.ContextWindow = n
 	case 20:
 		o.ForceStream = val == "true"
+	case 21:
+		o.RewardScoring = val == "true"
 	}
 }
 
@@ -582,6 +583,8 @@ func (o *AgentConfigOverrides) toggleBool(idx int) {
 		o.PersistThinking = !o.PersistThinking
 	case 20:
 		o.ForceStream = !o.ForceStream
+	case 21:
+		o.RewardScoring = !o.RewardScoring
 	}
 }
 
@@ -1373,7 +1376,6 @@ func (m setupModel) handleTextInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.cursor = 0
 			m.scrollOffset = 0
 			m.configOverrides = m.savedOverrides()
-			m.resolveModelSpecs()
 			return m, nil
 		}
 		// Custom model ID within a provider (phase 4)
@@ -1386,7 +1388,6 @@ func (m setupModel) handleTextInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.cursor = 0
 			m.scrollOffset = 0
 			m.configOverrides = m.savedOverrides()
-			m.resolveModelSpecs()
 			return m, nil
 		}
 		return m, nil
@@ -1720,8 +1721,6 @@ func (m setupModel) selectItem() (tea.Model, tea.Cmd) {
 		if mc.ContextWindow > 0 {
 			m.configOverrides.ContextWindow = mc.ContextWindow
 			m.configOverrides.MaxTokens = mc.MaxTokens
-		} else {
-			m.resolveModelSpecs()
 		}
 		if mc.ID == "nvidia/free" {
 			m.configOverrides.RewardScoring = true

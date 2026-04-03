@@ -210,14 +210,16 @@ func main() {
 	telemetry := features.NewTelemetryCollector()
 	telemetry.RegisterHooks(hooks)
 	hooks.Register(core.HookBeforeToolCall, "secret-scan", func(ctx context.Context, d *core.HookData) error {
-		if d.ToolName == "write" || d.ToolName == "edit" {
-			content, _ := d.ToolArgs["content"].(string)
-			if content == "" {
-				content, _ = d.ToolArgs["new_str"].(string)
+		// Scan ALL tool inputs for secrets (covers write, edit, bash, MCP tools, etc.)
+		for _, v := range d.ToolArgs {
+			s, ok := v.(string)
+			if !ok || s == "" {
+				continue
 			}
-			if desc, found := safety.ScanSecrets(content); found {
+			if desc, found := safety.ScanSecrets(s); found {
 				d.Block = true
 				d.BlockReason = "Secret detected: " + desc
+				return nil
 			}
 		}
 		return nil

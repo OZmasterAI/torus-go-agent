@@ -73,11 +73,14 @@ func (m *rewardMock) StreamComplete(_ context.Context, _ string, _ []tp.Message,
 // provider and rewardModelMock replaces the real nvidia reward endpoint.
 func newTestRewardRouter(routerMock *rewardMock, rewardModelMock *rewardMock) *RewardRouter {
 	router := NewRouter(routerMock)
+	ctx, cancel := context.WithCancel(context.Background())
 	rr := &RewardRouter{
 		router:      router,
 		rewardModel: nil, // replaced below
 		scores:      make(map[string]*modelStats),
 		updateEvery: 10,
+		ctx:         ctx,
+		cancel:      cancel,
 	}
 	// We cannot directly assign rewardModelMock to rr.rewardModel because the
 	// field type is *OpenRouterProvider. Instead we test through the public API

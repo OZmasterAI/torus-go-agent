@@ -258,6 +258,7 @@ func (a *Agent) runLoop(ctx context.Context, userMessage string, ch chan<- Agent
 				timer := time.NewTimer(delay)
 				select {
 				case <-timer.C:
+					timer.Stop()
 				case <-ctx.Done():
 					timer.Stop()
 					llmErr = ctx.Err()

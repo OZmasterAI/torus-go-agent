@@ -226,10 +226,13 @@ func TestWorkflowsEdge_RunSequentialContextCancellation(t *testing.T) {
 
 	result, err := RunSequential(ctx, nil, provider, "system prompt", agents, mgr, nil)
 
-	// Cancelled context may affect behavior
-	// The function doesn't explicitly check context, but it's passed to SpawnWithProvider
-	_ = result
-	_ = err
+	// Cancelled context with nil parent agent means spawn fails.
+	if err == nil {
+		t.Fatal("expected error with cancelled context and nil parent agent")
+	}
+	if result != "" {
+		t.Errorf("expected empty result on failure, got: %q", result)
+	}
 }
 
 // TestWorkflowsEdge_RunParallelContextCancellation tests RunParallel with cancelled context
@@ -247,9 +250,13 @@ func TestWorkflowsEdge_RunParallelContextCancellation(t *testing.T) {
 
 	results, err := RunParallel(ctx, nil, provider, "system prompt", agents, mgr, nil)
 
-	// Cancelled context effects
-	_ = results
-	_ = err
+	// Cancelled context with nil parent agent means spawn fails.
+	if err == nil {
+		t.Fatal("expected error with cancelled context and nil parent agent")
+	}
+	if results != nil && len(results) > 0 {
+		t.Errorf("expected nil or empty results on failure, got %d results", len(results))
+	}
 }
 
 // TestWorkflowsEdge_RunLoopContextTimeout tests RunLoop with context timeout
@@ -264,9 +271,13 @@ func TestWorkflowsEdge_RunLoopContextTimeout(t *testing.T) {
 
 	result, err := RunLoop(ctx, nil, provider, "system prompt", cfg, mgr, nil, nil, 5)
 
-	// Timeout may prevent operations from completing
-	_ = result
-	_ = err
+	// Timeout with nil parent agent means spawn fails.
+	if err == nil {
+		t.Fatal("expected error with timed-out context and nil parent agent")
+	}
+	if result != "" {
+		t.Errorf("expected empty result on failure, got: %q", result)
+	}
 }
 
 // --- Edge Case: Large Workflow Sizes ---
@@ -288,10 +299,14 @@ func TestWorkflowsEdge_RunSequentialManyAgents(t *testing.T) {
 
 	result, err := RunSequential(ctx, nil, provider, "system prompt", agents, mgr, nil)
 
-	// Should handle large agent lists without panic
-	// Will error because no parent agent, but should not crash
-	_ = result
-	_ = err
+	// Should handle large agent lists without panic.
+	// Will error because no parent agent, but should not crash.
+	if err == nil {
+		t.Fatal("expected error with nil parent agent")
+	}
+	if result != "" {
+		t.Errorf("expected empty result on failure, got: %q", result)
+	}
 }
 
 // TestWorkflowsEdge_RunParallelManyAgents tests RunParallel with many agents (concurrency stress)
@@ -315,9 +330,14 @@ func TestWorkflowsEdge_RunParallelManyAgents(t *testing.T) {
 
 	results, err := RunParallel(ctx, nil, provider, "system prompt", agents, mgr, nil)
 
-	// Should handle large parallel spawns without panic
-	_ = results
-	_ = err
+	// Should handle large parallel spawns without panic.
+	// Will error because no parent agent.
+	if err == nil {
+		t.Fatal("expected error with nil parent agent")
+	}
+	if results != nil && len(results) > 0 {
+		t.Errorf("expected nil or empty results on failure, got %d results", len(results))
+	}
 }
 
 // TestWorkflowsEdge_RunLoopManyIterations tests RunLoop with many iterations
@@ -340,12 +360,13 @@ func TestWorkflowsEdge_RunLoopManyIterations(t *testing.T) {
 
 	result, err := RunLoop(ctx, nil, provider, "system prompt", cfg, mgr, nil, shouldStop, 100)
 
-	// Should handle many iterations without panic
-	if iterCount > 50 {
-		t.Errorf("RunLoop should respect shouldStop, iterCount: %d", iterCount)
+	// No parent agent means spawn fails on first iteration.
+	if err == nil {
+		t.Fatal("expected error with nil parent agent")
 	}
-	_ = result
-	_ = err
+	if result != "" {
+		t.Errorf("expected empty result on failure, got: %q", result)
+	}
 }
 
 // --- Edge Case: Nil Callbacks & Handlers ---

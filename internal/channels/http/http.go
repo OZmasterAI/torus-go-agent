@@ -26,6 +26,9 @@ func (h *httpChannel) Start(agent *core.Agent, cfg config.Config, _ *features.Sk
 		port = "8080"
 	}
 	apiKey := os.Getenv("TORUSGO_API_KEY")
+	if apiKey == "" {
+		log.Println("[http] WARNING: no TORUSGO_API_KEY set — all requests will be accepted without authentication")
+	}
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/health", handleHealth)
