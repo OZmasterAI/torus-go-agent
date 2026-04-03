@@ -21,6 +21,7 @@ type sidebarModel struct {
 	toolEvents      []ToolEvent
 	agentCfg        config.AgentConfig
 	steerAggressive bool // true when agent steering mode is "aggressive"
+	turnCount       int  // actual turn count from parent model
 	show            bool
 }
 
@@ -52,14 +53,7 @@ func (s sidebarModel) View(height int) string {
 	lines = append(lines, s.theme.SidebarTitle.Render("Session"))
 	lines = append(lines, fmt.Sprintf(" Tools: %d", len(s.toolEvents)))
 
-	// Count turns (assistant messages would be passed in, but we count tool events).
-	turnCount := 0
-	for _, ev := range s.toolEvents {
-		if ev.Name != "" {
-			turnCount++
-		}
-	}
-	lines = append(lines, fmt.Sprintf(" Turns: %d", turnCount/3+1)) // rough estimate
+	lines = append(lines, fmt.Sprintf(" Turns: %d", s.turnCount))
 
 	lines = append(lines, "")
 	lines = append(lines, s.theme.SidebarTitle.Render("Files"))

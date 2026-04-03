@@ -31,7 +31,8 @@ func (m Model) View() string {
 	// Chat viewport + optional sidebar.
 	chatView := m.chat.View()
 	if m.sidebar.show {
-		// Sync steering state from agent into sidebar sub-model.
+		// Sync state from parent into sidebar sub-model.
+		m.sidebar.turnCount = m.turnCount
 		if m.agent != nil {
 			m.sidebar.steerAggressive = m.agent.GetSteeringMode() == "aggressive"
 		}

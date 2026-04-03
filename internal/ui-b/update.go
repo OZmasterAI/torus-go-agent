@@ -189,6 +189,7 @@ func (m Model) handleSubmit() (tea.Model, tea.Cmd) {
 	m.chat.AddMessage("user", input)
 	m.chat.AddMessage("assistant", "") // streaming placeholder
 	m.input.Clear()
+	m.turnCount++
 	m.status.processing = true
 	m.chat.streaming = true
 	m.status.lastElapsed = 0

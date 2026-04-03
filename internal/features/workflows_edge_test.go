@@ -641,9 +641,13 @@ func TestWorkflowsEdge_RunSequentialProviderStreamError(t *testing.T) {
 
 	result, err := RunSequential(ctx, nil, streamFailProvider, "system prompt", agents, mgr, nil)
 
-	// Stream error will affect provider behavior
-	_ = result
-	_ = err
+	// Nil parent agent means spawn fails regardless of stream error.
+	if err == nil {
+		t.Fatal("expected error with nil parent agent")
+	}
+	if result != "" {
+		t.Errorf("expected empty result on failure, got: %q", result)
+	}
 }
 
 // TestWorkflowsEdge_RunParallelProviderStreamError tests RunParallel when provider stream fails
@@ -666,8 +670,13 @@ func TestWorkflowsEdge_RunParallelProviderStreamError(t *testing.T) {
 
 	results, err := RunParallel(ctx, nil, streamFailProvider, "system prompt", agents, mgr, nil)
 
-	_ = results
-	_ = err
+	// Nil parent agent means spawn fails regardless of stream error.
+	if err == nil {
+		t.Fatal("expected error with nil parent agent")
+	}
+	if results != nil && len(results) > 0 {
+		t.Errorf("expected nil or empty results on failure, got %d results", len(results))
+	}
 }
 
 // --- Edge Case: Race Conditions ---
@@ -734,9 +743,14 @@ func TestWorkflowsEdge_SpecialCharactersInTask(t *testing.T) {
 
 	result, err := RunSequential(ctx, nil, provider, "system prompt", specialTasks, mgr, nil)
 
-	// Should handle special characters without panicking
-	_ = result
-	_ = err
+	// Should handle special characters without panicking.
+	// Nil parent agent means spawn fails.
+	if err == nil {
+		t.Fatal("expected error with nil parent agent")
+	}
+	if result != "" {
+		t.Errorf("expected empty result on failure, got: %q", result)
+	}
 }
 
 // TestWorkflowsEdge_LargeTaskString tests workflows with moderately large task strings
@@ -758,7 +772,12 @@ func TestWorkflowsEdge_LargeTaskString(t *testing.T) {
 
 	result, err := RunSequential(ctx, nil, provider, "system prompt", agents, mgr, nil)
 
-	// Should handle large strings without panicking
-	_ = result
-	_ = err
+	// Should handle large strings without panicking.
+	// Nil parent agent means spawn fails.
+	if err == nil {
+		t.Fatal("expected error with nil parent agent")
+	}
+	if result != "" {
+		t.Errorf("expected empty result on failure, got: %q", result)
+	}
 }

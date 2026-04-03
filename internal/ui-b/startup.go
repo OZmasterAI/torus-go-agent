@@ -510,6 +510,11 @@ func (o *StartupConfigOverrides) getValue(idx int) string {
 			return "true"
 		}
 		return "false"
+	case 21:
+		if o.RewardScoring {
+			return "true"
+		}
+		return "false"
 	}
 	return ""
 }
@@ -559,6 +564,8 @@ func (o *StartupConfigOverrides) setValue(idx int, val string) {
 		o.ContextWindow = n
 	case 20:
 		o.ForceStream = val == "true"
+	case 21:
+		o.RewardScoring = val == "true"
 	}
 }
 
@@ -574,6 +581,8 @@ func (o *StartupConfigOverrides) toggleBool(idx int) {
 		o.PersistThinking = !o.PersistThinking
 	case 20:
 		o.ForceStream = !o.ForceStream
+	case 21:
+		o.RewardScoring = !o.RewardScoring
 	}
 }
 
