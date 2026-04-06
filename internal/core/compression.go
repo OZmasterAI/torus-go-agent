@@ -3,9 +3,14 @@ package core
 import (
 	"fmt"
 	"strings"
+	"sync/atomic"
 
 	t "torus_go_agent/internal/types"
 )
+
+// CompressionRuns counts how many times UnifiedCompress actually compressed
+// (i.e. did not early-return). Safe for concurrent access.
+var CompressionRuns atomic.Int64
 
 // MessageScore represents the importance of a message.
 type MessageScore int
@@ -314,6 +319,8 @@ func UnifiedCompress(messages []t.Message, cfg UnifiedCompressConfig) []t.Messag
 	if cfg.MinMessages > 0 && n < cfg.MinMessages {
 		return messages
 	}
+
+	CompressionRuns.Add(1)
 
 	// Step 0: Extract pinned messages (KeepFirst)
 	// These sit right after messages[0] (system prompt) and are always kept verbatim.

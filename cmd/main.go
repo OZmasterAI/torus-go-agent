@@ -138,6 +138,7 @@ func main() {
 	soul = strings.ReplaceAll(soul, "{{MODEL}}", cfg.Agent.Provider+"/"+cfg.Agent.Model)
 	soul = strings.ReplaceAll(soul, "{{CWD}}", initCwd)
 	schema := config.LoadSchema(cfgDir)
+	schema += config.GenerateFileTree(initCwd, 4)
 	key := cfg.APIKey()
 	if key == "" && cfg.Agent.Provider == "anthropic" {
 		oauthKey, err := providers.GetAnthropicKey()

@@ -74,7 +74,18 @@ func readTool() t.Tool {
 		Execute: func(args map[string]any) (*t.ToolResult, error) {
 			fp, _ := args["file_path"].(string)
 			data, err := os.ReadFile(fp)
-			if err != nil {
+			if err != nil && os.IsNotExist(err) {
+				// Try to find the file by basename and suggest the correct path.
+				base := filepath.Base(fp)
+				if suggestions := findFileByName(base); len(suggestions) > 0 {
+					hint := "File not found: " + fp + "\nDid you mean:\n"
+					for _, s := range suggestions {
+						hint += "  " + s + "\n"
+					}
+					return &t.ToolResult{Content: hint, IsError: true}, nil
+				}
+				return &t.ToolResult{Content: "Error: " + err.Error(), IsError: true}, nil
+			} else if err != nil {
 				return &t.ToolResult{Content: "Error: " + err.Error(), IsError: true}, nil
 			}
 			lines := strings.Split(string(data), "\n")
@@ -201,6 +212,9 @@ func grepTool() t.Tool {
 		},
 		Execute: func(args map[string]any) (*t.ToolResult, error) {
 			pat, _ := args["pattern"].(string)
+			if strings.TrimSpace(pat) == "" {
+				return &t.ToolResult{Content: "Error: empty search pattern. Provide a specific search term.", IsError: true}, nil
+			}
 			path, _ := args["path"].(string)
 			if path == "" {
 				path = "."
@@ -226,4 +240,35 @@ func GetFloat(m map[string]any, key string, def float64) float64 {
 		return def
 	}
 	return v
+}
+
+// findFileByName walks the working directory looking for files matching the
+// given basename. Returns up to 5 absolute paths. The walk skips hidden
+// directories and common large directories (vendor, node_modules, .git).
+func findFileByName(name string) []string {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return nil
+	}
+	var matches []string
+	filepath.Walk(cwd, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return nil
+		}
+		if info.IsDir() {
+			base := filepath.Base(path)
+			if base == ".git" || base == "vendor" || base == "node_modules" || base == "tmp" {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if filepath.Base(path) == name {
+			matches = append(matches, path)
+			if len(matches) >= 5 {
+				return filepath.SkipAll
+			}
+		}
+		return nil
+	})
+	return matches
 }

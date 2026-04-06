@@ -354,3 +354,55 @@ func LoadSchema(configDir string) string {
 	}
 	return string(data)
 }
+
+// GenerateFileTree walks root up to maxDepth levels and returns a text tree
+// of directories and files. It skips hidden dirs, vendor, node_modules, tmp,
+// and binary/db files. This gives the LLM an accurate view of the project.
+func GenerateFileTree(root string, maxDepth int) string {
+	skipDirs := map[string]bool{
+		".git": true, ".github": true, ".torus": true, ".claude": true,
+		".agent": true, ".agents": true, ".pi": true,
+		"vendor": true, "node_modules": true, "tmp": true,
+		"data": true, "RESEARCH": true, "PRPs": true, "skills": true,
+	}
+	skipExts := map[string]bool{
+		".db": true, ".sqlite3": true, ".exe": true, ".bin": true,
+		".test": true, ".png": true, ".jpg": true, ".gif": true,
+	}
+
+	var b strings.Builder
+	b.WriteString("\n## File Tree (auto-generated)\n```\n")
+
+	filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return nil
+		}
+		rel, _ := filepath.Rel(root, path)
+		if rel == "." {
+			return nil
+		}
+		depth := strings.Count(rel, string(filepath.Separator))
+		if depth >= maxDepth {
+			if info.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if info.IsDir() {
+			if skipDirs[info.Name()] {
+				return filepath.SkipDir
+			}
+			indent := strings.Repeat("  ", depth)
+			b.WriteString(indent + info.Name() + "/\n")
+			return nil
+		}
+		if skipExts[filepath.Ext(info.Name())] {
+			return nil
+		}
+		indent := strings.Repeat("  ", depth)
+		b.WriteString(indent + info.Name() + "\n")
+		return nil
+	})
+	b.WriteString("```\n")
+	return b.String()
+}
