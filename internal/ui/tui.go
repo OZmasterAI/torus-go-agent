@@ -861,12 +861,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	// ── Stream delta ─────────────────────────────────────────────────────
 	case streamDeltaMsg:
-		if m.streaming && len(m.messages) > 0 {
+		if len(m.messages) > 0 {
 			last := &m.messages[len(m.messages)-1]
 			if last.role == "assistant" {
 				last.text += msg.delta
 				last.rendered = ""
-				m.statusPhrase = "Torus relaying..."
+				if m.streaming {
+					m.statusPhrase = "Torus relaying..."
+				}
 			}
 		}
 		m.rebuildContent()
