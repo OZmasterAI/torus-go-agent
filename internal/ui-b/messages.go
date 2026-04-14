@@ -43,11 +43,12 @@ type ToolEvent struct {
 
 // AgentDoneMsg signals the agent finished successfully.
 type AgentDoneMsg struct {
-	Text      string
-	TokensIn  int
-	TokensOut int
-	Cost      float64
-	Elapsed   time.Duration
+	Text            string
+	TokensIn        int // Cumulative input tokens across all turns (for billing/totals).
+	TokensOut       int
+	Cost            float64
+	Elapsed         time.Duration
+	LastInputTokens int // Input tokens from the most recent API call (for CTX% display).
 }
 
 // AgentErrorMsg signals the agent hit a fatal error.

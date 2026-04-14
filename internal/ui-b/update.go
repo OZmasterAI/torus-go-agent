@@ -279,7 +279,7 @@ func (m Model) handleAgentDone(msg AgentDoneMsg) (tea.Model, tea.Cmd) {
 	}
 	m.chat.thinking.Collapse()
 
-	m.lastInputTokens = msg.TokensIn
+	m.lastInputTokens = msg.LastInputTokens
 	m.status.totalTokensIn += msg.TokensIn
 	m.status.totalTokensOut += msg.TokensOut
 	m.status.totalCost += msg.Cost

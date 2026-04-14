@@ -126,11 +126,12 @@ const (
 // ── Custom messages ───────────────────────────────────────────────────────────
 
 type agentResponseMsg struct {
-	text      string
-	tokensIn  int
-	tokensOut int
-	cost      float64
-	elapsed   time.Duration
+	text            string
+	tokensIn        int // cumulative input tokens across all turns (for billing/totals)
+	tokensOut       int
+	cost            float64
+	elapsed         time.Duration
+	lastInputTokens int // input tokens from the most recent API call (for CTX%)
 }
 
 type agentErrorMsg struct{ err error }
@@ -976,7 +977,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.thinking.Buf = ""
 		}
 		m.resizeViewport()
-		m.lastInputTokens = msg.tokensIn
+		m.lastInputTokens = msg.lastInputTokens
 		m.totalTokensIn += msg.tokensIn
 		m.totalTokensOut += msg.tokensOut
 		m.totalCost += msg.cost
@@ -2797,6 +2798,7 @@ func runAgentStream(agent *core.Agent, input string, deltaCh chan<- string, tool
 		var finalErr error
 		var toolStartTime time.Time
 		var totalIn, totalOut int
+		var lastTurnIn int // most recent turn's input tokens (= current context fill)
 		var totalCost float64
 		for ev := range agent.RunStream(context.Background(), input) {
 			switch ev.Type {
@@ -2826,6 +2828,7 @@ func runAgentStream(agent *core.Agent, input string, deltaCh chan<- string, tool
 					totalIn += ev.Usage.InputTokens
 					totalOut += ev.Usage.OutputTokens
 					totalCost += ev.Usage.Cost
+					lastTurnIn = ev.Usage.InputTokens
 				}
 			case core.EventAgentDone:
 				finalText = ev.Text
@@ -2844,11 +2847,12 @@ func runAgentStream(agent *core.Agent, input string, deltaCh chan<- string, tool
 			return agentErrorMsg{err: finalErr}
 		}
 		return agentResponseMsg{
-			text:      finalText,
-			tokensIn:  totalIn,
-			tokensOut: totalOut,
-			cost:      totalCost,
-			elapsed:   elapsed,
+			text:            finalText,
+			tokensIn:        totalIn,
+			tokensOut:       totalOut,
+			cost:            totalCost,
+			elapsed:         elapsed,
+			lastInputTokens: lastTurnIn,
 		}
 	}
 }

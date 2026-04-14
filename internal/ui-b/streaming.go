@@ -20,6 +20,7 @@ func runAgentStream(agent *core.Agent, input string, eventCh chan<- StreamEventM
 		var finalErr error
 		var toolStart time.Time
 		var totalIn, totalOut int
+		var lastTurnIn int // most recent turn's input tokens (= current context fill)
 		var totalCost float64
 
 		for ev := range agent.RunStream(context.Background(), input) {
@@ -51,6 +52,7 @@ func runAgentStream(agent *core.Agent, input string, eventCh chan<- StreamEventM
 					totalIn += ev.Usage.InputTokens
 					totalOut += ev.Usage.OutputTokens
 					totalCost += ev.Usage.Cost
+					lastTurnIn = ev.Usage.InputTokens
 				}
 			case core.EventAgentDone:
 				finalText = ev.Text
@@ -65,11 +67,12 @@ func runAgentStream(agent *core.Agent, input string, eventCh chan<- StreamEventM
 			return AgentErrorMsg{Err: finalErr}
 		}
 		return AgentDoneMsg{
-			Text:      finalText,
-			TokensIn:  totalIn,
-			TokensOut: totalOut,
-			Cost:      totalCost,
-			Elapsed:   time.Since(start),
+			Text:            finalText,
+			TokensIn:        totalIn,
+			TokensOut:       totalOut,
+			Cost:            totalCost,
+			Elapsed:         time.Since(start),
+			LastInputTokens: lastTurnIn,
 		}
 	}
 }
