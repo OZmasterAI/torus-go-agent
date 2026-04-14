@@ -114,9 +114,10 @@ func (c *chatModel) Rebuild() {
 
 		case "assistant":
 			isStreaming := c.streaming && i == len(c.messages)-1
-			if isStreaming || dm.Text == "" {
-				// Render pending thinking before streaming assistant text.
-				if isStreaming {
+			nextIsTool := i+1 < len(c.messages) && c.messages[i+1].Role == "tool"
+			if isStreaming || (dm.Text == "" && dm.ThinkingText == "" && !nextIsTool) {
+				// Render pending thinking above streaming text.
+				if isStreaming && c.thinking.HasPending() {
 					sb.WriteString(c.thinking.RenderPending(chatW))
 				}
 				sb.WriteString(indentBlock(wrapText(dm.Text, chatW-12), "          "))
@@ -124,15 +125,44 @@ func (c *chatModel) Rebuild() {
 					sb.WriteByte('\n')
 				}
 			} else {
+				followsTool := verbosity == shared.VerbosityCompact && i > 0 && c.messages[i-1].Role == "tool"
 				if !dm.Ts.IsZero() {
 					ts := fmtTimestamp(dm.Ts)
-					sb.WriteString(c.theme.Timestamp.Render(ts) + " " + c.theme.AssistantPrefix.Render("\u25c9 <torus>") + "\n")
+					if followsTool {
+						// Mid-turn: just show thinking indicator, no header/timestamp.
+						if dm.ThinkingText != "" {
+							sb.WriteString("            " + c.thinking.RenderInline(shared.ThinkingCard{Text: dm.ThinkingText}) + "\n")
+						}
+						if dm.Text != "" {
+							if dm.Rendered == "" {
+								dm.Rendered = c.glamourRender(dm.Text)
+							}
+							indented := indentBlock(dm.Rendered, "          ")
+							sb.WriteString(c.theme.Timestamp.Render(ts) + "  " + strings.TrimLeft(indented, " "))
+							sb.WriteString("\n\n\n")
+						}
+					} else {
+						header := c.theme.Timestamp.Render(ts) + " " + c.theme.AssistantPrefix.Render("\u25c9 <torus>")
+						if dm.ThinkingText != "" {
+							header += "  " + c.thinking.RenderInline(shared.ThinkingCard{Text: dm.ThinkingText})
+						}
+						sb.WriteString(header + "\n")
+					}
 				}
-				if dm.Rendered == "" {
-					dm.Rendered = c.glamourRender(dm.Text)
+				if dm.ThinkingText != "" && verbosity >= shared.VerbosityVerbose {
+					sb.WriteString(shared.ThinkingStyle.Render(indentBlock(wrapText(dm.ThinkingText, chatW-14), "              ")) + "\n")
 				}
-				sb.WriteString(indentBlock(dm.Rendered, "          "))
-				sb.WriteString("\n\n\n")
+				if dm.Text != "" && !followsTool {
+					if dm.Rendered == "" {
+						dm.Rendered = c.glamourRender(dm.Text)
+					}
+					sb.WriteString(indentBlock(dm.Rendered, "          "))
+					if nextIsTool {
+						// Tight spacing before tool cards.
+					} else {
+						sb.WriteString("\n\n\n")
+					}
+				}
 			}
 
 		case "tool":

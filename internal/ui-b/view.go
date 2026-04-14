@@ -33,6 +33,18 @@ func (m Model) View() string {
 	if m.sidebar.show {
 		// Sync state from parent into sidebar sub-model.
 		m.sidebar.turnCount = m.turnCount
+		m.sidebar.totalTokensIn = m.status.totalTokensIn
+		m.sidebar.totalTokensOut = m.status.totalTokensOut
+		m.sidebar.totalCost = m.status.totalCost
+		m.sidebar.lastInputTokens = m.lastInputTokens
+		// Pre-prompt fallback: estimate CTX from DAG when no API response yet.
+		if m.sidebar.lastInputTokens == 0 && m.agent != nil {
+			if head, _ := m.agent.DAG().GetHead(); head != "" {
+				if msgs, _ := m.agent.DAG().PromptFrom(head); len(msgs) > 0 {
+					m.sidebar.lastInputTokens = core.EstimateTokens(msgs)
+				}
+			}
+		}
 		if m.agent != nil {
 			m.sidebar.steerAggressive = m.agent.GetSteeringMode() == "aggressive"
 		}
@@ -83,7 +95,7 @@ func (m Model) View() string {
 		VerbosityLabel:  m.chat.thinking.VerbosityLabel(),
 	}
 
-	// Compute next-prompt cost estimate when idle and DAG head is available.
+	// Compute next-prompt cost estimate and CTX fallback when idle.
 	if !m.status.processing && m.agent != nil {
 		head, _ := m.agent.DAG().GetHead()
 		if head != "" {
@@ -93,6 +105,10 @@ func (m Model) View() string {
 				preEst += core.EstimateTokensForText(m.input.Value())
 			}
 			data.NextEstimate = preEst
+			// Pre-prompt fallback for CTX bar.
+			if data.LastInputTokens == 0 && len(msgs) > 0 {
+				data.LastInputTokens = core.EstimateTokens(msgs)
+			}
 		}
 	}
 

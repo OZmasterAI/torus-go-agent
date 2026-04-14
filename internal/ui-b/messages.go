@@ -66,12 +66,13 @@ type WorkflowDoneMsg struct {
 
 // DisplayMsg is a rendered chat message shown in the viewport.
 type DisplayMsg struct {
-	Role     string     // "user", "assistant", "error", "tool"
-	Text     string
-	IsError  bool
-	Rendered string     // Cached glamour output (invalidated on resize).
-	Tool     *ToolEvent // Set when Role == "tool".
-	Ts       time.Time
+	Role         string     // "user", "assistant", "error", "tool"
+	Text         string
+	ThinkingText string     // Finalized thinking for this response (inline display).
+	IsError      bool
+	Rendered     string     // Cached glamour output (invalidated on resize).
+	Tool         *ToolEvent // Set when Role == "tool".
+	Ts           time.Time
 }
 
 // NewDisplayMsg creates a DisplayMsg timestamped to now.

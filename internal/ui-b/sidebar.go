@@ -22,6 +22,10 @@ type sidebarModel struct {
 	agentCfg        config.AgentConfig
 	steerAggressive bool // true when agent steering mode is "aggressive"
 	turnCount       int  // actual turn count from parent model
+	totalTokensIn   int
+	totalTokensOut  int
+	totalCost       float64
+	lastInputTokens int // from most recent API call (for CTX%)
 	show            bool
 }
 
@@ -54,6 +58,24 @@ func (s sidebarModel) View(height int) string {
 	lines = append(lines, fmt.Sprintf(" Tools: %d", len(s.toolEvents)))
 
 	lines = append(lines, fmt.Sprintf(" Turns: %d", s.turnCount))
+
+	ctxWin := float64(s.agentCfg.ContextWindow)
+	if ctxWin <= 0 {
+		ctxWin = 128000
+	}
+	ctxPct := 0.0
+	if s.lastInputTokens > 0 {
+		ctxPct = float64(s.lastInputTokens) / ctxWin * 100
+	}
+	lines = append(lines, fmt.Sprintf(" CTX: %.0f%%", ctxPct))
+
+	totalTok := s.totalTokensIn + s.totalTokensOut
+	if totalTok > 0 {
+		lines = append(lines, fmt.Sprintf(" Tokens: %s", fmtTok(totalTok)))
+	}
+	if s.totalCost > 0 {
+		lines = append(lines, fmt.Sprintf(" Cost: $%.2f", s.totalCost))
+	}
 
 	lines = append(lines, "")
 	lines = append(lines, s.theme.SidebarTitle.Render("Files"))

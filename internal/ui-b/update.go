@@ -236,6 +236,17 @@ func (m Model) handleStreamEvent(msg StreamEventMsg) (tea.Model, tea.Cmd) {
 	case StreamToolEnd:
 		m.sidebar.TrackTool(msg.Tool)
 		m.status.statusPhrase = torusPhrase(msg.Tool.Name, msg.Tool.IsError)
+		// Flush pending thinking onto the last assistant message before tool card.
+		if m.chat.thinking.HasPending() {
+			for i := len(m.chat.messages) - 1; i >= 0; i-- {
+				if m.chat.messages[i].Role == "assistant" {
+					m.chat.messages[i].ThinkingText = m.chat.thinking.Buf
+					m.chat.messages[i].Rendered = ""
+					break
+				}
+			}
+			m.chat.thinking.Buf = ""
+		}
 		m.chat.AddToolCard(&msg.Tool)
 
 	case StreamStatusUpdate:
@@ -254,9 +265,21 @@ func (m Model) handleAgentDone(msg AgentDoneMsg) (tea.Model, tea.Cmd) {
 	m.status.lastElapsed = msg.Elapsed
 	m.eventCh = nil
 
-	// Collapse any pending thinking into a card.
+	// Store pending thinking on the last assistant message (inline display),
+	// then collapse into a card (Collapse needs Buf intact).
+	if m.chat.thinking.HasPending() {
+		thinkBuf := m.chat.thinking.Buf
+		for i := len(m.chat.messages) - 1; i >= 0; i-- {
+			if m.chat.messages[i].Role == "assistant" {
+				m.chat.messages[i].ThinkingText = thinkBuf
+				m.chat.messages[i].Rendered = ""
+				break
+			}
+		}
+	}
 	m.chat.thinking.Collapse()
 
+	m.lastInputTokens = msg.TokensIn
 	m.status.totalTokensIn += msg.TokensIn
 	m.status.totalTokensOut += msg.TokensOut
 	m.status.totalCost += msg.Cost
@@ -288,6 +311,19 @@ func (m Model) handleAgentError(msg AgentErrorMsg) (tea.Model, tea.Cmd) {
 	m.chat.streaming = false
 	m.eventCh = nil
 	m.err = msg.Err
+
+	// Store pending thinking on the last assistant message (inline display).
+	if m.chat.thinking.HasPending() {
+		thinkBuf := m.chat.thinking.Buf
+		for i := len(m.chat.messages) - 1; i >= 0; i-- {
+			if m.chat.messages[i].Role == "assistant" {
+				m.chat.messages[i].ThinkingText = thinkBuf
+				m.chat.messages[i].Rendered = ""
+				break
+			}
+		}
+	}
+	m.chat.thinking.Collapse()
 
 	// Remove empty trailing placeholder.
 	if len(m.chat.messages) > 0 {
@@ -366,6 +402,13 @@ func (m Model) sidebarFlagsStartLine() int {
 	line++ // Session title
 	line++ // Tools
 	line++ // Turns
+	line++ // CTX
+	if m.status.totalTokensIn+m.status.totalTokensOut > 0 {
+		line++ // Tokens (conditional)
+	}
+	if m.status.totalCost > 0 {
+		line++ // Cost (conditional)
+	}
 	line++ // blank
 	line++ // Files title
 	if len(m.sidebar.modifiedFiles) == 0 {

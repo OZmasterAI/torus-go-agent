@@ -83,6 +83,8 @@ func (m Model) cmdNew() (tea.Model, tea.Cmd) {
 		m.chat.messages = m.chat.messages[:0]
 		m.chat.AddMessage("assistant", "New conversation started (previous preserved on old branch).")
 		m.status.totalTokensIn, m.status.totalTokensOut, m.status.totalCost = 0, 0, 0
+		m.turnCount = 0
+		m.lastInputTokens = 0
 		m.sidebar.toolEvents = nil
 		m.sidebar.modifiedFiles = make(map[string]int)
 	}
@@ -101,6 +103,8 @@ func (m Model) cmdClear() (tea.Model, tea.Cmd) {
 		m.chat.messages = m.chat.messages[:0]
 		m.chat.AddMessage("assistant", "Context cleared on current branch.")
 		m.status.totalTokensIn, m.status.totalTokensOut, m.status.totalCost = 0, 0, 0
+		m.turnCount = 0
+		m.lastInputTokens = 0
 	}
 	m.input.Clear()
 	return m, nil
