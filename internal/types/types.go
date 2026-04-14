@@ -110,11 +110,11 @@ type ProviderConfig struct {
 }
 
 const (
-	// DefaultMaxTurns is the default max turns for the main agent loop.
-	DefaultMaxTurns = 30
+	// DefaultMaxTurns is the default max turns for the main agent loop (0 = unlimited).
+	DefaultMaxTurns = 0
 
-	// SubAgentMaxTurns is the default max turns for sub-agent runs.
-	SubAgentMaxTurns = 20
+	// SubAgentMaxTurns is the default max turns for sub-agent runs (0 = unlimited).
+	SubAgentMaxTurns = 0
 )
 
 // AgentConfig is the top-level configuration for an agent.

@@ -144,6 +144,7 @@ func (a *Agent) runLoop(ctx context.Context, userMessage string, ch chan<- Agent
 	}
 
 	var finalText string
+	continuations := 0
 
 	for turn := 0; a.config.MaxTurns == 0 || turn < a.config.MaxTurns; turn++ {
 		emit(AgentEvent{Type: EventAgentTurnStart, Turn: turn})
@@ -344,6 +345,19 @@ func (a *Agent) runLoop(ctx context.Context, userMessage string, ch chan<- Agent
 		}
 
 		if !HasToolUse(resp) {
+			// Auto-continue when the model hit its token limit mid-response.
+			if resp.StopReason == "length" || resp.StopReason == "max_tokens" {
+				continuations++
+				log.Printf("[loop] response truncated (stop_reason=%q), auto-continuing (%d)", resp.StopReason, continuations)
+				contHead, _ := a.dag.GetHead()
+				contContent := []t.ContentBlock{{Type: "text", Text: "Continue."}}
+				if _, contErr := a.dag.AddNode(contHead, t.RoleUser, contContent, "", "", 0); contErr != nil {
+					log.Printf("[loop] failed to add continuation node: %v", contErr)
+				}
+				emit(AgentEvent{Type: EventAgentTurnEnd, Turn: turn, Usage: &resp.Usage})
+				a.hooks.Fire(ctx, HookOnTurnEnd, &HookData{AgentID: "main", Response: resp})
+				continue
+			}
 			finalText = ExtractText(resp)
 			// HookOnStop: can override stop decision via Block.
 			stopData := &HookData{AgentID: "main", Response: resp, Meta: map[string]any{"final_text": finalText}}
