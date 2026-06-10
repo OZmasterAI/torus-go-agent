@@ -32,7 +32,7 @@ type InstructionFile struct {
 	Path       string
 	Content    string
 	MemType    MemoryType
-	Paths      []string   // frontmatter paths: globs for conditional activation
+	Paths      []string // frontmatter paths: globs for conditional activation
 	LoadReason LoadReason
 }
 
@@ -144,6 +144,22 @@ func isGitRoot(dir string) bool {
 	return err == nil
 }
 
+// findGitRoot walks from cwd upward to the nearest git root.
+// Returns the cleaned cwd if no git root is found.
+func findGitRoot(cwd string) string {
+	dir := filepath.Clean(cwd)
+	for {
+		if isGitRoot(dir) {
+			return dir
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return filepath.Clean(cwd) // filesystem root reached, no git root
+		}
+		dir = parent
+	}
+}
+
 // ParseFrontmatter extracts YAML frontmatter (between --- delimiters) from content.
 // Returns the parsed paths and the content with frontmatter stripped.
 // Uses a simple line parser instead of a YAML library to avoid external dependencies.
@@ -175,8 +191,10 @@ func ParseFrontmatter(content string) (paths []string, body string) {
 
 // ExpandIncludes processes @include directives in content.
 // Lines starting with @ (not inside code blocks) are treated as file references.
-// Paths are resolved relative to the directory of the source file.
-func ExpandIncludes(content string, sourceDir string, seen map[string]bool) string {
+// Paths are resolved relative to the directory of the source file, with
+// symlinks resolved; references outside allowedRoots are silently skipped.
+// A nil or empty allowedRoots disables all includes.
+func ExpandIncludes(content string, sourceDir string, allowedRoots []string, seen map[string]bool) string {
 	if seen == nil {
 		seen = make(map[string]bool)
 	}
@@ -200,30 +218,61 @@ func ExpandIncludes(content string, sourceDir string, seen map[string]bool) stri
 			result.WriteByte('\n')
 			continue
 		}
-		// Resolve path.
-		ref = expandHome(ref)
-		if !filepath.IsAbs(ref) {
-			ref = filepath.Join(sourceDir, ref)
+		// Resolve path against the allowed roots.
+		resolved, ok := resolveInclude(ref, sourceDir, allowedRoots)
+		if !ok {
+			// Non-existent or out-of-allowlist files silently ignored.
+			continue
 		}
-		ref = filepath.Clean(ref)
-		if seen[ref] {
+		if seen[resolved] {
 			// Circular reference -- skip.
 			continue
 		}
-		seen[ref] = true
-		data, err := os.ReadFile(ref)
+		seen[resolved] = true
+		data, err := os.ReadFile(resolved)
 		if err != nil {
-			// Non-existent files silently ignored.
+			// Unreadable files silently ignored.
 			continue
 		}
 		// Recursively expand includes in the included file.
-		expanded := ExpandIncludes(string(data), filepath.Dir(ref), seen)
+		expanded := ExpandIncludes(string(data), filepath.Dir(resolved), allowedRoots, seen)
 		result.WriteString(expanded)
 		if !strings.HasSuffix(expanded, "\n") {
 			result.WriteByte('\n')
 		}
 	}
 	return result.String()
+}
+
+// resolveInclude resolves an @include reference against sourceDir, following
+// symlinks. Returns the resolved path and true only if the file exists and
+// falls inside one of the allowed roots.
+func resolveInclude(ref, sourceDir string, allowedRoots []string) (string, bool) {
+	ref = expandHome(ref)
+	if !filepath.IsAbs(ref) {
+		ref = filepath.Join(sourceDir, ref)
+	}
+	ref = filepath.Clean(ref)
+	resolved, err := filepath.EvalSymlinks(ref)
+	if err != nil {
+		// Non-existent files and broken symlinks silently ignored.
+		return "", false
+	}
+	for _, root := range allowedRoots {
+		if isWithinRoot(resolved, root) {
+			return resolved, true
+		}
+	}
+	return "", false
+}
+
+// isWithinRoot reports whether path is root itself or contained within it.
+func isWithinRoot(path, root string) bool {
+	rel, err := filepath.Rel(root, path)
+	if err != nil {
+		return false
+	}
+	return rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
 }
 
 // expandHome replaces a leading ~/ with the user's home directory.
@@ -242,10 +291,22 @@ func expandHome(path string) string {
 // expands includes, and sets the load reason.
 func LoadAndParseAll(cwd string, reason LoadReason) []InstructionFile {
 	raw := DiscoverInstructionFiles(cwd)
+	// Includes may only resolve inside the project (git root) or the
+	// user-global config directory.
+	roots := []string{findGitRoot(cwd)}
+	if home, err := os.UserHomeDir(); err == nil {
+		roots = append(roots, filepath.Join(home, ".config", "torus"))
+	}
+	// Resolve symlinked roots so includes inside them aren't false-rejected.
+	for i, root := range roots {
+		if resolved, err := filepath.EvalSymlinks(root); err == nil {
+			roots[i] = resolved
+		}
+	}
 	result := make([]InstructionFile, 0, len(raw))
 	for _, f := range raw {
 		paths, body := ParseFrontmatter(f.Content)
-		expanded := ExpandIncludes(body, filepath.Dir(f.Path), nil)
+		expanded := ExpandIncludes(body, filepath.Dir(f.Path), roots, nil)
 		result = append(result, InstructionFile{
 			Path:       f.Path,
 			Content:    expanded,

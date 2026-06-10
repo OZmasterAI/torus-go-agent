@@ -207,6 +207,7 @@ func TestParseFrontmatter_Empty(t *testing.T) {
 // TestExpandIncludes verifies basic @include expansion between two files.
 func TestExpandIncludes(t *testing.T) {
 	dir := t.TempDir()
+	dir, _ = filepath.EvalSymlinks(dir) // t.TempDir may sit under a symlink
 
 	// Create the included file.
 	os.WriteFile(filepath.Join(dir, "other.md"), []byte("included content"), 0644)
@@ -214,7 +215,7 @@ func TestExpandIncludes(t *testing.T) {
 	// Source content referencing the other file.
 	content := "before\n@other.md\nafter\n"
 
-	result := ExpandIncludes(content, dir, nil)
+	result := ExpandIncludes(content, dir, []string{dir}, nil)
 
 	if !strings.Contains(result, "before") {
 		t.Error("result missing 'before'")
@@ -230,13 +231,14 @@ func TestExpandIncludes(t *testing.T) {
 // TestExpandIncludes_Circular verifies circular references do not cause infinite loops.
 func TestExpandIncludes_Circular(t *testing.T) {
 	dir := t.TempDir()
+	dir, _ = filepath.EvalSymlinks(dir) // t.TempDir may sit under a symlink
 
 	// A includes B, B includes A.
 	os.WriteFile(filepath.Join(dir, "a.md"), []byte("A start\n@b.md\nA end\n"), 0644)
 	os.WriteFile(filepath.Join(dir, "b.md"), []byte("B start\n@a.md\nB end\n"), 0644)
 
 	content := "root\n@a.md\n"
-	result := ExpandIncludes(content, dir, nil)
+	result := ExpandIncludes(content, dir, []string{dir}, nil)
 
 	// Should contain content from both files but not loop.
 	if !strings.Contains(result, "root") {
@@ -258,9 +260,10 @@ func TestExpandIncludes_Circular(t *testing.T) {
 // TestExpandIncludes_MissingFile verifies @nonexistent.md is silently skipped.
 func TestExpandIncludes_MissingFile(t *testing.T) {
 	dir := t.TempDir()
+	dir, _ = filepath.EvalSymlinks(dir) // t.TempDir may sit under a symlink
 
 	content := "before\n@nonexistent.md\nafter\n"
-	result := ExpandIncludes(content, dir, nil)
+	result := ExpandIncludes(content, dir, []string{dir}, nil)
 
 	if !strings.Contains(result, "before") {
 		t.Error("result missing 'before'")
@@ -276,16 +279,129 @@ func TestExpandIncludes_MissingFile(t *testing.T) {
 // TestExpandIncludes_InCodeBlock verifies @ inside code blocks is NOT expanded.
 func TestExpandIncludes_InCodeBlock(t *testing.T) {
 	dir := t.TempDir()
+	dir, _ = filepath.EvalSymlinks(dir) // t.TempDir may sit under a symlink
 	os.WriteFile(filepath.Join(dir, "other.md"), []byte("SHOULD NOT APPEAR"), 0644)
 
 	content := "before\n```\n@other.md\n```\nafter\n"
-	result := ExpandIncludes(content, dir, nil)
+	result := ExpandIncludes(content, dir, []string{dir}, nil)
 
 	if strings.Contains(result, "SHOULD NOT APPEAR") {
 		t.Error("@ inside code block should not be expanded")
 	}
 	if !strings.Contains(result, "@other.md") {
 		t.Error("@ line inside code block should be preserved verbatim")
+	}
+}
+
+// TestExpandIncludes_TraversalEscape verifies ../ traversal cannot escape the allowed roots.
+func TestExpandIncludes_TraversalEscape(t *testing.T) {
+	base := t.TempDir()
+	base, _ = filepath.EvalSymlinks(base) // t.TempDir may sit under a symlink
+	dirA := filepath.Join(base, "a")
+	dirB := filepath.Join(base, "b")
+	os.Mkdir(dirA, 0755)
+	os.Mkdir(dirB, 0755)
+	os.WriteFile(filepath.Join(dirB, "secret.md"), []byte("TOPSECRET-B"), 0644)
+
+	content := "before\n@../b/secret.md\nafter\n"
+	result := ExpandIncludes(content, dirA, []string{dirA}, nil)
+
+	if strings.Contains(result, "TOPSECRET-B") {
+		t.Error("../ traversal escaped the allowed root: secret content included")
+	}
+	if !strings.Contains(result, "before") || !strings.Contains(result, "after") {
+		t.Error("surrounding content should be preserved")
+	}
+}
+
+// TestExpandIncludes_AbsoluteOutsideAllowlist verifies absolute paths outside
+// the allowed roots are silently skipped.
+func TestExpandIncludes_AbsoluteOutsideAllowlist(t *testing.T) {
+	dir := t.TempDir()
+	dir, _ = filepath.EvalSymlinks(dir) // t.TempDir may sit under a symlink
+	outside := t.TempDir()
+	outside, _ = filepath.EvalSymlinks(outside)
+	secretPath := filepath.Join(outside, "secret.md")
+	os.WriteFile(secretPath, []byte("TOPSECRET-ABS"), 0644)
+
+	content := "before\n@" + secretPath + "\nafter\n"
+	result := ExpandIncludes(content, dir, []string{dir}, nil)
+	if strings.Contains(result, "TOPSECRET-ABS") {
+		t.Error("absolute path outside allowlist should not be expanded")
+	}
+
+	result = ExpandIncludes("@/etc/passwd\n", dir, []string{dir}, nil)
+	if strings.Contains(result, "root:") {
+		t.Error("/etc/passwd should not be expanded")
+	}
+}
+
+// TestExpandIncludes_SymlinkEscape verifies a symlink inside an allowed root
+// pointing outside it is skipped.
+func TestExpandIncludes_SymlinkEscape(t *testing.T) {
+	root := t.TempDir()
+	root, _ = filepath.EvalSymlinks(root) // t.TempDir may sit under a symlink
+	outside := t.TempDir()
+	outside, _ = filepath.EvalSymlinks(outside)
+	secretPath := filepath.Join(outside, "secret.md")
+	os.WriteFile(secretPath, []byte("TOPSECRET-LINK"), 0644)
+
+	linkPath := filepath.Join(root, "link.md")
+	if err := os.Symlink(secretPath, linkPath); err != nil {
+		t.Skipf("symlinks not supported on this platform: %v", err)
+	}
+
+	result := ExpandIncludes("@link.md\n", root, []string{root}, nil)
+	if strings.Contains(result, "TOPSECRET-LINK") {
+		t.Error("symlink escaping the allowed root should not be expanded")
+	}
+}
+
+// TestExpandIncludes_HomeEscape verifies ~/ includes are rejected unless the
+// resolved path falls inside an allowed root.
+func TestExpandIncludes_HomeEscape(t *testing.T) {
+	fakeHome := t.TempDir()
+	fakeHome, _ = filepath.EvalSymlinks(fakeHome) // t.TempDir may sit under a symlink
+	t.Setenv("HOME", fakeHome)                    // os.UserHomeDir honors $HOME on Linux
+	os.WriteFile(filepath.Join(fakeHome, "secret.md"), []byte("HOMESECRET"), 0644)
+
+	projectDir := t.TempDir()
+	projectDir, _ = filepath.EvalSymlinks(projectDir)
+
+	// ~/secret.md with roots limited to the project dir -- skipped.
+	result := ExpandIncludes("@~/secret.md\n", projectDir, []string{projectDir}, nil)
+	if strings.Contains(result, "HOMESECRET") {
+		t.Error("~/ include outside allowed roots should not be expanded")
+	}
+
+	// Same mechanism with ~/.config/torus allow-listed -- expanded.
+	configDir := filepath.Join(fakeHome, ".config", "torus")
+	os.MkdirAll(configDir, 0755)
+	os.WriteFile(filepath.Join(configDir, "rule.md"), []byte("CONFIGRULE"), 0644)
+	roots := []string{projectDir, configDir}
+	result = ExpandIncludes("@~/.config/torus/rule.md\n", projectDir, roots, nil)
+	if !strings.Contains(result, "CONFIGRULE") {
+		t.Error("~/ include inside an allowed root should be expanded")
+	}
+}
+
+// TestExpandIncludes_LegitNestedStillWorks verifies nested includes (including
+// ../ hops that stay inside the allowed root) keep working after the allowlist.
+func TestExpandIncludes_LegitNestedStillWorks(t *testing.T) {
+	root := t.TempDir()
+	root, _ = filepath.EvalSymlinks(root) // t.TempDir may sit under a symlink
+	sub := filepath.Join(root, "sub")
+	os.Mkdir(sub, 0755)
+	os.WriteFile(filepath.Join(sub, "inner.md"), []byte("inner content\n@../sibling.md\n"), 0644)
+	os.WriteFile(filepath.Join(root, "sibling.md"), []byte("sibling content"), 0644)
+
+	result := ExpandIncludes("@sub/inner.md\n", root, []string{root}, nil)
+
+	if !strings.Contains(result, "inner content") {
+		t.Error("result missing 'inner content'")
+	}
+	if !strings.Contains(result, "sibling content") {
+		t.Error("result missing 'sibling content' (../ include still inside root)")
 	}
 }
 
