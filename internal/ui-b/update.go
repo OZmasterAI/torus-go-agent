@@ -161,6 +161,19 @@ func (m Model) handleSubmit() (tea.Model, tea.Cmd) {
 		return m.executeCommand(input)
 	}
 
+	return m.submitToAgent(input)
+}
+
+// submitToAgent formats skill commands, appends the user message, and starts
+// the streaming pipeline. Called from handleSubmit (plain input) and
+// cmdSkillDispatch (typed skill/unknown slash commands).
+func (m Model) submitToAgent(input string) (tea.Model, tea.Cmd) {
+	// Re-entrancy guard: palette/overlay paths bypass handleSubmit's steering
+	// branch, so refuse to start a second turn while the agent is running.
+	if m.status.processing {
+		return m, nil
+	}
+
 	// Skill dispatch.
 	if m.skills != nil {
 		if skillName, ok := m.skills.IsSkillCommand(input); ok {
