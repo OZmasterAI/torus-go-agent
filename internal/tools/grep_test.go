@@ -17,6 +17,7 @@ func skipIfNoRg(t *testing.T) {
 
 // TestGrepPatternFound tests grep with a pattern that matches.
 func TestGrepPatternFound(t *testing.T) {
+	t.Parallel()
 	skipIfNoRg(t)
 	tmpDir := t.TempDir()
 	testFile := filepath.Join(tmpDir, "test.txt")
@@ -64,6 +65,7 @@ func TestGrepPatternFound(t *testing.T) {
 
 // TestGrepPatternNotFound tests grep with a pattern that doesn't match.
 func TestGrepPatternNotFound(t *testing.T) {
+	t.Parallel()
 	skipIfNoRg(t)
 	tmpDir := t.TempDir()
 	testFile := filepath.Join(tmpDir, "test.txt")
@@ -97,6 +99,7 @@ func TestGrepPatternNotFound(t *testing.T) {
 
 // TestGrepMultipleMatches tests grep with multiple matching lines.
 func TestGrepMultipleMatches(t *testing.T) {
+	t.Parallel()
 	skipIfNoRg(t)
 	tmpDir := t.TempDir()
 	testFile := filepath.Join(tmpDir, "test.txt")
@@ -149,6 +152,7 @@ foo foo foo
 
 // TestGrepWithDirectory tests grep on a directory (searches recursively).
 func TestGrepWithDirectory(t *testing.T) {
+	t.Parallel()
 	skipIfNoRg(t)
 	tmpDir := t.TempDir()
 
@@ -194,6 +198,7 @@ func TestGrepWithDirectory(t *testing.T) {
 
 // TestGrepWithDefaultPath tests grep with empty path (should use current directory).
 func TestGrepWithDefaultPath(t *testing.T) {
+	t.Parallel()
 	skipIfNoRg(t)
 	tmpDir := t.TempDir()
 	testFile := filepath.Join(tmpDir, "test.txt")
@@ -223,6 +228,7 @@ func TestGrepWithDefaultPath(t *testing.T) {
 
 // TestGrepRegexPattern tests grep with a regex pattern.
 func TestGrepRegexPattern(t *testing.T) {
+	t.Parallel()
 	skipIfNoRg(t)
 	tmpDir := t.TempDir()
 	testFile := filepath.Join(tmpDir, "test.txt")
@@ -264,6 +270,7 @@ test000
 
 // TestGrepToolMetadata verifies the tool is properly configured.
 func TestGrepToolMetadata(t *testing.T) {
+	t.Parallel()
 	grep := grepTool()
 
 	if grep.Name != "grep" {
@@ -303,6 +310,7 @@ func TestGrepToolMetadata(t *testing.T) {
 
 // TestGrepSpecialCharacters tests grep with special regex characters.
 func TestGrepSpecialCharacters(t *testing.T) {
+	t.Parallel()
 	skipIfNoRg(t)
 	tmpDir := t.TempDir()
 	testFile := filepath.Join(tmpDir, "test.txt")

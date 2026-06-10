@@ -17,6 +17,7 @@ import (
 
 // TestGeminiEdge_InvalidAPIKey tests Complete with an invalid API key response.
 func TestGeminiEdge_InvalidAPIKey(t *testing.T) {
+	t.Parallel()
 	provider := NewGeminiProvider("invalid-key-xyz", "gemini-2.0-flash")
 
 	provider.client = &http.Client{
@@ -43,6 +44,7 @@ func TestGeminiEdge_InvalidAPIKey(t *testing.T) {
 
 // TestGeminiEdge_ExpiredAccessToken tests Bearer auth with expired token.
 func TestGeminiEdge_ExpiredAccessToken(t *testing.T) {
+	t.Parallel()
 	provider := NewVertexAIProvider("expired-token-xyz", "my-project", "us-central1", "gemini-2.0-flash")
 
 	provider.client = &http.Client{
@@ -65,6 +67,7 @@ func TestGeminiEdge_ExpiredAccessToken(t *testing.T) {
 
 // TestGeminiEdge_EmptyAPIKey tests with empty API key.
 func TestGeminiEdge_EmptyAPIKey(t *testing.T) {
+	t.Parallel()
 	provider := NewGeminiProvider("", "gemini-2.0-flash")
 
 	// Should generate a URL with empty key
@@ -78,6 +81,7 @@ func TestGeminiEdge_EmptyAPIKey(t *testing.T) {
 
 // TestGeminiEdge_ModelNotFound tests response when model does not exist.
 func TestGeminiEdge_ModelNotFound(t *testing.T) {
+	t.Parallel()
 	provider := NewGeminiProvider("test-key", "gemini-nonexistent-model")
 
 	provider.client = &http.Client{
@@ -100,6 +104,7 @@ func TestGeminiEdge_ModelNotFound(t *testing.T) {
 
 // TestGeminiEdge_VertexAIProjectNotFound tests Vertex AI with nonexistent project.
 func TestGeminiEdge_VertexAIProjectNotFound(t *testing.T) {
+	t.Parallel()
 	provider := NewVertexAIProvider("token", "nonexistent-project", "us-central1", "gemini-2.0-flash")
 
 	provider.client = &http.Client{
@@ -124,6 +129,7 @@ func TestGeminiEdge_VertexAIProjectNotFound(t *testing.T) {
 
 // TestGeminiEdge_SafetyFilteredResponse tests response with SAFETY finish reason.
 func TestGeminiEdge_SafetyFilteredResponse(t *testing.T) {
+	t.Parallel()
 	provider := NewGeminiProvider("test-key", "gemini-2.0-flash")
 
 	mockResp := geminiResponse{
@@ -165,6 +171,7 @@ func TestGeminiEdge_SafetyFilteredResponse(t *testing.T) {
 
 // TestGeminiEdge_RecitationFilteredResponse tests content with recitation finish reason.
 func TestGeminiEdge_RecitationFilteredResponse(t *testing.T) {
+	t.Parallel()
 	provider := NewGeminiProvider("test-key", "gemini-2.0-flash")
 
 	mockResp := geminiResponse{
@@ -202,6 +209,7 @@ func TestGeminiEdge_RecitationFilteredResponse(t *testing.T) {
 
 // TestGeminiEdge_StreamingConnectionClosed tests stream that closes mid-response.
 func TestGeminiEdge_StreamingConnectionClosed(t *testing.T) {
+	t.Parallel()
 	provider := NewGeminiProvider("test-key", "gemini-2.0-flash")
 
 	sseBody := `data: {"candidates":[{"content":{"parts":[{"text":"Hello"}]},"finishReason":""}]}
@@ -242,6 +250,7 @@ func TestGeminiEdge_StreamingConnectionClosed(t *testing.T) {
 
 // TestGeminiEdge_StreamingWithContextCancellation tests stream cancellation via context.
 func TestGeminiEdge_StreamingWithContextCancellation(t *testing.T) {
+	t.Parallel()
 	provider := NewGeminiProvider("test-key", "gemini-2.0-flash")
 
 	sseBody := `data: {"candidates":[{"content":{"parts":[{"text":"First"}]},"finishReason":""}]}
@@ -285,6 +294,7 @@ data: {"candidates":[{"content":{"parts":[{"text":"Third"}]},"finishReason":"STO
 
 // TestGeminiEdge_StreamingMalformedJSON tests stream with invalid JSON data lines.
 func TestGeminiEdge_StreamingMalformedJSON(t *testing.T) {
+	t.Parallel()
 	provider := NewGeminiProvider("test-key", "gemini-2.0-flash")
 
 	sseBody := `data: {"candidates":[{"content":{"parts":[{"text":"Valid"}]},"finishReason":""}]}
@@ -330,6 +340,7 @@ data: {"candidates":[{"content":{"parts":[{"text":"Also valid"}]},"finishReason"
 
 // TestGeminiEdge_StreamingEmptyLines tests stream with blank lines.
 func TestGeminiEdge_StreamingEmptyLines(t *testing.T) {
+	t.Parallel()
 	provider := NewGeminiProvider("test-key", "gemini-2.0-flash")
 
 	sseBody := `data: {"candidates":[{"content":{"parts":[{"text":"Line1"}]},"finishReason":""}]}
@@ -368,6 +379,7 @@ data: {"candidates":[{"content":{"parts":[{"text":"Line2"}]},"finishReason":"STO
 
 // TestGeminiEdge_StreamingPartialResponse tests stream ending without STOP reason.
 func TestGeminiEdge_StreamingPartialResponse(t *testing.T) {
+	t.Parallel()
 	provider := NewGeminiProvider("test-key", "gemini-2.0-flash")
 
 	sseBody := `data: {"candidates":[{"content":{"parts":[{"text":"Incomplete"}]},"finishReason":""}]}
@@ -412,6 +424,7 @@ func TestGeminiEdge_StreamingPartialResponse(t *testing.T) {
 
 // TestGeminiEdge_InvalidJSON tests Complete with malformed JSON response.
 func TestGeminiEdge_InvalidJSON(t *testing.T) {
+	t.Parallel()
 	provider := NewGeminiProvider("test-key", "gemini-2.0-flash")
 
 	provider.client = &http.Client{
@@ -434,6 +447,7 @@ func TestGeminiEdge_InvalidJSON(t *testing.T) {
 
 // TestGeminiEdge_NoCandidatesButNonNilUsage tests response with no candidates but usage data.
 func TestGeminiEdge_NoCandidatesButNonNilUsage(t *testing.T) {
+	t.Parallel()
 	provider := NewGeminiProvider("test-key", "gemini-2.0-flash")
 
 	mockResp := geminiResponse{
@@ -470,6 +484,7 @@ func TestGeminiEdge_NoCandidatesButNonNilUsage(t *testing.T) {
 
 // TestGeminiEdge_MultiplePartsInContent tests response with mixed text and tool use parts.
 func TestGeminiEdge_MultiplePartsInContent(t *testing.T) {
+	t.Parallel()
 	provider := NewGeminiProvider("test-key", "gemini-2.0-flash")
 
 	mockResp := geminiResponse{
@@ -529,6 +544,7 @@ func TestGeminiEdge_MultiplePartsInContent(t *testing.T) {
 
 // TestGeminiEdge_HTTPServerError tests 500 error response.
 func TestGeminiEdge_HTTPServerError(t *testing.T) {
+	t.Parallel()
 	provider := NewGeminiProvider("test-key", "gemini-2.0-flash")
 
 	provider.client = &http.Client{
@@ -551,6 +567,7 @@ func TestGeminiEdge_HTTPServerError(t *testing.T) {
 
 // TestGeminiEdge_HTTPRateLimited tests 429 Too Many Requests response.
 func TestGeminiEdge_HTTPRateLimited(t *testing.T) {
+	t.Parallel()
 	provider := NewGeminiProvider("test-key", "gemini-2.0-flash")
 
 	provider.client = &http.Client{
@@ -573,6 +590,7 @@ func TestGeminiEdge_HTTPRateLimited(t *testing.T) {
 
 // TestGeminiEdge_HTTPBadRequest tests 400 malformed request response.
 func TestGeminiEdge_HTTPBadRequest(t *testing.T) {
+	t.Parallel()
 	provider := NewGeminiProvider("test-key", "gemini-2.0-flash")
 
 	provider.client = &http.Client{
@@ -597,6 +615,7 @@ func TestGeminiEdge_HTTPBadRequest(t *testing.T) {
 
 // TestGeminiEdge_ContextAlreadyCancelled tests Complete with pre-cancelled context.
 func TestGeminiEdge_ContextAlreadyCancelled(t *testing.T) {
+	t.Parallel()
 	provider := NewGeminiProvider("test-key", "gemini-2.0-flash")
 
 	provider.client = &http.Client{
@@ -617,6 +636,7 @@ func TestGeminiEdge_ContextAlreadyCancelled(t *testing.T) {
 
 // TestGeminiEdge_ContextDeadlineExceeded tests Complete with exceeded deadline.
 func TestGeminiEdge_ContextDeadlineExceeded(t *testing.T) {
+	t.Parallel()
 	provider := NewGeminiProvider("test-key", "gemini-2.0-flash")
 
 	// Create a slow transport that doesn't return immediately
@@ -637,6 +657,7 @@ func TestGeminiEdge_ContextDeadlineExceeded(t *testing.T) {
 
 // TestGeminiEdge_StreamingWithToolUse tests streaming response with tool calls.
 func TestGeminiEdge_StreamingWithToolUse(t *testing.T) {
+	t.Parallel()
 	provider := NewGeminiProvider("test-key", "gemini-2.0-flash")
 
 	sseBody := `data: {"candidates":[{"content":{"parts":[{"text":"Searching"}]},"finishReason":""}]}
@@ -689,6 +710,7 @@ data: {"candidates":[{"content":{"parts":[{"functionCall":{"name":"search","id":
 
 // TestGeminiEdge_StreamingMaxTokensReached tests stream stopping due to MAX_TOKENS.
 func TestGeminiEdge_StreamingMaxTokensReached(t *testing.T) {
+	t.Parallel()
 	provider := NewGeminiProvider("test-key", "gemini-2.0-flash")
 
 	sseBody := `data: {"candidates":[{"content":{"parts":[{"text":"This is a very long response that keeps going"}]},"finishReason":"MAX_TOKENS"}]}
@@ -752,6 +774,7 @@ func collectStreamEvents(ch <-chan tp.StreamEvent) []tp.StreamEvent {
 
 // TestGeminiEdge_VeryLargeResponse tests handling of large response bodies.
 func TestGeminiEdge_VeryLargeResponse(t *testing.T) {
+	t.Parallel()
 	provider := NewGeminiProvider("test-key", "gemini-2.0-flash")
 
 	// Create a large text response (1MB)
@@ -795,6 +818,7 @@ func TestGeminiEdge_VeryLargeResponse(t *testing.T) {
 
 // TestGeminiEdge_EmptyTextParts tests response with empty text parts.
 func TestGeminiEdge_EmptyTextParts(t *testing.T) {
+	t.Parallel()
 	provider := NewGeminiProvider("test-key", "gemini-2.0-flash")
 
 	mockResp := geminiResponse{
@@ -839,6 +863,7 @@ func TestGeminiEdge_EmptyTextParts(t *testing.T) {
 
 // TestGeminiEdge_SystemPromptWithCompleteMessage tests system prompt inclusion in request.
 func TestGeminiEdge_SystemPromptWithCompleteMessage(t *testing.T) {
+	t.Parallel()
 	provider := NewGeminiProvider("test-key", "gemini-2.0-flash")
 
 	capturedReq := &geminiRequest{}
@@ -865,6 +890,7 @@ func TestGeminiEdge_SystemPromptWithCompleteMessage(t *testing.T) {
 
 // TestGeminiEdge_NoSystemPromptWhenEmpty tests that empty system prompt is not included.
 func TestGeminiEdge_NoSystemPromptWhenEmpty(t *testing.T) {
+	t.Parallel()
 	provider := NewGeminiProvider("test-key", "gemini-2.0-flash")
 
 	capturedReq := &geminiRequest{}
@@ -881,6 +907,7 @@ func TestGeminiEdge_NoSystemPromptWhenEmpty(t *testing.T) {
 
 // TestGeminiEdge_StreamingLargeBufferSize tests streaming with large scanner buffer.
 func TestGeminiEdge_StreamingLargeBufferSize(t *testing.T) {
+	t.Parallel()
 	provider := NewGeminiProvider("test-key", "gemini-2.0-flash")
 
 	// Create a very large data line
@@ -920,6 +947,7 @@ func TestGeminiEdge_StreamingLargeBufferSize(t *testing.T) {
 
 // TestGeminiEdge_StreamingWithoutDataPrefix tests SSE lines without "data: " prefix.
 func TestGeminiEdge_StreamingWithoutDataPrefix(t *testing.T) {
+	t.Parallel()
 	provider := NewGeminiProvider("test-key", "gemini-2.0-flash")
 
 	sseBody := `some random text

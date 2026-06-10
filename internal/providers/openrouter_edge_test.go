@@ -15,6 +15,7 @@ import (
 // TestOpenRouterEdge_FallbackModelSelection tests provider fallback behavior
 // when the preferred model is unavailable.
 func TestOpenRouterEdge_FallbackModelSelection(t *testing.T) {
+	t.Parallel()
 	// Simulate scenario where first model is unavailable (404) but fallback succeeds
 	p := NewOpenRouterProvider("test-key", "unavailable-model")
 
@@ -72,6 +73,7 @@ func TestOpenRouterEdge_FallbackModelSelection(t *testing.T) {
 
 // TestOpenRouterEdge_RateLimitWithRetry tests handling of rate limit responses.
 func TestOpenRouterEdge_RateLimitWithRetry(t *testing.T) {
+	t.Parallel()
 	p := NewOpenRouterProvider("test-key", "gpt-4")
 
 	// First call returns 429 rate limit
@@ -96,6 +98,7 @@ func TestOpenRouterEdge_RateLimitWithRetry(t *testing.T) {
 
 // TestOpenRouterEdge_TokenCountTracking verifies token usage accumulation.
 func TestOpenRouterEdge_TokenCountTracking(t *testing.T) {
+	t.Parallel()
 	p := NewOpenRouterProvider("test-key", "gpt-4")
 
 	respBody := openaiResponse{
@@ -148,6 +151,7 @@ func TestOpenRouterEdge_TokenCountTracking(t *testing.T) {
 // TestOpenRouterEdge_LargeTokenCount tests handling of large token counts
 // that may overflow in cost calculations.
 func TestOpenRouterEdge_LargeTokenCount(t *testing.T) {
+	t.Parallel()
 	p := NewOpenRouterProvider("test-key", "gpt-4-turbo")
 
 	// Simulate very large token usage (e.g., long context)
@@ -192,6 +196,7 @@ func TestOpenRouterEdge_LargeTokenCount(t *testing.T) {
 // TestOpenRouterEdge_CostCalculationForDifferentModels tests cost tracking
 // varies by model tier.
 func TestOpenRouterEdge_CostCalculationForDifferentModels(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name   string
 		model  string
@@ -249,6 +254,7 @@ func TestOpenRouterEdge_CostCalculationForDifferentModels(t *testing.T) {
 
 // TestOpenRouterEdge_ProviderTimeout tests context deadline exceeded handling.
 func TestOpenRouterEdge_ProviderTimeout(t *testing.T) {
+	t.Parallel()
 	p := NewOpenRouterProvider("test-key", "gpt-4")
 
 	// Mock transport that times out
@@ -273,6 +279,7 @@ func TestOpenRouterEdge_ProviderTimeout(t *testing.T) {
 
 // TestOpenRouterEdge_ServerErrorRecovery tests handling of 5xx errors.
 func TestOpenRouterEdge_ServerErrorRecovery(t *testing.T) {
+	t.Parallel()
 	p := NewOpenRouterProvider("test-key", "gpt-4")
 
 	p.client = &http.Client{
@@ -296,6 +303,7 @@ func TestOpenRouterEdge_ServerErrorRecovery(t *testing.T) {
 
 // TestOpenRouterEdge_AuthenticationError tests handling of invalid API keys.
 func TestOpenRouterEdge_AuthenticationError(t *testing.T) {
+	t.Parallel()
 	p := NewOpenRouterProvider("invalid-key", "gpt-4")
 
 	p.client = &http.Client{
@@ -319,6 +327,7 @@ func TestOpenRouterEdge_AuthenticationError(t *testing.T) {
 
 // TestOpenRouterEdge_StreamContextCancellation tests early termination of streaming.
 func TestOpenRouterEdge_StreamContextCancellation(t *testing.T) {
+	t.Parallel()
 	p := NewOpenRouterProvider("test-key", "gpt-4")
 
 	// Build long SSE stream
@@ -367,6 +376,7 @@ data: [DONE]
 
 // TestOpenRouterEdge_StreamMalformedChunk tests handling of invalid JSON in stream.
 func TestOpenRouterEdge_StreamMalformedChunk(t *testing.T) {
+	t.Parallel()
 	p := NewOpenRouterProvider("test-key", "gpt-4")
 
 	// Build SSE stream with some malformed chunks (should be skipped gracefully)
@@ -415,6 +425,7 @@ data: [DONE]
 
 // TestOpenRouterEdge_StreamEmptyChoices tests handling of empty choices in stream chunk.
 func TestOpenRouterEdge_StreamEmptyChoices(t *testing.T) {
+	t.Parallel()
 	p := NewOpenRouterProvider("test-key", "gpt-4")
 
 	// Stream with chunk that has empty choices (should be skipped)
@@ -460,6 +471,7 @@ data: [DONE]
 
 // TestOpenRouterEdge_StreamWithToolCalls tests streaming with tool call chunks.
 func TestOpenRouterEdge_StreamWithToolCalls(t *testing.T) {
+	t.Parallel()
 	p := NewOpenRouterProvider("test-key", "gpt-4")
 
 	// Stream with tool calls
@@ -527,6 +539,7 @@ data: [DONE]
 
 // TestOpenRouterEdge_StreamDuplicateFinishReason tests that duplicate finish chunks are handled.
 func TestOpenRouterEdge_StreamDuplicateFinishReason(t *testing.T) {
+	t.Parallel()
 	p := NewOpenRouterProvider("test-key", "gpt-4")
 
 	// Stream with duplicate finish_reason chunks (only first should be processed)
@@ -569,6 +582,7 @@ data: [DONE]
 
 // TestOpenRouterEdge_StreamUsageEvent tests that usage events are properly emitted.
 func TestOpenRouterEdge_StreamUsageEvent(t *testing.T) {
+	t.Parallel()
 	p := NewOpenRouterProvider("test-key", "gpt-4")
 
 	sseBody := `data: {"id":"1","model":"gpt-4","choices":[{"index":0,"delta":{"content":"Response"},"finish_reason":null}]}
@@ -611,6 +625,7 @@ data: [DONE]
 
 // TestOpenRouterEdge_EmptySystemPrompt tests Complete without system prompt.
 func TestOpenRouterEdge_EmptySystemPrompt(t *testing.T) {
+	t.Parallel()
 	p := NewOpenRouterProvider("test-key", "gpt-4")
 
 	respBody := openaiResponse{
@@ -661,6 +676,7 @@ func TestOpenRouterEdge_EmptySystemPrompt(t *testing.T) {
 
 // TestOpenRouterEdge_MultipleToolCalls tests multiple tool calls in single response.
 func TestOpenRouterEdge_MultipleToolCalls(t *testing.T) {
+	t.Parallel()
 	p := NewOpenRouterProvider("test-key", "gpt-4")
 
 	respBody := openaiResponse{

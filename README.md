@@ -29,6 +29,9 @@ cd torus-go-agent
 # Build
 go build -o torus_go_agent ./cmd
 
+# Test (always runs with -race)
+make test
+
 # Set an API key
 export OPENROUTER_API_KEY=your-key-here
 # Or: ANTHROPIC_API_KEY, GEMINI_API_KEY, etc.

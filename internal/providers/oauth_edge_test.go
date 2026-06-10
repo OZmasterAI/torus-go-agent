@@ -19,6 +19,7 @@ import (
 // TestOAuthEdge_GetAnthropicKeyExpiredTokenAutoRefresh tests that GetAnthropicKey
 // auto-refreshes an expired token when loading from credentials.
 func TestOAuthEdge_GetAnthropicKeyExpiredTokenAutoRefresh(t *testing.T) {
+	t.Parallel()
 	// Create a mock HTTP server for token refresh.
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/v1/oauth/token" && r.Method == "POST" {
@@ -80,6 +81,7 @@ func TestOAuthEdge_GetAnthropicKeyExpiredTokenAutoRefresh(t *testing.T) {
 // TestOAuthEdge_GetAnthropicKeyWithNonExpiredToken tests that GetAnthropicKey
 // returns the token directly when it's not expired.
 func TestOAuthEdge_GetAnthropicKeyWithNonExpiredToken(t *testing.T) {
+	t.Parallel()
 	// Create a non-expired token (1 hour from now).
 	tokenFile := filepath.Join(t.TempDir(), "credentials.json")
 	futureTime := time.Now().UnixMilli() + 3600000
@@ -106,6 +108,7 @@ func TestOAuthEdge_GetAnthropicKeyWithNonExpiredToken(t *testing.T) {
 
 // TestOAuthEdge_RefreshTokenNetworkError tests that RefreshToken handles network errors.
 func TestOAuthEdge_RefreshTokenNetworkError(t *testing.T) {
+	t.Parallel()
 	// Use a non-existent server to trigger a network error.
 	// We can't easily test this without modifying the code to accept a custom HTTP client.
 	// Instead, we'll test the error handling by mocking the response.
@@ -131,6 +134,7 @@ func TestOAuthEdge_RefreshTokenNetworkError(t *testing.T) {
 // TestOAuthEdge_RefreshTokenInvalidRefreshToken tests that RefreshToken handles
 // an invalid refresh token gracefully.
 func TestOAuthEdge_RefreshTokenInvalidRefreshToken(t *testing.T) {
+	t.Parallel()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/v1/oauth/token" && r.Method == "POST" {
 			var payload map[string]string
@@ -141,7 +145,7 @@ func TestOAuthEdge_RefreshTokenInvalidRefreshToken(t *testing.T) {
 				w.WriteHeader(http.StatusUnauthorized)
 				w.Header().Set("Content-Type", "application/json")
 				json.NewEncoder(w).Encode(map[string]interface{}{
-					"error": "invalid_grant",
+					"error":             "invalid_grant",
 					"error_description": "Refresh token has expired or is invalid",
 				})
 				return
@@ -158,6 +162,7 @@ func TestOAuthEdge_RefreshTokenInvalidRefreshToken(t *testing.T) {
 // TestOAuthEdge_RefreshTokenHTTPErrorStatus tests that RefreshToken returns
 // an error when the server returns a non-200 status code.
 func TestOAuthEdge_RefreshTokenHTTPErrorStatus(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name       string
 		statusCode int
@@ -203,6 +208,7 @@ func TestOAuthEdge_RefreshTokenHTTPErrorStatus(t *testing.T) {
 // TestOAuthEdge_RefreshTokenMalformedResponse tests that RefreshToken handles
 // a malformed JSON response.
 func TestOAuthEdge_RefreshTokenMalformedResponse(t *testing.T) {
+	t.Parallel()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/v1/oauth/token" && r.Method == "POST" {
 			w.WriteHeader(http.StatusOK)
@@ -221,6 +227,7 @@ func TestOAuthEdge_RefreshTokenMalformedResponse(t *testing.T) {
 // TestOAuthEdge_RefreshTokenMissingRequiredFields tests that RefreshToken
 // handles a response with missing required fields.
 func TestOAuthEdge_RefreshTokenMissingRequiredFields(t *testing.T) {
+	t.Parallel()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/v1/oauth/token" && r.Method == "POST" {
 			w.WriteHeader(http.StatusOK)
@@ -243,6 +250,7 @@ func TestOAuthEdge_RefreshTokenMissingRequiredFields(t *testing.T) {
 // TestOAuthEdge_ExchangeCodeWithEmptyCode tests that exchangeCode handles
 // an empty authorization code.
 func TestOAuthEdge_ExchangeCodeWithEmptyCode(t *testing.T) {
+	t.Parallel()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/v1/oauth/token" && r.Method == "POST" {
 			var payload map[string]string
@@ -252,7 +260,7 @@ func TestOAuthEdge_ExchangeCodeWithEmptyCode(t *testing.T) {
 				w.WriteHeader(http.StatusBadRequest)
 				w.Header().Set("Content-Type", "application/json")
 				json.NewEncoder(w).Encode(map[string]interface{}{
-					"error": "invalid_request",
+					"error":             "invalid_request",
 					"error_description": "code parameter is required",
 				})
 				return
@@ -276,6 +284,7 @@ func TestOAuthEdge_ExchangeCodeWithEmptyCode(t *testing.T) {
 // TestOAuthEdge_ExchangeCodeWithMismatchedState tests that LoginAnthropic
 // rejects a callback whose state doesn't match the generated nonce.
 func TestOAuthEdge_ExchangeCodeWithMismatchedState(t *testing.T) {
+	t.Parallel()
 	_, err := LoginAnthropic(
 		func(url string) {
 			// Verify the authorize URL contains a state parameter.
@@ -301,6 +310,7 @@ func TestOAuthEdge_ExchangeCodeWithMismatchedState(t *testing.T) {
 // TestOAuthEdge_ConcurrentTokenRefresh tests that multiple concurrent refreshes
 // don't cause race conditions.
 func TestOAuthEdge_ConcurrentTokenRefresh(t *testing.T) {
+	t.Parallel()
 	callCount := 0
 	var mu sync.Mutex
 
@@ -351,6 +361,7 @@ func TestOAuthEdge_ConcurrentTokenRefresh(t *testing.T) {
 // TestOAuthEdge_ConcurrentCredentialModification tests that concurrent modifications
 // to credentials don't cause corruption.
 func TestOAuthEdge_ConcurrentCredentialModification(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	credFile := filepath.Join(tmpDir, "auth.json")
 
@@ -412,6 +423,7 @@ func TestOAuthEdge_ConcurrentCredentialModification(t *testing.T) {
 
 // TestOAuthEdge_IsOAuthTokenWithVariants tests IsOAuthToken with various token formats.
 func TestOAuthEdge_IsOAuthTokenWithVariants(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		token    string
 		expected bool
@@ -422,7 +434,7 @@ func TestOAuthEdge_IsOAuthTokenWithVariants(t *testing.T) {
 		{"sk-proj-token", false},
 		{"", false},
 		{"sk-ant-oat-with-special-chars-!@#", true},
-		{"SK-ANT-OAT-uppercase", false}, // Case sensitive
+		{"SK-ANT-OAT-uppercase", false},   // Case sensitive
 		{"prefix-sk-ant-oat-token", true}, // Contains sk-ant-oat
 		{"sk-ant-v2-oat-token", false},    // Does NOT contain sk-ant-oat (has sk-ant-v2-oat)
 	}
@@ -438,6 +450,7 @@ func TestOAuthEdge_IsOAuthTokenWithVariants(t *testing.T) {
 // TestOAuthEdge_SaveCredentialsPermissions tests that SaveCredentials creates
 // files with the correct permissions (0600).
 func TestOAuthEdge_SaveCredentialsPermissions(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	credFile := filepath.Join(tmpDir, ".torus", "auth.json")
 
@@ -467,6 +480,7 @@ func TestOAuthEdge_SaveCredentialsPermissions(t *testing.T) {
 
 // TestOAuthEdge_ExchangeCodeZeroExpiresIn tests exchangeCode when expires_in is 0.
 func TestOAuthEdge_ExchangeCodeZeroExpiresIn(t *testing.T) {
+	t.Parallel()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/v1/oauth/token" && r.Method == "POST" {
 			w.WriteHeader(http.StatusOK)
@@ -486,6 +500,7 @@ func TestOAuthEdge_ExchangeCodeZeroExpiresIn(t *testing.T) {
 
 // TestOAuthEdge_RefreshTokenNegativeExpiresIn tests RefreshToken when expires_in is negative.
 func TestOAuthEdge_RefreshTokenNegativeExpiresIn(t *testing.T) {
+	t.Parallel()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/v1/oauth/token" && r.Method == "POST" {
 			w.WriteHeader(http.StatusOK)
@@ -504,6 +519,7 @@ func TestOAuthEdge_RefreshTokenNegativeExpiresIn(t *testing.T) {
 
 // TestOAuthEdge_OAuthCredentialsWithLargeTimestamp tests OAuthCredentials with very large timestamps.
 func TestOAuthEdge_OAuthCredentialsWithLargeTimestamp(t *testing.T) {
+	t.Parallel()
 	largeTimestamp := int64(9999999999999) // Year ~318509
 
 	creds := &OAuthCredentials{
@@ -524,6 +540,7 @@ func TestOAuthEdge_OAuthCredentialsWithLargeTimestamp(t *testing.T) {
 
 // TestOAuthEdge_OAuthCredentialsWithZeroTimestamp tests OAuthCredentials with zero timestamp (epoch).
 func TestOAuthEdge_OAuthCredentialsWithZeroTimestamp(t *testing.T) {
+	t.Parallel()
 	creds := &OAuthCredentials{
 		Access:    "access-token",
 		Refresh:   "refresh-token",
@@ -550,6 +567,7 @@ func TestOAuthEdge_OAuthCredentialsWithZeroTimestamp(t *testing.T) {
 
 // TestOAuthEdge_ExchangeCodeValidation tests exchangeCode with various inputs.
 func TestOAuthEdge_ExchangeCodeValidation(t *testing.T) {
+	t.Parallel()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/v1/oauth/token" && r.Method == "POST" {
 			w.WriteHeader(http.StatusOK)
@@ -611,6 +629,7 @@ func TestOAuthEdge_ExchangeCodeValidation(t *testing.T) {
 
 // TestOAuthEdge_Base64URLEncodeEdgeCases tests base64URLEncode with edge cases.
 func TestOAuthEdge_Base64URLEncodeEdgeCases(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		input    []byte
@@ -655,6 +674,7 @@ func TestOAuthEdge_Base64URLEncodeEdgeCases(t *testing.T) {
 
 // TestOAuthEdge_GeneratePKCEFormat tests that generatePKCE output is URL-safe.
 func TestOAuthEdge_GeneratePKCEFormat(t *testing.T) {
+	t.Parallel()
 	verifier, challenge := generatePKCE()
 
 	// Verify URL-safe characters (no +, /, or =).
@@ -684,6 +704,7 @@ func TestOAuthEdge_GeneratePKCEFormat(t *testing.T) {
 
 // TestOAuthEdge_LoginAnthropicUserCancel tests LoginAnthropic when user cancels.
 func TestOAuthEdge_LoginAnthropicUserCancel(t *testing.T) {
+	t.Parallel()
 	urlCalled := false
 	onAuthURL := func(url string) {
 		urlCalled = true
@@ -719,6 +740,7 @@ func (e *cancelError) Error() string {
 
 // TestOAuthEdge_LoginAnthropicParseCodeHash tests LoginAnthropic parsing of code#state format.
 func TestOAuthEdge_LoginAnthropicParseCodeHash(t *testing.T) {
+	t.Parallel()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/v1/oauth/token" && r.Method == "POST" {
 			w.WriteHeader(http.StatusOK)
@@ -787,6 +809,7 @@ func TestOAuthEdge_LoginAnthropicParseCodeHash(t *testing.T) {
 // TestOAuthEdge_CredentialStorageDirectoryCreation tests that credentials directory
 // is created with proper permissions.
 func TestOAuthEdge_CredentialStorageDirectoryCreation(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	credFile := filepath.Join(tmpDir, ".torus", "nested", "auth.json")
 
@@ -813,6 +836,7 @@ func TestOAuthEdge_CredentialStorageDirectoryCreation(t *testing.T) {
 
 // TestOAuthEdge_OAuthCredentialsEmptyTokens tests OAuthCredentials with empty token strings.
 func TestOAuthEdge_OAuthCredentialsEmptyTokens(t *testing.T) {
+	t.Parallel()
 	creds := &OAuthCredentials{
 		Access:    "", // Empty access token
 		Refresh:   "", // Empty refresh token
@@ -841,6 +865,7 @@ func TestOAuthEdge_OAuthCredentialsEmptyTokens(t *testing.T) {
 
 // TestOAuthEdge_ResponseBodyReading tests that response bodies are properly read and decoded.
 func TestOAuthEdge_ResponseBodyReading(t *testing.T) {
+	t.Parallel()
 	responseBody := `{
 		"access_token": "test-access-token",
 		"refresh_token": "test-refresh-token",
@@ -874,6 +899,7 @@ func TestOAuthEdge_ResponseBodyReading(t *testing.T) {
 
 // TestOAuthEdge_CredentialJSONIndentation tests that credentials are saved with proper formatting.
 func TestOAuthEdge_CredentialJSONIndentation(t *testing.T) {
+	t.Parallel()
 	creds := &OAuthCredentials{
 		Access:    "test-access-token",
 		Refresh:   "test-refresh-token",

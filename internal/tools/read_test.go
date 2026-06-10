@@ -8,6 +8,7 @@ import (
 )
 
 func TestReadTool_ExistingFile(t *testing.T) {
+	t.Parallel()
 	// Setup: Create a temporary file with known content
 	tmpDir := t.TempDir()
 	testFile := filepath.Join(tmpDir, "test.txt")
@@ -50,6 +51,7 @@ func TestReadTool_ExistingFile(t *testing.T) {
 }
 
 func TestReadTool_NonexistentFile(t *testing.T) {
+	t.Parallel()
 	// Execute read tool on non-existent file
 	tool := readTool()
 	result, err := tool.Execute(map[string]any{"file_path": "/nonexistent/path/to/file.txt"})
@@ -70,6 +72,7 @@ func TestReadTool_NonexistentFile(t *testing.T) {
 }
 
 func TestReadTool_WithOffset(t *testing.T) {
+	t.Parallel()
 	// Setup: Create a temporary file with multiple lines
 	tmpDir := t.TempDir()
 	testFile := filepath.Join(tmpDir, "test.txt")
@@ -109,6 +112,7 @@ func TestReadTool_WithOffset(t *testing.T) {
 }
 
 func TestReadTool_WithLimit(t *testing.T) {
+	t.Parallel()
 	// Setup: Create a temporary file with multiple lines
 	tmpDir := t.TempDir()
 	testFile := filepath.Join(tmpDir, "test.txt")
@@ -150,6 +154,7 @@ func TestReadTool_WithLimit(t *testing.T) {
 }
 
 func TestReadTool_WithOffsetAndLimit(t *testing.T) {
+	t.Parallel()
 	// Setup: Create a temporary file with multiple lines
 	tmpDir := t.TempDir()
 	testFile := filepath.Join(tmpDir, "test.txt")
@@ -198,6 +203,7 @@ func TestReadTool_WithOffsetAndLimit(t *testing.T) {
 }
 
 func TestReadTool_EmptyFile(t *testing.T) {
+	t.Parallel()
 	// Setup: Create an empty temporary file
 	tmpDir := t.TempDir()
 	testFile := filepath.Join(tmpDir, "empty.txt")
@@ -223,6 +229,7 @@ func TestReadTool_EmptyFile(t *testing.T) {
 }
 
 func TestReadTool_OffsetBeyondFileLength(t *testing.T) {
+	t.Parallel()
 	// Setup: Create a temporary file with 3 lines
 	tmpDir := t.TempDir()
 	testFile := filepath.Join(tmpDir, "test.txt")
@@ -252,6 +259,7 @@ func TestReadTool_OffsetBeyondFileLength(t *testing.T) {
 }
 
 func TestReadTool_LineNumbering(t *testing.T) {
+	t.Parallel()
 	// Setup: Create a temporary file
 	tmpDir := t.TempDir()
 	testFile := filepath.Join(tmpDir, "test.txt")
@@ -286,6 +294,7 @@ func TestReadTool_LineNumbering(t *testing.T) {
 }
 
 func TestReadTool_FileWithSpecialCharacters(t *testing.T) {
+	t.Parallel()
 	// Setup: Create a file with special characters
 	tmpDir := t.TempDir()
 	testFile := filepath.Join(tmpDir, "special.txt")
@@ -322,6 +331,7 @@ func TestReadTool_FileWithSpecialCharacters(t *testing.T) {
 }
 
 func TestReadTool_Permissions(t *testing.T) {
+	t.Parallel()
 	// Setup: Create a file and remove read permissions
 	tmpDir := t.TempDir()
 	testFile := filepath.Join(tmpDir, "noperm.txt")

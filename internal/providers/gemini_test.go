@@ -28,6 +28,7 @@ func (m *mockGeminiTransport) RoundTrip(req *http.Request) (*http.Response, erro
 
 // TestNewGeminiProvider verifies that NewGeminiProvider creates a valid provider.
 func TestNewGeminiProvider(t *testing.T) {
+	t.Parallel()
 	apiKey := "test-api-key"
 	model := "gemini-2.0-flash"
 
@@ -68,6 +69,7 @@ func TestNewGeminiProvider(t *testing.T) {
 
 // TestNewVertexAIProvider verifies that NewVertexAIProvider creates a valid Vertex AI provider.
 func TestNewVertexAIProvider(t *testing.T) {
+	t.Parallel()
 	accessToken := "test-access-token"
 	project := "my-project"
 	region := "us-central1"
@@ -108,6 +110,7 @@ func TestNewVertexAIProvider(t *testing.T) {
 
 // TestGenerateURLGemini verifies URL generation for Gemini (API key auth).
 func TestGenerateURLGemini(t *testing.T) {
+	t.Parallel()
 	provider := NewGeminiProvider("test-key", "gemini-2.0-flash")
 
 	tests := []struct {
@@ -134,6 +137,7 @@ func TestGenerateURLGemini(t *testing.T) {
 
 // TestGenerateURLVertexAI verifies URL generation for Vertex AI (Bearer auth).
 func TestGenerateURLVertexAI(t *testing.T) {
+	t.Parallel()
 	provider := NewVertexAIProvider("access-token", "my-project", "us-central1", "gemini-2.0-flash")
 
 	tests := []struct {
@@ -160,6 +164,7 @@ func TestGenerateURLVertexAI(t *testing.T) {
 
 // TestSetGeminiAuthAPIKey verifies API key auth header handling.
 func TestSetGeminiAuthAPIKey(t *testing.T) {
+	t.Parallel()
 	provider := NewGeminiProvider("my-key", "gemini-2.0-flash")
 	req, _ := http.NewRequest("POST", "https://example.com", nil)
 
@@ -173,6 +178,7 @@ func TestSetGeminiAuthAPIKey(t *testing.T) {
 
 // TestSetGeminiAuthBearer verifies Bearer token auth header handling.
 func TestSetGeminiAuthBearer(t *testing.T) {
+	t.Parallel()
 	provider := NewVertexAIProvider("my-token", "project", "region", "model")
 	req, _ := http.NewRequest("POST", "https://example.com", nil)
 
@@ -186,6 +192,7 @@ func TestSetGeminiAuthBearer(t *testing.T) {
 
 // TestGeminiCompleteSuccess verifies a successful non-streaming completion.
 func TestGeminiCompleteSuccess(t *testing.T) {
+	t.Parallel()
 	provider := NewGeminiProvider("test-key", "gemini-2.0-flash")
 
 	mockResp := geminiResponse{
@@ -256,6 +263,7 @@ func TestGeminiCompleteSuccess(t *testing.T) {
 
 // TestGeminiCompleteWithToolUse verifies completion with tool use blocks.
 func TestGeminiCompleteWithToolUse(t *testing.T) {
+	t.Parallel()
 	provider := NewGeminiProvider("test-key", "gemini-2.0-flash")
 
 	mockResp := geminiResponse{
@@ -315,6 +323,7 @@ func TestGeminiCompleteWithToolUse(t *testing.T) {
 
 // TestGeminiCompleteAPIError verifies error handling for API responses.
 func TestGeminiCompleteAPIError(t *testing.T) {
+	t.Parallel()
 	provider := NewGeminiProvider("test-key", "gemini-2.0-flash")
 
 	provider.client = &http.Client{
@@ -337,6 +346,7 @@ func TestGeminiCompleteAPIError(t *testing.T) {
 
 // TestGeminiCompleteEmptyResponse verifies handling of empty candidates.
 func TestGeminiCompleteEmptyResponse(t *testing.T) {
+	t.Parallel()
 	provider := NewGeminiProvider("test-key", "gemini-2.0-flash")
 
 	mockResp := geminiResponse{
@@ -365,6 +375,7 @@ func TestGeminiCompleteEmptyResponse(t *testing.T) {
 
 // TestGeminiStreamCompleteSuccess verifies SSE streaming response parsing.
 func TestGeminiStreamCompleteSuccess(t *testing.T) {
+	t.Parallel()
 	provider := NewGeminiProvider("test-key", "gemini-2.0-flash")
 
 	sseBody := `data: {"candidates":[{"content":{"parts":[{"text":"Hello"}]},"finishReason":""}],"usageMetadata":{"promptTokenCount":5,"candidatesTokenCount":2,"totalTokenCount":7}}
@@ -421,6 +432,7 @@ data: {"candidates":[{"content":{"parts":[{"text":" world"}]},"finishReason":"ST
 
 // TestGeminiStreamCompleteAPIError verifies SSE error handling.
 func TestGeminiStreamCompleteAPIError(t *testing.T) {
+	t.Parallel()
 	provider := NewGeminiProvider("test-key", "gemini-2.0-flash")
 
 	provider.client = &http.Client{
@@ -443,6 +455,7 @@ func TestGeminiStreamCompleteAPIError(t *testing.T) {
 
 // TestToGeminiRole verifies role mapping.
 func TestToGeminiRole(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		role tp.Role
 		want string
@@ -462,6 +475,7 @@ func TestToGeminiRole(t *testing.T) {
 
 // TestGeminiStopReason verifies stop reason mapping.
 func TestGeminiStopReason(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		reason string
 		want   string
@@ -482,6 +496,7 @@ func TestGeminiStopReason(t *testing.T) {
 
 // TestToGeminiContents verifies message conversion to Gemini format.
 func TestToGeminiContents(t *testing.T) {
+	t.Parallel()
 	messages := []tp.Message{
 		{
 			Role: tp.RoleUser,
@@ -518,6 +533,7 @@ func TestToGeminiContents(t *testing.T) {
 
 // TestToGeminiTools verifies tool conversion to Gemini format.
 func TestToGeminiTools(t *testing.T) {
+	t.Parallel()
 	tools := []tp.Tool{
 		{
 			Name:        "get_weather",
@@ -553,6 +569,7 @@ func TestToGeminiTools(t *testing.T) {
 
 // TestToGeminiToolsEmpty verifies empty tools handling.
 func TestToGeminiToolsEmpty(t *testing.T) {
+	t.Parallel()
 	geminiTools := toGeminiTools(nil)
 
 	if len(geminiTools) != 0 {
@@ -610,6 +627,7 @@ func (c *captureStreamTransport) RoundTrip(req *http.Request) (*http.Response, e
 
 // TestGeminiCompleteDefaultMaxTokens verifies default max tokens handling.
 func TestGeminiCompleteDefaultMaxTokens(t *testing.T) {
+	t.Parallel()
 	provider := NewGeminiProvider("test-key", "gemini-2.0-flash")
 
 	capturedReq := &geminiRequest{}
@@ -630,6 +648,7 @@ func TestGeminiCompleteDefaultMaxTokens(t *testing.T) {
 
 // TestGeminiStreamCompleteDefaultMaxTokens verifies default max tokens in streaming.
 func TestGeminiStreamCompleteDefaultMaxTokens(t *testing.T) {
+	t.Parallel()
 	provider := NewGeminiProvider("test-key", "gemini-2.0-flash")
 
 	capturedReq := &geminiRequest{}
@@ -652,6 +671,7 @@ func TestGeminiStreamCompleteDefaultMaxTokens(t *testing.T) {
 
 // TestGeminiStreamThinkingDelta verifies that parts with thought:true emit EventThinkingDelta.
 func TestGeminiStreamThinkingDelta(t *testing.T) {
+	t.Parallel()
 	provider := NewGeminiProvider("test-key", "gemini-2.5-flash")
 
 	// Simulate Gemini SSE: first chunk has a thinking part, second has regular text.
@@ -719,6 +739,7 @@ data: {"candidates":[{"content":{"parts":[{"text":"The answer is 42."}]},"finish
 
 // TestGeminiCompleteThinkingPart verifies that non-streaming responses tag thinking parts correctly.
 func TestGeminiCompleteThinkingPart(t *testing.T) {
+	t.Parallel()
 	provider := NewGeminiProvider("test-key", "gemini-2.5-flash")
 
 	mockResp := geminiResponse{
@@ -774,6 +795,7 @@ func TestGeminiCompleteThinkingPart(t *testing.T) {
 
 // TestGeminiStreamThinkingOnly verifies a stream with only thinking parts (no regular text).
 func TestGeminiStreamThinkingOnly(t *testing.T) {
+	t.Parallel()
 	provider := NewGeminiProvider("test-key", "gemini-2.5-flash")
 
 	sseBody := `data: {"candidates":[{"content":{"parts":[{"text":"thinking only","thought":true}]},"finishReason":"STOP"}]}

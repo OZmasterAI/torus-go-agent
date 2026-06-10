@@ -11,6 +11,7 @@ import (
 
 // TestProviderEdge_MultipleAddWithSameProvider tests adding the same provider multiple times.
 func TestProviderEdge_MultipleAddWithSameProvider(t *testing.T) {
+	t.Parallel()
 	p1 := newMock("openai", "gpt-4")
 	p2 := newMock("openai", "gpt-4") // Same name and model, different instance
 	r := NewRouter(p1)
@@ -30,6 +31,7 @@ func TestProviderEdge_MultipleAddWithSameProvider(t *testing.T) {
 
 // TestProviderEdge_SwitchWithEmptyProviders tests switching when no providers registered.
 func TestProviderEdge_SwitchWithEmptyProviders(t *testing.T) {
+	t.Parallel()
 	p := newMock("openai", "gpt-4")
 	r := NewRouter(p)
 
@@ -47,6 +49,7 @@ func TestProviderEdge_SwitchWithEmptyProviders(t *testing.T) {
 
 // TestProviderEdge_CompleteWithContextCancellation tests handling of cancelled context.
 func TestProviderEdge_CompleteWithContextCancellation(t *testing.T) {
+	t.Parallel()
 	p := newMock("openai", "gpt-4")
 	r := NewRouter(p)
 
@@ -66,6 +69,7 @@ func TestProviderEdge_CompleteWithContextCancellation(t *testing.T) {
 
 // TestProviderEdge_WeightedRoutingWithNegativeWeights tests negative weight handling.
 func TestProviderEdge_WeightedRoutingWithNegativeWeights(t *testing.T) {
+	t.Parallel()
 	p1 := newMock("openai", "gpt-4")
 	p2 := newMock("anthropic", "claude-4")
 	r := NewRouter(p1)
@@ -86,6 +90,7 @@ func TestProviderEdge_WeightedRoutingWithNegativeWeights(t *testing.T) {
 
 // TestProviderEdge_WeightedRoutingWithZeroTotalWeight tests all-zero weights.
 func TestProviderEdge_WeightedRoutingWithZeroTotalWeight(t *testing.T) {
+	t.Parallel()
 	p1 := newMock("openai", "gpt-4")
 	p2 := newMock("anthropic", "claude-4")
 	r := NewRouter(p1)
@@ -105,6 +110,7 @@ func TestProviderEdge_WeightedRoutingWithZeroTotalWeight(t *testing.T) {
 
 // TestProviderEdge_FallbackWithUnregisteredKeys tests fallback order with unregistered provider keys.
 func TestProviderEdge_FallbackWithUnregisteredKeys(t *testing.T) {
+	t.Parallel()
 	failing := newFailingMock("openai", "gpt-4")
 	backup := newMock("anthropic", "claude-4")
 	r := NewRouter(failing)
@@ -132,6 +138,7 @@ func TestProviderEdge_FallbackWithUnregisteredKeys(t *testing.T) {
 
 // TestProviderEdge_CompleteWithContextTimeout tests behavior with context timeout during fallback.
 func TestProviderEdge_CompleteWithContextTimeout(t *testing.T) {
+	t.Parallel()
 	failing := newFailingMock("openai", "gpt-4")
 	backup := newMock("anthropic", "claude-4")
 	r := NewRouter(failing)
@@ -153,6 +160,7 @@ func TestProviderEdge_CompleteWithContextTimeout(t *testing.T) {
 
 // TestProviderEdge_StreamCompleteWithContextTimeout tests stream with context timeout.
 func TestProviderEdge_StreamCompleteWithContextTimeout(t *testing.T) {
+	t.Parallel()
 	failing := newFailingMock("openai", "gpt-4")
 	backup := newMock("anthropic", "claude-4")
 	r := NewRouter(failing)
@@ -175,6 +183,7 @@ func TestProviderEdge_StreamCompleteWithContextTimeout(t *testing.T) {
 
 // TestProviderEdge_RapidSwitching tests switching providers rapidly.
 func TestProviderEdge_RapidSwitching(t *testing.T) {
+	t.Parallel()
 	p1 := newMock("provider1", "model1")
 	p2 := newMock("provider2", "model2")
 	p3 := newMock("provider3", "model3")
@@ -210,6 +219,7 @@ func TestProviderEdge_RapidSwitching(t *testing.T) {
 
 // TestProviderEdge_WeightedPickWithSingleEntry tests weighted pick with a single entry.
 func TestProviderEdge_WeightedPickWithSingleEntry(t *testing.T) {
+	t.Parallel()
 	p1 := newMock("openai", "gpt-4")
 	p2 := newMock("anthropic", "claude-4")
 	r := NewRouter(p1)
@@ -242,6 +252,7 @@ func TestProviderEdge_WeightedPickWithSingleEntry(t *testing.T) {
 
 // TestProviderEdge_CompleteWithNilMessages tests Complete with nil messages slice.
 func TestProviderEdge_CompleteWithNilMessages(t *testing.T) {
+	t.Parallel()
 	p := newMock("openai", "gpt-4")
 	r := NewRouter(p)
 
@@ -256,6 +267,7 @@ func TestProviderEdge_CompleteWithNilMessages(t *testing.T) {
 
 // TestProviderEdge_CompleteWithEmptyMessages tests Complete with empty messages slice.
 func TestProviderEdge_CompleteWithEmptyMessages(t *testing.T) {
+	t.Parallel()
 	p := newMock("openai", "gpt-4")
 	r := NewRouter(p)
 
@@ -270,6 +282,7 @@ func TestProviderEdge_CompleteWithEmptyMessages(t *testing.T) {
 
 // TestProviderEdge_CompleteWithZeroMaxTokens tests Complete with maxTokens = 0.
 func TestProviderEdge_CompleteWithZeroMaxTokens(t *testing.T) {
+	t.Parallel()
 	p := newMock("openai", "gpt-4")
 	r := NewRouter(p)
 
@@ -284,6 +297,7 @@ func TestProviderEdge_CompleteWithZeroMaxTokens(t *testing.T) {
 
 // TestProviderEdge_FallbackExcludesCurrentProvider tests that fallback skips the primary provider.
 func TestProviderEdge_FallbackExcludesCurrentProvider(t *testing.T) {
+	t.Parallel()
 	failing := newFailingMock("primary", "1")
 	backup1 := newMock("backup1", "1")
 	backup2 := newMock("backup2", "1")
@@ -315,10 +329,11 @@ func TestProviderEdge_FallbackExcludesCurrentProvider(t *testing.T) {
 
 // TestProviderEdge_CompleteWithDifferentErrors tests that different error types are preserved.
 func TestProviderEdge_CompleteWithDifferentErrors(t *testing.T) {
+	t.Parallel()
 	customErr := errors.New("custom error: network timeout")
 	p1 := &mockProvider{
-		name:    "provider1",
-		modelID: "model1",
+		name:        "provider1",
+		modelID:     "model1",
 		completeErr: customErr,
 	}
 	p2 := newFailingMock("provider2", "model2")
@@ -339,10 +354,11 @@ func TestProviderEdge_CompleteWithDifferentErrors(t *testing.T) {
 
 // TestProviderEdge_StreamCompleteWithDifferentErrors tests that different error types are preserved in stream.
 func TestProviderEdge_StreamCompleteWithDifferentErrors(t *testing.T) {
+	t.Parallel()
 	customErr := errors.New("stream error: connection lost")
 	p1 := &mockProvider{
-		name:    "provider1",
-		modelID: "model1",
+		name:        "provider1",
+		modelID:     "model1",
 		completeErr: customErr,
 	}
 	p2 := newFailingMock("provider2", "model2")
@@ -363,6 +379,7 @@ func TestProviderEdge_StreamCompleteWithDifferentErrors(t *testing.T) {
 
 // TestProviderEdge_ActiveReturnsCurrentAfterSwitch tests that Active() reflects recent Switch changes.
 func TestProviderEdge_ActiveReturnsCurrentAfterSwitch(t *testing.T) {
+	t.Parallel()
 	p1 := newMock("openai", "gpt-4")
 	p2 := newMock("anthropic", "claude-4")
 	p3 := newMock("grok", "grok-2")
@@ -396,6 +413,7 @@ func TestProviderEdge_ActiveReturnsCurrentAfterSwitch(t *testing.T) {
 
 // TestProviderEdge_IsWeightedAfterSetWeightsNil tests IsWeighted after setting nil.
 func TestProviderEdge_IsWeightedAfterSetWeightsNil(t *testing.T) {
+	t.Parallel()
 	p1 := newMock("openai", "gpt-4")
 	p2 := newMock("anthropic", "claude-4")
 	r := NewRouter(p1)
@@ -425,6 +443,7 @@ func TestProviderEdge_IsWeightedAfterSetWeightsNil(t *testing.T) {
 
 // TestProviderEdge_SetFallbackOrderWithDuplicates tests fallback order with duplicate entries.
 func TestProviderEdge_SetFallbackOrderWithDuplicates(t *testing.T) {
+	t.Parallel()
 	failing := newFailingMock("openai", "gpt-4")
 	backup := newMock("anthropic", "claude-4")
 	r := NewRouter(failing)
@@ -449,6 +468,7 @@ func TestProviderEdge_SetFallbackOrderWithDuplicates(t *testing.T) {
 
 // TestProviderEdge_StreamCompleteChannelConsumption tests that stream channel is properly returned.
 func TestProviderEdge_StreamCompleteChannelConsumption(t *testing.T) {
+	t.Parallel()
 	p := newMock("openai", "gpt-4")
 	r := NewRouter(p)
 
@@ -475,6 +495,7 @@ func TestProviderEdge_StreamCompleteChannelConsumption(t *testing.T) {
 
 // TestProviderEdge_CompleteWithLargeMaxTokens tests Complete with very large maxTokens value.
 func TestProviderEdge_CompleteWithLargeMaxTokens(t *testing.T) {
+	t.Parallel()
 	p := newMock("openai", "gpt-4")
 	r := NewRouter(p)
 
@@ -489,6 +510,7 @@ func TestProviderEdge_CompleteWithLargeMaxTokens(t *testing.T) {
 
 // TestProviderEdge_AddProviderAfterSwitch tests adding a provider after switching.
 func TestProviderEdge_AddProviderAfterSwitch(t *testing.T) {
+	t.Parallel()
 	p1 := newMock("openai", "gpt-4")
 	p2 := newMock("anthropic", "claude-4")
 	r := NewRouter(p1)

@@ -7,6 +7,7 @@ import (
 )
 
 func TestNewAnthropicProvider(t *testing.T) {
+	t.Parallel()
 	apiKey := "sk-ant-abc123"
 	model := "claude-3-sonnet-20250219"
 
@@ -30,6 +31,7 @@ func TestNewAnthropicProvider(t *testing.T) {
 }
 
 func TestAnthropicProviderName(t *testing.T) {
+	t.Parallel()
 	p := NewAnthropicProvider("test-key", "claude-3-haiku")
 	name := p.Name()
 	if name != "anthropic" {
@@ -38,6 +40,7 @@ func TestAnthropicProviderName(t *testing.T) {
 }
 
 func TestAnthropicProviderModelID(t *testing.T) {
+	t.Parallel()
 	model := "claude-3-opus-20250219"
 	p := NewAnthropicProvider("test-key", model)
 	modelID := p.ModelID()
@@ -47,6 +50,7 @@ func TestAnthropicProviderModelID(t *testing.T) {
 }
 
 func TestSetHeadersWithAPIKey(t *testing.T) {
+	t.Parallel()
 	p := NewAnthropicProvider("sk-ant-abc123def456", "claude-3-sonnet")
 
 	req, _ := http.NewRequest("POST", "https://api.anthropic.com/v1/messages", nil)
@@ -74,6 +78,7 @@ func TestSetHeadersWithAPIKey(t *testing.T) {
 }
 
 func TestSetHeadersWithOAuthToken(t *testing.T) {
+	t.Parallel()
 	// OAuth tokens contain "sk-ant-oat"
 	p := NewAnthropicProvider("sk-ant-oat-abc123def456", "claude-3-sonnet")
 
@@ -125,6 +130,7 @@ func TestSetHeadersWithOAuthToken(t *testing.T) {
 }
 
 func TestIsOAuthToken(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name   string
 		token  string
@@ -168,6 +174,7 @@ func TestIsOAuthToken(t *testing.T) {
 }
 
 func TestAnthropicProviderComplete_MaxTokensCap(t *testing.T) {
+	t.Parallel()
 	p := NewAnthropicProvider("sk-ant-test", "claude-3-sonnet")
 
 	// Test that we don't make actual HTTP calls by mocking the client
@@ -189,6 +196,7 @@ func TestAnthropicProviderComplete_MaxTokensCap(t *testing.T) {
 }
 
 func TestAnthropicProviderImplementsProvider(t *testing.T) {
+	t.Parallel()
 	p := NewAnthropicProvider("sk-ant-test", "claude-3-sonnet")
 
 	// Verify it implements the Provider interface
@@ -228,6 +236,7 @@ func indexOfSubstring(s, substr string) int {
 // TestCompleteWithMockedHTTPClient tests Complete by mocking the HTTP client.
 // This test verifies message conversion without making real API calls.
 func TestCompleteWithMessages(t *testing.T) {
+	t.Parallel()
 	p := NewAnthropicProvider("sk-ant-test", "claude-3-sonnet")
 
 	// We can't easily test Complete without a real HTTP client or mocking.
@@ -240,6 +249,7 @@ func TestCompleteWithMessages(t *testing.T) {
 
 // TestAnthropicProviderWithDifferentModels verifies provider works with different model IDs.
 func TestAnthropicProviderWithDifferentModels(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name  string
 		model string
@@ -264,6 +274,7 @@ func TestAnthropicProviderWithDifferentModels(t *testing.T) {
 
 // TestAnthropicConstantsAreSet verifies that API constants are properly defined.
 func TestAnthropicConstantsAreSet(t *testing.T) {
+	t.Parallel()
 	if anthropicBaseURL == "" {
 		t.Fatal("anthropicBaseURL should not be empty")
 	}

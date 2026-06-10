@@ -9,6 +9,7 @@ import (
 )
 
 func TestStartTUISignature(t *testing.T) {
+	t.Parallel()
 	// Verify StartTUI compiles and has the right signature.
 	// We cannot actually run it because it launches a terminal program,
 	// but we can verify the function exists and accepts the right types.

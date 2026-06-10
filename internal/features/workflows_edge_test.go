@@ -15,6 +15,7 @@ import (
 
 // TestWorkflowsEdge_RunSequentialEmptyAgentsList tests RunSequential with empty agents list
 func TestWorkflowsEdge_RunSequentialEmptyAgentsList(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	mgr := NewSubAgentManager()
 	provider := &mockProvider{name: "test", modelID: "test-model", cannedText: "response"}
@@ -31,6 +32,7 @@ func TestWorkflowsEdge_RunSequentialEmptyAgentsList(t *testing.T) {
 
 // TestWorkflowsEdge_RunParallelEmptyAgentsList tests RunParallel with empty agents list
 func TestWorkflowsEdge_RunParallelEmptyAgentsList(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	mgr := NewSubAgentManager()
 	provider := &mockProvider{name: "test", modelID: "test-model", cannedText: "response"}
@@ -50,6 +52,7 @@ func TestWorkflowsEdge_RunParallelEmptyAgentsList(t *testing.T) {
 
 // TestWorkflowsEdge_RunLoopEmptyAgentsList tests RunLoop with empty agent config (empty task)
 func TestWorkflowsEdge_RunLoopEmptyTask(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	mgr := NewSubAgentManager()
 	provider := &mockProvider{name: "test", modelID: "test-model", cannedText: "response"}
@@ -72,6 +75,7 @@ func TestWorkflowsEdge_RunLoopEmptyTask(t *testing.T) {
 
 // TestWorkflowsEdge_RunSequentialFirstStepFails tests when first agent in sequence fails
 func TestWorkflowsEdge_RunSequentialFirstStepFails(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	mgr := NewSubAgentManager()
 
@@ -101,6 +105,7 @@ func TestWorkflowsEdge_RunSequentialFirstStepFails(t *testing.T) {
 
 // TestWorkflowsEdge_RunParallelPartialFailure tests RunParallel when some agents fail
 func TestWorkflowsEdge_RunParallelPartialFailure(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	mgr := NewSubAgentManager()
 
@@ -130,6 +135,7 @@ func TestWorkflowsEdge_RunParallelPartialFailure(t *testing.T) {
 
 // TestWorkflowsEdge_RunLoopStepFailure tests RunLoop when agent step fails
 func TestWorkflowsEdge_RunLoopStepFailure(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	mgr := NewSubAgentManager()
 
@@ -158,6 +164,7 @@ func TestWorkflowsEdge_RunLoopStepFailure(t *testing.T) {
 
 // TestWorkflowsEdge_RunLoopMaxIterationsExceeded tests RunLoop respects maxIterations limit
 func TestWorkflowsEdge_RunLoopMaxIterationsExceeded(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	mgr := NewSubAgentManager()
 	provider := &mockProvider{name: "test", modelID: "test-model", cannedText: "response"}
@@ -186,6 +193,7 @@ func TestWorkflowsEdge_RunLoopMaxIterationsExceeded(t *testing.T) {
 
 // TestWorkflowsEdge_RunLoopZeroMaxIterations tests RunLoop with unlimited iterations (maxIterations=0)
 func TestWorkflowsEdge_RunLoopZeroMaxIterations(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	mgr := NewSubAgentManager()
 	provider := &mockProvider{name: "test", modelID: "test-model", cannedText: "response"}
@@ -214,6 +222,7 @@ func TestWorkflowsEdge_RunLoopZeroMaxIterations(t *testing.T) {
 
 // TestWorkflowsEdge_RunSequentialContextCancellation tests RunSequential with cancelled context
 func TestWorkflowsEdge_RunSequentialContextCancellation(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel() // Cancel immediately
 
@@ -237,6 +246,7 @@ func TestWorkflowsEdge_RunSequentialContextCancellation(t *testing.T) {
 
 // TestWorkflowsEdge_RunParallelContextCancellation tests RunParallel with cancelled context
 func TestWorkflowsEdge_RunParallelContextCancellation(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel() // Cancel immediately
 
@@ -261,6 +271,7 @@ func TestWorkflowsEdge_RunParallelContextCancellation(t *testing.T) {
 
 // TestWorkflowsEdge_RunLoopContextTimeout tests RunLoop with context timeout
 func TestWorkflowsEdge_RunLoopContextTimeout(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Millisecond)
 	defer cancel()
 
@@ -284,6 +295,7 @@ func TestWorkflowsEdge_RunLoopContextTimeout(t *testing.T) {
 
 // TestWorkflowsEdge_RunSequentialManyAgents tests RunSequential with many agents
 func TestWorkflowsEdge_RunSequentialManyAgents(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	mgr := NewSubAgentManager()
 	provider := &mockProvider{name: "test", modelID: "test-model", cannedText: "response"}
@@ -311,6 +323,7 @@ func TestWorkflowsEdge_RunSequentialManyAgents(t *testing.T) {
 
 // TestWorkflowsEdge_RunParallelManyAgents tests RunParallel with many agents (concurrency stress)
 func TestWorkflowsEdge_RunParallelManyAgents(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("skipping long-running test in short mode")
 	}
@@ -342,6 +355,7 @@ func TestWorkflowsEdge_RunParallelManyAgents(t *testing.T) {
 
 // TestWorkflowsEdge_RunLoopManyIterations tests RunLoop with many iterations
 func TestWorkflowsEdge_RunLoopManyIterations(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("skipping long-running test in short mode")
 	}
@@ -373,6 +387,7 @@ func TestWorkflowsEdge_RunLoopManyIterations(t *testing.T) {
 
 // TestWorkflowsEdge_RunLoopNilShouldStop tests RunLoop with nil shouldStop callback
 func TestWorkflowsEdge_RunLoopNilShouldStop(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	mgr := NewSubAgentManager()
 	provider := &mockProvider{name: "test", modelID: "test-model", cannedText: "response"}
@@ -394,6 +409,7 @@ func TestWorkflowsEdge_RunLoopNilShouldStop(t *testing.T) {
 
 // TestWorkflowsEdge_RunSequentialNilProvider tests RunSequential with nil provider (should error in spawn)
 func TestWorkflowsEdge_RunSequentialNilProvider(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	mgr := NewSubAgentManager()
 
@@ -414,6 +430,7 @@ func TestWorkflowsEdge_RunSequentialNilProvider(t *testing.T) {
 
 // TestWorkflowsEdge_RunParallelNilProvider tests RunParallel with nil provider
 func TestWorkflowsEdge_RunParallelNilProvider(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	mgr := NewSubAgentManager()
 
@@ -434,6 +451,7 @@ func TestWorkflowsEdge_RunParallelNilProvider(t *testing.T) {
 
 // TestWorkflowsEdge_RunLoopNilProvider tests RunLoop with nil provider
 func TestWorkflowsEdge_RunLoopNilProvider(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	mgr := NewSubAgentManager()
 
@@ -454,6 +472,7 @@ func TestWorkflowsEdge_RunLoopNilProvider(t *testing.T) {
 
 // TestWorkflowsEdge_RunSequentialOutputChaining tests that outputs are properly chained
 func TestWorkflowsEdge_RunSequentialOutputChaining(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	mgr := NewSubAgentManager()
 
@@ -477,6 +496,7 @@ func TestWorkflowsEdge_RunSequentialOutputChaining(t *testing.T) {
 
 // TestWorkflowsEdge_RunLoopOutputAccumulation tests that RunLoop accumulates outputs across iterations
 func TestWorkflowsEdge_RunLoopOutputAccumulation(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	mgr := NewSubAgentManager()
 	provider := &mockProvider{name: "test", modelID: "test-model", cannedText: "iter_output"}
@@ -504,6 +524,7 @@ func TestWorkflowsEdge_RunLoopOutputAccumulation(t *testing.T) {
 
 // TestWorkflowsEdge_ConcurrentSequentialWorkflows tests multiple sequential workflows running concurrently
 func TestWorkflowsEdge_ConcurrentSequentialWorkflows(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("skipping concurrency test in short mode")
 	}
@@ -542,6 +563,7 @@ func TestWorkflowsEdge_ConcurrentSequentialWorkflows(t *testing.T) {
 
 // TestWorkflowsEdge_ConcurrentParallelWorkflows tests multiple parallel workflows running concurrently
 func TestWorkflowsEdge_ConcurrentParallelWorkflows(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("skipping concurrency test in short mode")
 	}
@@ -581,6 +603,7 @@ func TestWorkflowsEdge_ConcurrentParallelWorkflows(t *testing.T) {
 
 // TestWorkflowsEdge_ConcurrentLoopWorkflows tests multiple loop workflows running concurrently
 func TestWorkflowsEdge_ConcurrentLoopWorkflows(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("skipping concurrency test in short mode")
 	}
@@ -624,6 +647,7 @@ func TestWorkflowsEdge_ConcurrentLoopWorkflows(t *testing.T) {
 
 // TestWorkflowsEdge_RunSequentialProviderStreamError tests RunSequential when provider stream fails
 func TestWorkflowsEdge_RunSequentialProviderStreamError(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	mgr := NewSubAgentManager()
 
@@ -652,6 +676,7 @@ func TestWorkflowsEdge_RunSequentialProviderStreamError(t *testing.T) {
 
 // TestWorkflowsEdge_RunParallelProviderStreamError tests RunParallel when provider stream fails
 func TestWorkflowsEdge_RunParallelProviderStreamError(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	mgr := NewSubAgentManager()
 
@@ -683,6 +708,7 @@ func TestWorkflowsEdge_RunParallelProviderStreamError(t *testing.T) {
 
 // TestWorkflowsEdge_RaceConditionParallelModification tests potential race conditions
 func TestWorkflowsEdge_RaceConditionParallelModification(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("skipping race condition test in short mode")
 	}
@@ -730,6 +756,7 @@ func TestWorkflowsEdge_RaceConditionParallelModification(t *testing.T) {
 
 // TestWorkflowsEdge_SpecialCharactersInTask tests workflows with special characters in task strings
 func TestWorkflowsEdge_SpecialCharactersInTask(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	mgr := NewSubAgentManager()
 	provider := &mockProvider{name: "test", modelID: "test-model", cannedText: "response"}
@@ -755,6 +782,7 @@ func TestWorkflowsEdge_SpecialCharactersInTask(t *testing.T) {
 
 // TestWorkflowsEdge_LargeTaskString tests workflows with moderately large task strings
 func TestWorkflowsEdge_LargeTaskString(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("skipping large data test in short mode")
 	}

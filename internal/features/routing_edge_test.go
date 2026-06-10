@@ -8,6 +8,7 @@ import (
 
 // TestRoutingEdge_UnicodeAndMultibyte tests handling of Unicode and multibyte characters
 func TestRoutingEdge_UnicodeAndMultibyte(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		text     string
@@ -62,6 +63,7 @@ func TestRoutingEdge_UnicodeAndMultibyte(t *testing.T) {
 
 // TestRoutingEdge_BoundaryConditions tests exact boundary values
 func TestRoutingEdge_BoundaryConditions(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		text     string
@@ -116,6 +118,7 @@ func TestRoutingEdge_BoundaryConditions(t *testing.T) {
 
 // TestRoutingEdge_KeywordPartialMatches tests keyword detection with partial matches
 func TestRoutingEdge_KeywordPartialMatches(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		text     string
@@ -200,6 +203,7 @@ func TestRoutingEdge_KeywordPartialMatches(t *testing.T) {
 
 // TestRoutingEdge_CodeBlockVariants tests various code block patterns
 func TestRoutingEdge_CodeBlockVariants(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		text     string
@@ -254,6 +258,7 @@ func TestRoutingEdge_CodeBlockVariants(t *testing.T) {
 
 // TestRoutingEdge_URLVariants tests various URL patterns
 func TestRoutingEdge_URLVariants(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		text     string
@@ -333,6 +338,7 @@ func TestRoutingEdge_URLVariants(t *testing.T) {
 
 // TestRoutingEdge_CombinedComplexity tests combinations of complexity factors
 func TestRoutingEdge_CombinedComplexity(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		text     string
@@ -392,6 +398,7 @@ func TestRoutingEdge_CombinedComplexity(t *testing.T) {
 
 // TestRoutingEdge_WhitespaceHandling tests various whitespace scenarios
 func TestRoutingEdge_WhitespaceHandling(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		text     string
@@ -446,6 +453,7 @@ func TestRoutingEdge_WhitespaceHandling(t *testing.T) {
 
 // TestRoutingEdge_KeywordCaseSensitivity tests case sensitivity of keyword matching
 func TestRoutingEdge_KeywordCaseSensitivity(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		text     string
@@ -495,6 +503,7 @@ func TestRoutingEdge_KeywordCaseSensitivity(t *testing.T) {
 
 // TestRoutingEdge_SpecialCharactersAndSymbols tests messages with special characters
 func TestRoutingEdge_SpecialCharactersAndSymbols(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		text     string
@@ -564,6 +573,7 @@ func TestRoutingEdge_SpecialCharactersAndSymbols(t *testing.T) {
 
 // TestRoutingEdge_NullAndControlCharacters tests null bytes and control characters
 func TestRoutingEdge_NullAndControlCharacters(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		text     string
@@ -608,6 +618,7 @@ func TestRoutingEdge_NullAndControlCharacters(t *testing.T) {
 
 // TestRoutingEdge_Byte_vs_RuneLength validates byte vs rune handling
 func TestRoutingEdge_Byte_vs_RuneLength(t *testing.T) {
+	t.Parallel()
 	// This test validates that the function uses byte length (len()) not rune length
 	// A string with 159 ASCII characters is 159 bytes
 	asciiString := strings.Repeat("x", 159)
@@ -632,6 +643,7 @@ func TestRoutingEdge_Byte_vs_RuneLength(t *testing.T) {
 
 // TestRoutingEdge_LargePaddedStrings tests strings padded to exact boundaries with various content
 func TestRoutingEdge_LargePaddedStrings(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		textFunc func() string

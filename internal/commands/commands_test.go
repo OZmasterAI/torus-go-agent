@@ -48,6 +48,7 @@ func headID(t *testing.T, dag *core.DAG) string {
 // ---------------------------------------------------------------------------
 
 func TestParseForkArgs(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		input      string
 		wantAction string
@@ -76,6 +77,7 @@ func TestParseForkArgs(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestParseSwitchArgs(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		input    string
 		wantMode string
@@ -103,6 +105,7 @@ func TestParseSwitchArgs(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestAlias_SetOnHead(t *testing.T) {
+	t.Parallel()
 	dag := newTestDAG(t)
 	nodeID := addNode(t, dag, "", types.RoleUser, "hello")
 
@@ -125,6 +128,7 @@ func TestAlias_SetOnHead(t *testing.T) {
 }
 
 func TestAlias_SetOnSpecificNode(t *testing.T) {
+	t.Parallel()
 	dag := newTestDAG(t)
 	node1 := addNode(t, dag, "", types.RoleUser, "first")
 	_ = addNode(t, dag, node1, types.RoleAssistant, "second") // head is now node2
@@ -148,6 +152,7 @@ func TestAlias_SetOnSpecificNode(t *testing.T) {
 }
 
 func TestAlias_RemoveAliases(t *testing.T) {
+	t.Parallel()
 	dag := newTestDAG(t)
 	nodeID := addNode(t, dag, "", types.RoleUser, "hello")
 
@@ -176,6 +181,7 @@ func TestAlias_RemoveAliases(t *testing.T) {
 }
 
 func TestAlias_NoHead_ReturnsError(t *testing.T) {
+	t.Parallel()
 	dag := newTestDAG(t)
 	// Branch is empty — no head.
 	_, err := Alias(dag, "", "whatever")
@@ -189,6 +195,7 @@ func TestAlias_NoHead_ReturnsError(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestNew_CreatesBranch(t *testing.T) {
+	t.Parallel()
 	dag := newTestDAG(t)
 	origID := dag.CurrentBranchID()
 
@@ -209,6 +216,7 @@ func TestNew_CreatesBranch(t *testing.T) {
 }
 
 func TestNew_BranchHasEmptyHead(t *testing.T) {
+	t.Parallel()
 	dag := newTestDAG(t)
 	// Add a node on the original branch first.
 	_ = addNode(t, dag, "", types.RoleUser, "original message")
@@ -232,6 +240,7 @@ func TestNew_BranchHasEmptyHead(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestClear_ResetsHead(t *testing.T) {
+	t.Parallel()
 	dag := newTestDAG(t)
 	_ = addNode(t, dag, "", types.RoleUser, "message 1")
 	// Head is non-empty.
@@ -254,6 +263,7 @@ func TestClear_ResetsHead(t *testing.T) {
 }
 
 func TestClear_EmptyBranch_NoError(t *testing.T) {
+	t.Parallel()
 	dag := newTestDAG(t)
 	// Branch has no nodes — Clear should succeed without error.
 	if err := Clear(dag, nil); err != nil {
@@ -266,6 +276,7 @@ func TestClear_EmptyBranch_NoError(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestForkFromHead_CreatesBranch(t *testing.T) {
+	t.Parallel()
 	dag := newTestDAG(t)
 	origBranch := dag.CurrentBranchID()
 	_ = addNode(t, dag, "", types.RoleUser, "root message")
@@ -280,6 +291,7 @@ func TestForkFromHead_CreatesBranch(t *testing.T) {
 }
 
 func TestForkFromHead_NoHead_ReturnsError(t *testing.T) {
+	t.Parallel()
 	dag := newTestDAG(t)
 	_, err := ForkFromHead(dag, "fork-from-empty")
 	if err == nil {
@@ -288,6 +300,7 @@ func TestForkFromHead_NoHead_ReturnsError(t *testing.T) {
 }
 
 func TestFork_ByNodeID(t *testing.T) {
+	t.Parallel()
 	dag := newTestDAG(t)
 	node1 := addNode(t, dag, "", types.RoleUser, "node 1")
 	_ = addNode(t, dag, node1, types.RoleAssistant, "node 2")
@@ -302,6 +315,7 @@ func TestFork_ByNodeID(t *testing.T) {
 }
 
 func TestFork_ByAlias(t *testing.T) {
+	t.Parallel()
 	dag := newTestDAG(t)
 	node1 := addNode(t, dag, "", types.RoleUser, "aliased node")
 	if err := dag.SetAlias(node1, "checkpoint"); err != nil {
@@ -319,6 +333,7 @@ func TestFork_ByAlias(t *testing.T) {
 }
 
 func TestForkBack_OneStep(t *testing.T) {
+	t.Parallel()
 	dag := newTestDAG(t)
 	n1 := addNode(t, dag, "", types.RoleUser, "msg1")
 	n2 := addNode(t, dag, n1, types.RoleAssistant, "msg2")
@@ -334,6 +349,7 @@ func TestForkBack_OneStep(t *testing.T) {
 }
 
 func TestForkBack_MoreThanAvailable_ClampsToRoot(t *testing.T) {
+	t.Parallel()
 	dag := newTestDAG(t)
 	n1 := addNode(t, dag, "", types.RoleUser, "only node")
 	_ = n1
@@ -349,6 +365,7 @@ func TestForkBack_MoreThanAvailable_ClampsToRoot(t *testing.T) {
 }
 
 func TestForkBack_NoHead_ReturnsError(t *testing.T) {
+	t.Parallel()
 	dag := newTestDAG(t)
 	_, err := ForkBack(dag, 1, "no-head")
 	if err == nil {
@@ -361,6 +378,7 @@ func TestForkBack_NoHead_ReturnsError(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestListBranches_InitialState(t *testing.T) {
+	t.Parallel()
 	dag := newTestDAG(t)
 	branches, err := ListBranches(dag)
 	if err != nil {
@@ -375,6 +393,7 @@ func TestListBranches_InitialState(t *testing.T) {
 }
 
 func TestListBranches_AfterNew(t *testing.T) {
+	t.Parallel()
 	dag := newTestDAG(t)
 	_, err := New(dag, nil)
 	if err != nil {
@@ -400,6 +419,7 @@ func TestListBranches_AfterNew(t *testing.T) {
 }
 
 func TestListBranches_MessageCountIncludesAncestors(t *testing.T) {
+	t.Parallel()
 	dag := newTestDAG(t)
 	n1 := addNode(t, dag, "", types.RoleUser, "msg1")
 	_ = addNode(t, dag, n1, types.RoleAssistant, "msg2")
@@ -422,6 +442,7 @@ func TestListBranches_MessageCountIncludesAncestors(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestListMessages_OrderAndContent(t *testing.T) {
+	t.Parallel()
 	dag := newTestDAG(t)
 	n1 := addNode(t, dag, "", types.RoleUser, "hello world")
 	n2 := addNode(t, dag, n1, types.RoleAssistant, "hi there")
@@ -447,6 +468,7 @@ func TestListMessages_OrderAndContent(t *testing.T) {
 }
 
 func TestListMessages_PreviewTruncation(t *testing.T) {
+	t.Parallel()
 	dag := newTestDAG(t)
 	long := strings.Repeat("a", 200)
 	_ = addNode(t, dag, "", types.RoleUser, long)
@@ -469,6 +491,7 @@ func TestListMessages_PreviewTruncation(t *testing.T) {
 }
 
 func TestListMessages_IncludesAliases(t *testing.T) {
+	t.Parallel()
 	dag := newTestDAG(t)
 	nodeID := addNode(t, dag, "", types.RoleUser, "aliased message")
 	if err := dag.SetAlias(nodeID, "tagged"); err != nil {
@@ -489,6 +512,7 @@ func TestListMessages_IncludesAliases(t *testing.T) {
 }
 
 func TestListMessages_EmptyBranch_ReturnsError(t *testing.T) {
+	t.Parallel()
 	dag := newTestDAG(t)
 	branchID := dag.CurrentBranchID()
 	_, err := ListMessages(dag, branchID)
@@ -502,6 +526,7 @@ func TestListMessages_EmptyBranch_ReturnsError(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestSteering_DefaultIsmild(t *testing.T) {
+	t.Parallel()
 	dag := newTestDAG(t)
 	agent := core.NewAgent(types.AgentConfig{}, nil, nil, dag)
 
@@ -512,6 +537,7 @@ func TestSteering_DefaultIsmild(t *testing.T) {
 }
 
 func TestSteering_SetAggressive(t *testing.T) {
+	t.Parallel()
 	dag := newTestDAG(t)
 	agent := core.NewAgent(types.AgentConfig{}, nil, nil, dag)
 
@@ -525,6 +551,7 @@ func TestSteering_SetAggressive(t *testing.T) {
 }
 
 func TestSteering_SetMild(t *testing.T) {
+	t.Parallel()
 	dag := newTestDAG(t)
 	agent := core.NewAgent(types.AgentConfig{}, nil, nil, dag)
 	agent.SetSteeringMode("aggressive") // start in aggressive
@@ -539,6 +566,7 @@ func TestSteering_SetMild(t *testing.T) {
 }
 
 func TestSteering_UnknownMode_ReturnsError(t *testing.T) {
+	t.Parallel()
 	dag := newTestDAG(t)
 	agent := core.NewAgent(types.AgentConfig{}, nil, nil, dag)
 
@@ -553,6 +581,7 @@ func TestSteering_UnknownMode_ReturnsError(t *testing.T) {
 }
 
 func TestSteering_CaseInsensitive(t *testing.T) {
+	t.Parallel()
 	dag := newTestDAG(t)
 	agent := core.NewAgent(types.AgentConfig{}, nil, nil, dag)
 

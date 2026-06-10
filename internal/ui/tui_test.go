@@ -7,6 +7,7 @@ package ui
 import "testing"
 
 func TestTuiPackageImport(t *testing.T) {
+	t.Parallel()
 	// Verify the ui package compiles and is importable.
 	// This is a placeholder; real tests are in companion files.
 	t.Log("ui package loaded successfully")

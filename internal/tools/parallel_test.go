@@ -12,6 +12,7 @@ import (
 )
 
 func TestParallelRead(tt *testing.T) {
+	tt.Parallel()
 	allTools := tools.BuildDefaultTools()
 	var readTool *types.Tool
 	for i := range allTools {

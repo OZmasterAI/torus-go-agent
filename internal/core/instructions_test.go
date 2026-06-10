@@ -9,6 +9,7 @@ import (
 
 // TestDiscoverInstructionFiles verifies discovery order with TORUS.md at root and subdirectory.
 func TestDiscoverInstructionFiles(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
 	// Create .git so root is recognized as git root.
 	os.Mkdir(filepath.Join(root, ".git"), 0755)
@@ -66,6 +67,7 @@ func TestDiscoverInstructionFiles(t *testing.T) {
 
 // TestDiscoverInstructionFiles_TorusDir verifies .torus/TORUS.md and .torus/rules/*.md are found.
 func TestDiscoverInstructionFiles_TorusDir(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
 	os.Mkdir(filepath.Join(root, ".git"), 0755)
 
@@ -111,6 +113,7 @@ func TestDiscoverInstructionFiles_TorusDir(t *testing.T) {
 
 // TestDiscoverInstructionFiles_LocalOverride verifies TORUS.local.md appears last with MemoryTypeLocal.
 func TestDiscoverInstructionFiles_LocalOverride(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
 	os.Mkdir(filepath.Join(root, ".git"), 0755)
 	os.WriteFile(filepath.Join(root, "TORUS.md"), []byte("root"), 0644)
@@ -144,6 +147,7 @@ func TestDiscoverInstructionFiles_LocalOverride(t *testing.T) {
 
 // TestParseFrontmatter_WithPaths tests content with YAML frontmatter containing paths.
 func TestParseFrontmatter_WithPaths(t *testing.T) {
+	t.Parallel()
 	content := "---\npaths:\n- *.go\n- internal/**\n---\nBody here"
 
 	paths, body := ParseFrontmatter(content)
@@ -164,6 +168,7 @@ func TestParseFrontmatter_WithPaths(t *testing.T) {
 
 // TestParseFrontmatter_NoPaths tests content without frontmatter.
 func TestParseFrontmatter_NoPaths(t *testing.T) {
+	t.Parallel()
 	content := "Just some regular content\nwith multiple lines"
 
 	paths, body := ParseFrontmatter(content)
@@ -181,6 +186,7 @@ func TestParseFrontmatter_NoPaths(t *testing.T) {
 // so an empty block is "---\n\n---\n". A "---\n---\n" sequence (no content
 // between delimiters) does not parse as valid frontmatter.
 func TestParseFrontmatter_Empty(t *testing.T) {
+	t.Parallel()
 	// Empty block with blank line between delimiters.
 	content := "---\n\n---\nBody after empty frontmatter"
 
@@ -206,6 +212,7 @@ func TestParseFrontmatter_Empty(t *testing.T) {
 
 // TestExpandIncludes verifies basic @include expansion between two files.
 func TestExpandIncludes(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	dir, _ = filepath.EvalSymlinks(dir) // t.TempDir may sit under a symlink
 
@@ -230,6 +237,7 @@ func TestExpandIncludes(t *testing.T) {
 
 // TestExpandIncludes_Circular verifies circular references do not cause infinite loops.
 func TestExpandIncludes_Circular(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	dir, _ = filepath.EvalSymlinks(dir) // t.TempDir may sit under a symlink
 
@@ -259,6 +267,7 @@ func TestExpandIncludes_Circular(t *testing.T) {
 
 // TestExpandIncludes_MissingFile verifies @nonexistent.md is silently skipped.
 func TestExpandIncludes_MissingFile(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	dir, _ = filepath.EvalSymlinks(dir) // t.TempDir may sit under a symlink
 
@@ -278,6 +287,7 @@ func TestExpandIncludes_MissingFile(t *testing.T) {
 
 // TestExpandIncludes_InCodeBlock verifies @ inside code blocks is NOT expanded.
 func TestExpandIncludes_InCodeBlock(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	dir, _ = filepath.EvalSymlinks(dir) // t.TempDir may sit under a symlink
 	os.WriteFile(filepath.Join(dir, "other.md"), []byte("SHOULD NOT APPEAR"), 0644)
@@ -295,6 +305,7 @@ func TestExpandIncludes_InCodeBlock(t *testing.T) {
 
 // TestExpandIncludes_TraversalEscape verifies ../ traversal cannot escape the allowed roots.
 func TestExpandIncludes_TraversalEscape(t *testing.T) {
+	t.Parallel()
 	base := t.TempDir()
 	base, _ = filepath.EvalSymlinks(base) // t.TempDir may sit under a symlink
 	dirA := filepath.Join(base, "a")
@@ -317,6 +328,7 @@ func TestExpandIncludes_TraversalEscape(t *testing.T) {
 // TestExpandIncludes_AbsoluteOutsideAllowlist verifies absolute paths outside
 // the allowed roots are silently skipped.
 func TestExpandIncludes_AbsoluteOutsideAllowlist(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	dir, _ = filepath.EvalSymlinks(dir) // t.TempDir may sit under a symlink
 	outside := t.TempDir()
@@ -339,6 +351,7 @@ func TestExpandIncludes_AbsoluteOutsideAllowlist(t *testing.T) {
 // TestExpandIncludes_SymlinkEscape verifies a symlink inside an allowed root
 // pointing outside it is skipped.
 func TestExpandIncludes_SymlinkEscape(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
 	root, _ = filepath.EvalSymlinks(root) // t.TempDir may sit under a symlink
 	outside := t.TempDir()
@@ -388,6 +401,7 @@ func TestExpandIncludes_HomeEscape(t *testing.T) {
 // TestExpandIncludes_LegitNestedStillWorks verifies nested includes (including
 // ../ hops that stay inside the allowed root) keep working after the allowlist.
 func TestExpandIncludes_LegitNestedStillWorks(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
 	root, _ = filepath.EvalSymlinks(root) // t.TempDir may sit under a symlink
 	sub := filepath.Join(root, "sub")
@@ -407,6 +421,7 @@ func TestExpandIncludes_LegitNestedStillWorks(t *testing.T) {
 
 // TestBuildPrompt_AllUnconditional verifies files without Paths are always included.
 func TestBuildPrompt_AllUnconditional(t *testing.T) {
+	t.Parallel()
 	files := []InstructionFile{
 		{Content: "first", MemType: MemoryTypeProject},
 		{Content: "second", MemType: MemoryTypeUser},
@@ -428,6 +443,7 @@ func TestBuildPrompt_AllUnconditional(t *testing.T) {
 
 // TestBuildPrompt_ConditionalMatches verifies conditional file included when glob matches.
 func TestBuildPrompt_ConditionalMatches(t *testing.T) {
+	t.Parallel()
 	files := []InstructionFile{
 		{Content: "always present", MemType: MemoryTypeProject},
 		{Content: "go rules", MemType: MemoryTypeProject, Paths: []string{"*.go"}},
@@ -445,6 +461,7 @@ func TestBuildPrompt_ConditionalMatches(t *testing.T) {
 
 // TestBuildPrompt_ConditionalNoMatch verifies conditional file excluded when glob doesn't match.
 func TestBuildPrompt_ConditionalNoMatch(t *testing.T) {
+	t.Parallel()
 	files := []InstructionFile{
 		{Content: "always present", MemType: MemoryTypeProject},
 		{Content: "rust rules", MemType: MemoryTypeProject, Paths: []string{"*.rs"}},
@@ -463,6 +480,7 @@ func TestBuildPrompt_ConditionalNoMatch(t *testing.T) {
 // TestLoadAndParseAll is an end-to-end test: create temp dir with files including
 // frontmatter and @includes, verify full pipeline.
 func TestLoadAndParseAll(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
 	os.Mkdir(filepath.Join(root, ".git"), 0755)
 

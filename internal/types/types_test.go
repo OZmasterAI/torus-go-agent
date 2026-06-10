@@ -8,6 +8,7 @@ import (
 
 // TestRoleConstants verifies all role constants are defined correctly.
 func TestRoleConstants(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		role     Role
@@ -29,10 +30,11 @@ func TestRoleConstants(t *testing.T) {
 
 // TestStreamEventTypeConstants verifies all stream event type constants.
 func TestStreamEventTypeConstants(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
-		name     string
+		name      string
 		eventType StreamEventType
-		expected string
+		expected  string
 	}{
 		{"EventTextDelta", EventTextDelta, "text_delta"},
 		{"EventToolUseStart", EventToolUseStart, "tool_use_start"},
@@ -54,6 +56,7 @@ func TestStreamEventTypeConstants(t *testing.T) {
 
 // TestContentBlockJSON verifies ContentBlock JSON marshaling/unmarshaling.
 func TestContentBlockJSON(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name    string
 		input   ContentBlock
@@ -151,6 +154,7 @@ func TestContentBlockJSON(t *testing.T) {
 
 // TestMessageJSON verifies Message JSON marshaling/unmarshaling.
 func TestMessageJSON(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name    string
 		input   Message
@@ -237,6 +241,7 @@ func TestMessageJSON(t *testing.T) {
 
 // TestUsageJSON verifies Usage JSON marshaling/unmarshaling.
 func TestUsageJSON(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name    string
 		input   Usage
@@ -325,6 +330,7 @@ func TestUsageJSON(t *testing.T) {
 
 // TestAssistantMessageJSON verifies AssistantMessage JSON marshaling/unmarshaling.
 func TestAssistantMessageJSON(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name    string
 		input   AssistantMessage
@@ -405,6 +411,7 @@ func TestAssistantMessageJSON(t *testing.T) {
 
 // TestStreamEventStructure verifies StreamEvent fields and types.
 func TestStreamEventStructure(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name  string
 		event StreamEvent
@@ -555,6 +562,7 @@ func TestStreamEventStructure(t *testing.T) {
 
 // TestToolResultJSON verifies ToolResult JSON marshaling/unmarshaling.
 func TestToolResultJSON(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name    string
 		input   ToolResult
@@ -622,6 +630,7 @@ func TestToolResultJSON(t *testing.T) {
 
 // TestToolStructure verifies Tool fields and Execute function signature.
 func TestToolStructure(t *testing.T) {
+	t.Parallel()
 	executeCalled := false
 	mockExecute := func(args map[string]any) (*ToolResult, error) {
 		executeCalled = true
@@ -670,6 +679,7 @@ func TestToolStructure(t *testing.T) {
 
 // TestToolJSON verifies Tool JSON marshaling (Execute field excluded).
 func TestToolJSON(t *testing.T) {
+	t.Parallel()
 	tool := Tool{
 		Name:        "my_tool",
 		Description: "Does something",
@@ -703,6 +713,7 @@ func TestToolJSON(t *testing.T) {
 
 // TestProviderConfigJSON verifies ProviderConfig JSON marshaling/unmarshaling.
 func TestProviderConfigJSON(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name    string
 		input   ProviderConfig
@@ -782,6 +793,7 @@ func TestProviderConfigJSON(t *testing.T) {
 
 // TestAgentConfigJSON verifies AgentConfig JSON marshaling/unmarshaling.
 func TestAgentConfigJSON(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name    string
 		input   AgentConfig
@@ -868,6 +880,7 @@ func TestAgentConfigJSON(t *testing.T) {
 
 // TestProviderInterface verifies the Provider interface contract.
 func TestProviderInterface(t *testing.T) {
+	t.Parallel()
 	// Create a mock implementation
 	mockProvider := &mockProvider{
 		name:    "mock",
@@ -950,6 +963,7 @@ func (m *mockProvider) ModelID() string {
 
 // TestIntegrationMessageAndContentBlock verifies complex message structures.
 func TestIntegrationMessageAndContentBlock(t *testing.T) {
+	t.Parallel()
 	// Build a complex conversation
 	messages := []Message{
 		{
@@ -1008,6 +1022,7 @@ func TestIntegrationMessageAndContentBlock(t *testing.T) {
 
 // TestRoleTypeConversion verifies Role type conversions.
 func TestRoleTypeConversion(t *testing.T) {
+	t.Parallel()
 	// Test conversion to string
 	role := RoleAssistant
 	if string(role) != "assistant" {
@@ -1024,6 +1039,7 @@ func TestRoleTypeConversion(t *testing.T) {
 
 // TestStreamEventTypeConversion verifies StreamEventType conversions.
 func TestStreamEventTypeConversion(t *testing.T) {
+	t.Parallel()
 	eventType := EventToolUseStart
 	if string(eventType) != "tool_use_start" {
 		t.Errorf("String conversion: expected %q, got %q", "tool_use_start", string(eventType))
@@ -1039,6 +1055,7 @@ func TestStreamEventTypeConversion(t *testing.T) {
 
 // TestEventThinkingDeltaDistinct verifies EventThinkingDelta exists and differs from EventTextDelta.
 func TestEventThinkingDeltaDistinct(t *testing.T) {
+	t.Parallel()
 	if EventThinkingDelta == EventTextDelta {
 		t.Error("EventThinkingDelta must be distinct from EventTextDelta")
 	}

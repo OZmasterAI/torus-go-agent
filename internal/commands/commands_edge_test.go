@@ -48,6 +48,7 @@ func headEdgeID(t *testing.T, dag *core.DAG) string {
 // ---------------------------------------------------------------------------
 
 func TestCommandsEdge_ParseForkArgs_BackWithoutNumber(t *testing.T) {
+	t.Parallel()
 	action, value := ParseForkArgs("-back")
 	// Without a space separator, -back is treated as a node ID
 	if action != "node" || value != "-back" {
@@ -56,6 +57,7 @@ func TestCommandsEdge_ParseForkArgs_BackWithoutNumber(t *testing.T) {
 }
 
 func TestCommandsEdge_ParseForkArgs_BackWithSpaces(t *testing.T) {
+	t.Parallel()
 	action, value := ParseForkArgs("  -back 5  ")
 	if action != "back" || value != "5" {
 		t.Errorf("ParseForkArgs(\"  -back 5  \") = (%q, %q), want (\"back\", \"5\")", action, value)
@@ -63,6 +65,7 @@ func TestCommandsEdge_ParseForkArgs_BackWithSpaces(t *testing.T) {
 }
 
 func TestCommandsEdge_ParseForkArgs_BackShortForm(t *testing.T) {
+	t.Parallel()
 	action, value := ParseForkArgs("-b")
 	// Without a space separator, -b is treated as a node ID
 	if action != "node" || value != "-b" {
@@ -71,6 +74,7 @@ func TestCommandsEdge_ParseForkArgs_BackShortForm(t *testing.T) {
 }
 
 func TestCommandsEdge_ParseForkArgs_BranchWithLeadingSpace(t *testing.T) {
+	t.Parallel()
 	action, value := ParseForkArgs("  branch  ")
 	if action != "branch" || value != "" {
 		t.Errorf("ParseForkArgs(\"  branch  \") = (%q, %q), want (\"branch\", \"\")", action, value)
@@ -78,6 +82,7 @@ func TestCommandsEdge_ParseForkArgs_BranchWithLeadingSpace(t *testing.T) {
 }
 
 func TestCommandsEdge_ParseForkArgs_NodeIDWithSpecialChars(t *testing.T) {
+	t.Parallel()
 	action, value := ParseForkArgs("nd_abc123-def")
 	if action != "node" || value != "nd_abc123-def" {
 		t.Errorf("ParseForkArgs(\"nd_abc123-def\") = (%q, %q), want (\"node\", \"nd_abc123-def\")", action, value)
@@ -89,6 +94,7 @@ func TestCommandsEdge_ParseForkArgs_NodeIDWithSpecialChars(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestCommandsEdge_ParseSwitchArgs_LargeIndex(t *testing.T) {
+	t.Parallel()
 	mode, value := ParseSwitchArgs("999999")
 	if mode != "index" || value != "999999" {
 		t.Errorf("ParseSwitchArgs(\"999999\") = (%q, %q), want (\"index\", \"999999\")", mode, value)
@@ -96,6 +102,7 @@ func TestCommandsEdge_ParseSwitchArgs_LargeIndex(t *testing.T) {
 }
 
 func TestCommandsEdge_ParseSwitchArgs_ZeroIndex(t *testing.T) {
+	t.Parallel()
 	mode, value := ParseSwitchArgs("0")
 	if mode != "index" || value != "0" {
 		t.Errorf("ParseSwitchArgs(\"0\") = (%q, %q), want (\"index\", \"0\")", mode, value)
@@ -103,6 +110,7 @@ func TestCommandsEdge_ParseSwitchArgs_ZeroIndex(t *testing.T) {
 }
 
 func TestCommandsEdge_ParseSwitchArgs_NegativeIndex(t *testing.T) {
+	t.Parallel()
 	mode, value := ParseSwitchArgs("-5")
 	// strconv.Atoi parses negative numbers, so -5 is a valid index
 	if mode != "index" || value != "-5" {
@@ -111,6 +119,7 @@ func TestCommandsEdge_ParseSwitchArgs_NegativeIndex(t *testing.T) {
 }
 
 func TestCommandsEdge_ParseSwitchArgs_IDWithSpaces(t *testing.T) {
+	t.Parallel()
 	mode, value := ParseSwitchArgs("  br_main  ")
 	if mode != "id" || value != "br_main" {
 		t.Errorf("ParseSwitchArgs(\"  br_main  \") = (%q, %q), want (\"id\", \"br_main\")", mode, value)
@@ -118,6 +127,7 @@ func TestCommandsEdge_ParseSwitchArgs_IDWithSpaces(t *testing.T) {
 }
 
 func TestCommandsEdge_ParseSwitchArgs_NumericStringInID(t *testing.T) {
+	t.Parallel()
 	mode, value := ParseSwitchArgs("br_123")
 	if mode != "id" || value != "br_123" {
 		t.Errorf("ParseSwitchArgs(\"br_123\") = (%q, %q), want (\"id\", \"br_123\")", mode, value)
@@ -129,6 +139,7 @@ func TestCommandsEdge_ParseSwitchArgs_NumericStringInID(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestCommandsEdge_SwitchByIndex_OutOfRange_TooHigh(t *testing.T) {
+	t.Parallel()
 	dag := newEdgeTestDAG(t)
 	_ = addEdgeNode(t, dag, "", types.RoleUser, "message")
 
@@ -142,6 +153,7 @@ func TestCommandsEdge_SwitchByIndex_OutOfRange_TooHigh(t *testing.T) {
 }
 
 func TestCommandsEdge_SwitchByIndex_ZeroIndex(t *testing.T) {
+	t.Parallel()
 	dag := newEdgeTestDAG(t)
 	_ = addEdgeNode(t, dag, "", types.RoleUser, "message")
 
@@ -152,6 +164,7 @@ func TestCommandsEdge_SwitchByIndex_ZeroIndex(t *testing.T) {
 }
 
 func TestCommandsEdge_SwitchByIndex_NegativeIndex(t *testing.T) {
+	t.Parallel()
 	dag := newEdgeTestDAG(t)
 	_ = addEdgeNode(t, dag, "", types.RoleUser, "message")
 
@@ -162,6 +175,7 @@ func TestCommandsEdge_SwitchByIndex_NegativeIndex(t *testing.T) {
 }
 
 func TestCommandsEdge_SwitchByIndex_SingleBranch(t *testing.T) {
+	t.Parallel()
 	dag := newEdgeTestDAG(t)
 	_ = addEdgeNode(t, dag, "", types.RoleUser, "message")
 
@@ -179,6 +193,7 @@ func TestCommandsEdge_SwitchByIndex_SingleBranch(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestCommandsEdge_FormatBranchList_Empty(t *testing.T) {
+	t.Parallel()
 	result := FormatBranchList([]BranchSummary{})
 	if result != "" {
 		t.Errorf("FormatBranchList([]) should be empty, got %q", result)
@@ -186,6 +201,7 @@ func TestCommandsEdge_FormatBranchList_Empty(t *testing.T) {
 }
 
 func TestCommandsEdge_FormatBranchList_VeryLongName(t *testing.T) {
+	t.Parallel()
 	branches := []BranchSummary{
 		{
 			ID:         "br_123",
@@ -206,6 +222,7 @@ func TestCommandsEdge_FormatBranchList_VeryLongName(t *testing.T) {
 }
 
 func TestCommandsEdge_FormatBranchList_CurrentMarker(t *testing.T) {
+	t.Parallel()
 	branches := []BranchSummary{
 		{
 			ID:         "br_1",
@@ -234,6 +251,7 @@ func TestCommandsEdge_FormatBranchList_CurrentMarker(t *testing.T) {
 }
 
 func TestCommandsEdge_FormatBranchList_ZeroMessages(t *testing.T) {
+	t.Parallel()
 	branches := []BranchSummary{
 		{
 			ID:         "br_empty",
@@ -254,6 +272,7 @@ func TestCommandsEdge_FormatBranchList_ZeroMessages(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestCommandsEdge_FormatMessageList_Empty(t *testing.T) {
+	t.Parallel()
 	result := FormatMessageList([]MessageSummary{})
 	if result != "" {
 		t.Errorf("FormatMessageList([]) should be empty, got %q", result)
@@ -261,6 +280,7 @@ func TestCommandsEdge_FormatMessageList_Empty(t *testing.T) {
 }
 
 func TestCommandsEdge_FormatMessageList_LongRole(t *testing.T) {
+	t.Parallel()
 	messages := []MessageSummary{
 		{
 			NodeID:    "nd_123",
@@ -278,6 +298,7 @@ func TestCommandsEdge_FormatMessageList_LongRole(t *testing.T) {
 }
 
 func TestCommandsEdge_FormatMessageList_WithAliases(t *testing.T) {
+	t.Parallel()
 	messages := []MessageSummary{
 		{
 			NodeID:    "nd_456",
@@ -295,6 +316,7 @@ func TestCommandsEdge_FormatMessageList_WithAliases(t *testing.T) {
 }
 
 func TestCommandsEdge_FormatMessageList_NoAliases(t *testing.T) {
+	t.Parallel()
 	messages := []MessageSummary{
 		{
 			NodeID:    "nd_789",
@@ -317,6 +339,7 @@ func TestCommandsEdge_FormatMessageList_NoAliases(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestCommandsEdge_Alias_ResolveByAlias(t *testing.T) {
+	t.Parallel()
 	dag := newEdgeTestDAG(t)
 	nodeID := addEdgeNode(t, dag, "", types.RoleUser, "message")
 	if err := dag.SetAlias(nodeID, "my-alias"); err != nil {
@@ -334,6 +357,7 @@ func TestCommandsEdge_Alias_ResolveByAlias(t *testing.T) {
 }
 
 func TestCommandsEdge_Alias_InvalidNodeID(t *testing.T) {
+	t.Parallel()
 	dag := newEdgeTestDAG(t)
 	_, err := Alias(dag, "nonexistent_node_id", "alias-name")
 	if err == nil {
@@ -342,6 +366,7 @@ func TestCommandsEdge_Alias_InvalidNodeID(t *testing.T) {
 }
 
 func TestCommandsEdge_Alias_MultipleAliasesOnNode(t *testing.T) {
+	t.Parallel()
 	dag := newEdgeTestDAG(t)
 	nodeID := addEdgeNode(t, dag, "", types.RoleUser, "message")
 
@@ -378,6 +403,7 @@ func TestCommandsEdge_Alias_MultipleAliasesOnNode(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestCommandsEdge_Fork_InvalidNodeID(t *testing.T) {
+	t.Parallel()
 	dag := newEdgeTestDAG(t)
 	_, err := Fork(dag, "nonexistent_node", "fork-name")
 	if err == nil {
@@ -386,6 +412,7 @@ func TestCommandsEdge_Fork_InvalidNodeID(t *testing.T) {
 }
 
 func TestCommandsEdge_Fork_EmptyName(t *testing.T) {
+	t.Parallel()
 	dag := newEdgeTestDAG(t)
 	nodeID := addEdgeNode(t, dag, "", types.RoleUser, "message")
 
@@ -400,6 +427,7 @@ func TestCommandsEdge_Fork_EmptyName(t *testing.T) {
 }
 
 func TestCommandsEdge_ForkBack_ZeroSteps(t *testing.T) {
+	t.Parallel()
 	dag := newEdgeTestDAG(t)
 	n1 := addEdgeNode(t, dag, "", types.RoleUser, "msg1")
 	n2 := addEdgeNode(t, dag, n1, types.RoleAssistant, "msg2")
@@ -419,6 +447,7 @@ func TestCommandsEdge_ForkBack_ZeroSteps(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestCommandsEdge_New_WithHooks(t *testing.T) {
+	t.Parallel()
 	dag := newEdgeTestDAG(t)
 	hooks := core.NewHookRegistry()
 	if hooks == nil {
@@ -435,6 +464,7 @@ func TestCommandsEdge_New_WithHooks(t *testing.T) {
 }
 
 func TestCommandsEdge_Clear_WithHooks(t *testing.T) {
+	t.Parallel()
 	dag := newEdgeTestDAG(t)
 	_ = addEdgeNode(t, dag, "", types.RoleUser, "message")
 	hooks := core.NewHookRegistry()
@@ -455,6 +485,7 @@ func TestCommandsEdge_Clear_WithHooks(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestCommandsEdge_ListMessages_SingleMessage(t *testing.T) {
+	t.Parallel()
 	dag := newEdgeTestDAG(t)
 	_ = addEdgeNode(t, dag, "", types.RoleUser, "only message")
 
@@ -472,6 +503,7 @@ func TestCommandsEdge_ListMessages_SingleMessage(t *testing.T) {
 }
 
 func TestCommandsEdge_ListMessages_WithEmptyContent(t *testing.T) {
+	t.Parallel()
 	dag := newEdgeTestDAG(t)
 	// Add a node with empty text
 	id, err := dag.AddNode("", types.RoleUser, []types.ContentBlock{{Type: "text", Text: ""}}, "", "", 0)
@@ -496,6 +528,7 @@ func TestCommandsEdge_ListMessages_WithEmptyContent(t *testing.T) {
 }
 
 func TestCommandsEdge_ListMessages_DifferentBranch(t *testing.T) {
+	t.Parallel()
 	dag := newEdgeTestDAG(t)
 	_ = addEdgeNode(t, dag, "", types.RoleUser, "branch1 msg")
 
@@ -523,6 +556,7 @@ func TestCommandsEdge_ListMessages_DifferentBranch(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestCommandsEdge_Steering_CaseSensitivity_Mixed(t *testing.T) {
+	t.Parallel()
 	dag := newEdgeTestDAG(t)
 	agent := core.NewAgent(types.AgentConfig{}, nil, nil, dag)
 
@@ -533,6 +567,7 @@ func TestCommandsEdge_Steering_CaseSensitivity_Mixed(t *testing.T) {
 }
 
 func TestCommandsEdge_Steering_WithLeadingTrailingSpace(t *testing.T) {
+	t.Parallel()
 	dag := newEdgeTestDAG(t)
 	agent := core.NewAgent(types.AgentConfig{}, nil, nil, dag)
 
@@ -543,6 +578,7 @@ func TestCommandsEdge_Steering_WithLeadingTrailingSpace(t *testing.T) {
 }
 
 func TestCommandsEdge_Steering_InvalidModes(t *testing.T) {
+	t.Parallel()
 	dag := newEdgeTestDAG(t)
 	agent := core.NewAgent(types.AgentConfig{}, nil, nil, dag)
 
@@ -556,6 +592,7 @@ func TestCommandsEdge_Steering_InvalidModes(t *testing.T) {
 }
 
 func TestCommandsEdge_Steering_ShowMode_DoesNotChange(t *testing.T) {
+	t.Parallel()
 	dag := newEdgeTestDAG(t)
 	agent := core.NewAgent(types.AgentConfig{}, nil, nil, dag)
 

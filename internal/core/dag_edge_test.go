@@ -11,6 +11,7 @@ import (
 
 // TestDagEdge_LargeGraphAddition tests adding nodes to a large graph without performance degradation
 func TestDagEdge_LargeGraphAddition(t *testing.T) {
+	t.Parallel()
 	d := newTestDAG(t)
 
 	const nodeCount = 100
@@ -48,6 +49,7 @@ func TestDagEdge_LargeGraphAddition(t *testing.T) {
 
 // TestDagEdge_ConcurrentAddNode tests safe concurrent additions to the DAG
 func TestDagEdge_ConcurrentAddNode(t *testing.T) {
+	t.Parallel()
 	d := newTestDAG(t)
 
 	// Add a root node first
@@ -99,6 +101,7 @@ func TestDagEdge_ConcurrentAddNode(t *testing.T) {
 
 // TestDagEdge_ConcurrentBranchSwitch tests concurrent branch operations
 func TestDagEdge_ConcurrentBranchSwitch(t *testing.T) {
+	t.Parallel()
 	d := newTestDAG(t)
 
 	// Create multiple branches
@@ -144,6 +147,7 @@ func TestDagEdge_ConcurrentBranchSwitch(t *testing.T) {
 
 // TestDagEdge_EmptyAliasOperations tests operations on nodes with no aliases
 func TestDagEdge_EmptyAliasOperations(t *testing.T) {
+	t.Parallel()
 	d := newTestDAG(t)
 	id1, _ := d.AddNode("", typ.RoleUser, textContent("test"), "", "", 0)
 
@@ -164,6 +168,7 @@ func TestDagEdge_EmptyAliasOperations(t *testing.T) {
 
 // TestDagEdge_NullParentID tests handling of nodes with null parent IDs
 func TestDagEdge_NullParentID(t *testing.T) {
+	t.Parallel()
 	d := newTestDAG(t)
 
 	// Add a root node (no parent)
@@ -191,6 +196,7 @@ func TestDagEdge_NullParentID(t *testing.T) {
 
 // TestDagEdge_GetAncestorsWithBrokenChain tests GetAncestors when a node references a deleted parent
 func TestDagEdge_GetAncestorsWithBrokenChain(t *testing.T) {
+	t.Parallel()
 	d := newTestDAG(t)
 
 	id1, _ := d.AddNode("", typ.RoleUser, textContent("first"), "", "", 0)
@@ -219,6 +225,7 @@ func TestDagEdge_GetAncestorsWithBrokenChain(t *testing.T) {
 
 // TestDagEdge_RemoveNodeRecursively tests that removing a node doesn't affect its subtree
 func TestDagEdge_RemoveNodeRecursively(t *testing.T) {
+	t.Parallel()
 	d := newTestDAG(t)
 
 	root, _ := d.AddNode("", typ.RoleUser, textContent("root"), "", "", 0)
@@ -251,6 +258,7 @@ func TestDagEdge_RemoveNodeRecursively(t *testing.T) {
 
 // TestDagEdge_GetSubtreeEmpty tests GetSubtree on a node with no children
 func TestDagEdge_GetSubtreeEmpty(t *testing.T) {
+	t.Parallel()
 	d := newTestDAG(t)
 
 	id1, _ := d.AddNode("", typ.RoleUser, textContent("leaf"), "", "", 0)
@@ -266,13 +274,14 @@ func TestDagEdge_GetSubtreeEmpty(t *testing.T) {
 
 // TestDagEdge_GetSubtreeLarge tests GetSubtree on a large tree structure
 func TestDagEdge_GetSubtreeLarge(t *testing.T) {
+	t.Parallel()
 	d := newTestDAG(t)
 
 	root, _ := d.AddNode("", typ.RoleUser, textContent("root"), "", "", 0)
 
 	// Create a tree with multiple levels
-	const width = 3   // children per node
-	const depth = 3   // levels
+	const width = 3 // children per node
+	const depth = 3 // levels
 	var allNodes []string
 	allNodes = append(allNodes, root)
 
@@ -303,6 +312,7 @@ func TestDagEdge_GetSubtreeLarge(t *testing.T) {
 
 // TestDagEdge_AliasWithSpecialCharacters tests aliases with special characters
 func TestDagEdge_AliasWithSpecialCharacters(t *testing.T) {
+	t.Parallel()
 	d := newTestDAG(t)
 	id1, _ := d.AddNode("", typ.RoleUser, textContent("test"), "", "", 0)
 
@@ -330,6 +340,7 @@ func TestDagEdge_AliasWithSpecialCharacters(t *testing.T) {
 
 // TestDagEdge_ContentBlockSerialization tests that complex content blocks serialize correctly
 func TestDagEdge_ContentBlockSerialization(t *testing.T) {
+	t.Parallel()
 	d := newTestDAG(t)
 
 	// Create content with multiple blocks
@@ -365,6 +376,7 @@ func TestDagEdge_ContentBlockSerialization(t *testing.T) {
 
 // TestDagEdge_SearchAllWithLimitZero tests SearchAll with zero max results
 func TestDagEdge_SearchAllWithLimitZero(t *testing.T) {
+	t.Parallel()
 	d := newTestDAG(t)
 	d.AddNode("", typ.RoleUser, textContent("target content"), "", "", 0)
 
@@ -381,6 +393,7 @@ func TestDagEdge_SearchAllWithLimitZero(t *testing.T) {
 
 // TestDagEdge_SearchAllNegativeLimit tests SearchAll with negative max results
 func TestDagEdge_SearchAllNegativeLimit(t *testing.T) {
+	t.Parallel()
 	d := newTestDAG(t)
 	d.AddNode("", typ.RoleUser, textContent("target content"), "", "", 0)
 
@@ -397,6 +410,7 @@ func TestDagEdge_SearchAllNegativeLimit(t *testing.T) {
 
 // TestDagEdge_SearchAllEmptyQuery tests SearchAll with empty query string
 func TestDagEdge_SearchAllEmptyQuery(t *testing.T) {
+	t.Parallel()
 	d := newTestDAG(t)
 	d.AddNode("", typ.RoleUser, textContent("any content"), "", "", 0)
 
@@ -413,6 +427,7 @@ func TestDagEdge_SearchAllEmptyQuery(t *testing.T) {
 
 // TestDagEdge_ResetHeadMultipleTimes tests calling ResetHead multiple times
 func TestDagEdge_ResetHeadMultipleTimes(t *testing.T) {
+	t.Parallel()
 	d := newTestDAG(t)
 
 	for i := 0; i < 3; i++ {
@@ -429,6 +444,7 @@ func TestDagEdge_ResetHeadMultipleTimes(t *testing.T) {
 
 // TestDagEdge_BranchWithNonexistentNode tests branching from a non-existent node
 func TestDagEdge_BranchWithNonexistentNode(t *testing.T) {
+	t.Parallel()
 	d := newTestDAG(t)
 
 	// Branch from non-existent node should succeed (the DAG doesn't validate the node exists)
@@ -456,6 +472,7 @@ func TestDagEdge_BranchWithNonexistentNode(t *testing.T) {
 
 // TestDagEdge_MultipleAliasesResolveToLatest tests that the latest alias assignment wins
 func TestDagEdge_MultipleAliasResolveToLatest(t *testing.T) {
+	t.Parallel()
 	d := newTestDAG(t)
 
 	id1, _ := d.AddNode("", typ.RoleUser, textContent("first"), "", "", 0)
@@ -476,6 +493,7 @@ func TestDagEdge_MultipleAliasResolveToLatest(t *testing.T) {
 
 // TestDagEdge_PromptFromBrokenChain tests PromptFrom with a broken ancestor chain
 func TestDagEdge_PromptFromBrokenChain(t *testing.T) {
+	t.Parallel()
 	d := newTestDAG(t)
 
 	id1, _ := d.AddNode("", typ.RoleUser, textContent("first"), "", "", 0)
@@ -498,6 +516,7 @@ func TestDagEdge_PromptFromBrokenChain(t *testing.T) {
 
 // TestDagEdge_TokenCountPreservation tests that token counts are preserved correctly
 func TestDagEdge_TokenCountPreservation(t *testing.T) {
+	t.Parallel()
 	d := newTestDAG(t)
 
 	testCases := []int{0, 1, 100, 1000000, -1}
@@ -523,6 +542,7 @@ func TestDagEdge_TokenCountPreservation(t *testing.T) {
 
 // TestDagEdge_TimestampOrdering tests that timestamps are created in order
 func TestDagEdge_TimestampOrdering(t *testing.T) {
+	t.Parallel()
 	d := newTestDAG(t)
 
 	id1, _ := d.AddNode("", typ.RoleUser, textContent("first"), "", "", 0)
@@ -539,6 +559,7 @@ func TestDagEdge_TimestampOrdering(t *testing.T) {
 
 // TestDagEdge_CurrentBranchInfoAfterBranch tests CurrentBranchInfo after switching branches
 func TestDagEdge_CurrentBranchInfoAfterBranch(t *testing.T) {
+	t.Parallel()
 	d := newTestDAG(t)
 
 	id1, _ := d.AddNode("", typ.RoleUser, textContent("root"), "", "", 0)
@@ -574,6 +595,7 @@ func TestDagEdge_CurrentBranchInfoAfterBranch(t *testing.T) {
 
 // TestDagEdge_DatabaseReopenWithAliases tests that aliases persist across database reopens
 func TestDagEdge_DatabaseReopenWithAliases(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	dbPath := filepath.Join(dir, "test.db")
 
@@ -604,6 +626,7 @@ func TestDagEdge_DatabaseReopenWithAliases(t *testing.T) {
 
 // TestDagEdge_DatabaseReopenWithBranches tests that branches persist across reopens
 func TestDagEdge_DatabaseReopenWithBranches(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	dbPath := filepath.Join(dir, "test.db")
 
@@ -645,6 +668,7 @@ func TestDagEdge_DatabaseReopenWithBranches(t *testing.T) {
 
 // TestDagEdge_ResolveNodeOrAliasPriority tests that aliases take priority over node IDs
 func TestDagEdge_ResolveNodeOrAliasPriority(t *testing.T) {
+	t.Parallel()
 	d := newTestDAG(t)
 
 	id1, _ := d.AddNode("", typ.RoleUser, textContent("first"), "", "", 0)
@@ -667,6 +691,7 @@ func TestDagEdge_ResolveNodeOrAliasPriority(t *testing.T) {
 
 // TestDagEdge_EmptySearchQuery tests behavior with whitespace-only search
 func TestDagEdge_EmptySearchQuery(t *testing.T) {
+	t.Parallel()
 	d := newTestDAG(t)
 	d.AddNode("", typ.RoleUser, textContent("some content"), "", "", 0)
 
@@ -681,6 +706,7 @@ func TestDagEdge_EmptySearchQuery(t *testing.T) {
 
 // TestDagEdge_GetAncestorsIncludesTargetNode tests that GetAncestors includes the target node itself
 func TestDagEdge_GetAncestorsIncludesTargetNode(t *testing.T) {
+	t.Parallel()
 	d := newTestDAG(t)
 
 	id1, _ := d.AddNode("", typ.RoleUser, textContent("a"), "", "", 0)
@@ -704,6 +730,7 @@ func TestDagEdge_GetAncestorsIncludesTargetNode(t *testing.T) {
 
 // TestDagEdge_NextAutoAliasWithGaps tests NextAutoAlias when there are gaps in numbering
 func TestDagEdge_NextAutoAliasWithGaps(t *testing.T) {
+	t.Parallel()
 	d := newTestDAG(t)
 
 	id1, _ := d.AddNode("", typ.RoleUser, textContent("msg"), "", "", 0)

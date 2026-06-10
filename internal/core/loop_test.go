@@ -90,8 +90,8 @@ func newTestAgent(t *testing.T, mp *mockProvider) (*Agent, *DAG) {
 	t.Helper()
 	dag := newTestDAG(t)
 	cfg := typ.AgentConfig{
-		Provider:  typ.ProviderConfig{Name: mp.name, Model: mp.modelID, MaxTokens: 1024},
-		MaxTurns:  3,
+		Provider: typ.ProviderConfig{Name: mp.name, Model: mp.modelID, MaxTokens: 1024},
+		MaxTurns: 3,
 	}
 	hooks := NewHookRegistry()
 	agent := NewAgent(cfg, mp, hooks, dag)
@@ -124,6 +124,7 @@ func findEvents(evs []AgentEvent, typ AgentEventType) []AgentEvent {
 
 // TestNewAgent verifies that NewAgent wires up config and provider correctly.
 func TestNewAgent(t *testing.T) {
+	t.Parallel()
 	mp := &mockProvider{name: "mock", modelID: "mock-model-1", cannedText: "hello"}
 	agent, dag := newTestAgent(t, mp)
 
@@ -147,6 +148,7 @@ func TestNewAgent(t *testing.T) {
 // TestRunStream_EventSequence verifies that a clean run emits:
 // TurnStart → TextDelta → TurnEnd (with Usage) → Done.
 func TestRunStream_EventSequence(t *testing.T) {
+	t.Parallel()
 	usage := typ.Usage{InputTokens: 10, OutputTokens: 5, TotalTokens: 15, Cost: 0.001}
 	mp := &mockProvider{
 		name:        "mock",
@@ -199,6 +201,7 @@ func TestRunStream_EventSequence(t *testing.T) {
 // TestRunStream_TurnEnd_CarriesUsage verifies that EventAgentTurnEnd carries
 // the Usage struct returned by the provider.
 func TestRunStream_TurnEnd_CarriesUsage(t *testing.T) {
+	t.Parallel()
 	usage := typ.Usage{InputTokens: 20, OutputTokens: 8, TotalTokens: 28, Cost: 0.002}
 	mp := &mockProvider{
 		name:        "mock",
@@ -233,6 +236,7 @@ func TestRunStream_TurnEnd_CarriesUsage(t *testing.T) {
 // returns an error from StreamComplete, the loop emits EventAgentError (not a
 // panic or silent failure).
 func TestRunStream_LLMError_EmitsEventAgentError(t *testing.T) {
+	t.Parallel()
 	provErr := errors.New("upstream timeout")
 	mp := &mockProvider{
 		name:      "mock",
@@ -259,6 +263,7 @@ func TestRunStream_LLMError_EmitsEventAgentError(t *testing.T) {
 // delivered inside the stream channel (EventError event) is surfaced as
 // EventAgentError.
 func TestRunStream_StreamChannelError_EmitsEventAgentError(t *testing.T) {
+	t.Parallel()
 	chanErr := errors.New("stream decode error")
 	mp := &mockProvider{name: "mock", modelID: "mock-model-1"}
 	// Override StreamComplete to return a channel that sends an error event.
@@ -338,6 +343,7 @@ func (m *thinkingMockProvider) StreamComplete(_ context.Context, _ string, _ []t
 // TestPersistThinking_Enabled verifies that when PersistThinking is true,
 // thinking blocks are stored as a separate DAG node.
 func TestPersistThinking_Enabled(t *testing.T) {
+	t.Parallel()
 	mp := &thinkingMockProvider{name: "mock", modelID: "think-model"}
 	dag := newTestDAG(t)
 	cfg := typ.AgentConfig{
@@ -383,6 +389,7 @@ func TestPersistThinking_Enabled(t *testing.T) {
 // TestPersistThinking_Disabled verifies that when PersistThinking is false,
 // no thinking node is stored in the DAG.
 func TestPersistThinking_Disabled(t *testing.T) {
+	t.Parallel()
 	mp := &thinkingMockProvider{name: "mock", modelID: "think-model"}
 	dag := newTestDAG(t)
 	cfg := typ.AgentConfig{
@@ -417,6 +424,7 @@ func TestPersistThinking_Disabled(t *testing.T) {
 // TestAutoAlias verifies that after AddNode, the returned node ID can be
 // aliased via NextAutoAlias and resolved back.
 func TestAutoAlias(t *testing.T) {
+	t.Parallel()
 	dag := newTestDAG(t)
 
 	head, _ := dag.GetHead()
@@ -444,6 +452,7 @@ func TestAutoAlias(t *testing.T) {
 
 // TestAutoAlias_Increments verifies that successive aliases are a1, a2, a3.
 func TestAutoAlias_Increments(t *testing.T) {
+	t.Parallel()
 	dag := newTestDAG(t)
 
 	for i := 1; i <= 3; i++ {
@@ -466,6 +475,7 @@ func TestAutoAlias_Increments(t *testing.T) {
 // TestRunStream_AutoAlias_SetAfterAssistantNode verifies that the loop itself
 // calls SetAlias on the assistant node produced each turn.
 func TestRunStream_AutoAlias_SetAfterAssistantNode(t *testing.T) {
+	t.Parallel()
 	mp := &mockProvider{
 		name:       "mock",
 		modelID:    "mock-model-1",
@@ -494,6 +504,7 @@ func TestRunStream_AutoAlias_SetAfterAssistantNode(t *testing.T) {
 
 // TestRun_ReturnsText verifies the synchronous Run wrapper returns the final text.
 func TestRun_ReturnsText(t *testing.T) {
+	t.Parallel()
 	mp := &mockProvider{
 		name:       "mock",
 		modelID:    "mock-model-1",
@@ -512,6 +523,7 @@ func TestRun_ReturnsText(t *testing.T) {
 
 // TestRun_PropagatesError verifies that Run returns the LLM error.
 func TestRun_PropagatesError(t *testing.T) {
+	t.Parallel()
 	mp := &mockProvider{
 		name:        "mock",
 		modelID:     "mock-model-1",
@@ -529,6 +541,7 @@ func TestRun_PropagatesError(t *testing.T) {
 // --- ActiveFiles tracking tests ---
 
 func TestActiveFiles_Empty(t *testing.T) {
+	t.Parallel()
 	mp := &mockProvider{name: "test", modelID: "m", cannedText: "done"}
 	agent, _ := newTestAgent(t, mp)
 	if got := agent.ActiveFiles(); len(got) != 0 {
@@ -537,6 +550,7 @@ func TestActiveFiles_Empty(t *testing.T) {
 }
 
 func TestTrackActiveFiles_FilePath(t *testing.T) {
+	t.Parallel()
 	mp := &mockProvider{name: "test", modelID: "m", cannedText: "done"}
 	agent, _ := newTestAgent(t, mp)
 	agent.trackActiveFiles(map[string]any{"file_path": "/home/user/foo.go"})
@@ -547,6 +561,7 @@ func TestTrackActiveFiles_FilePath(t *testing.T) {
 }
 
 func TestTrackActiveFiles_Path(t *testing.T) {
+	t.Parallel()
 	mp := &mockProvider{name: "test", modelID: "m", cannedText: "done"}
 	agent, _ := newTestAgent(t, mp)
 	agent.trackActiveFiles(map[string]any{"path": "/home/user/src"})
@@ -557,6 +572,7 @@ func TestTrackActiveFiles_Path(t *testing.T) {
 }
 
 func TestTrackActiveFiles_BothKeys(t *testing.T) {
+	t.Parallel()
 	mp := &mockProvider{name: "test", modelID: "m", cannedText: "done"}
 	agent, _ := newTestAgent(t, mp)
 	agent.trackActiveFiles(map[string]any{"file_path": "/a.go", "path": "/b"})
@@ -567,6 +583,7 @@ func TestTrackActiveFiles_BothKeys(t *testing.T) {
 }
 
 func TestTrackActiveFiles_Dedup(t *testing.T) {
+	t.Parallel()
 	mp := &mockProvider{name: "test", modelID: "m", cannedText: "done"}
 	agent, _ := newTestAgent(t, mp)
 	agent.trackActiveFiles(map[string]any{"file_path": "/a.go"})
@@ -578,6 +595,7 @@ func TestTrackActiveFiles_Dedup(t *testing.T) {
 }
 
 func TestTrackActiveFiles_EvictsOldest(t *testing.T) {
+	t.Parallel()
 	mp := &mockProvider{name: "test", modelID: "m", cannedText: "done"}
 	agent, _ := newTestAgent(t, mp)
 	for i := 0; i < maxActiveFiles+10; i++ {
@@ -594,6 +612,7 @@ func TestTrackActiveFiles_EvictsOldest(t *testing.T) {
 }
 
 func TestActiveFiles_SnapshotIsolation(t *testing.T) {
+	t.Parallel()
 	mp := &mockProvider{name: "test", modelID: "m", cannedText: "done"}
 	agent, _ := newTestAgent(t, mp)
 	agent.trackActiveFiles(map[string]any{"file_path": "/a.go"})

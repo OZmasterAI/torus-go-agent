@@ -9,6 +9,7 @@ import (
 
 // TestEditTool_ReplaceString tests successful string replacement in a file.
 func TestEditTool_ReplaceString(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	filePath := filepath.Join(tmpDir, "test.txt")
 
@@ -52,6 +53,7 @@ func TestEditTool_ReplaceString(t *testing.T) {
 
 // TestEditTool_ReplaceAll tests replacing all occurrences.
 func TestEditTool_ReplaceAll(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	filePath := filepath.Join(tmpDir, "test.txt")
 
@@ -92,6 +94,7 @@ func TestEditTool_ReplaceAll(t *testing.T) {
 
 // TestEditTool_StringNotFound tests behavior when old_str is not in the file.
 func TestEditTool_StringNotFound(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	filePath := filepath.Join(tmpDir, "test.txt")
 
@@ -132,6 +135,7 @@ func TestEditTool_StringNotFound(t *testing.T) {
 
 // TestEditTool_EmptyOldString tests behavior with an empty old_str.
 func TestEditTool_EmptyOldString(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	filePath := filepath.Join(tmpDir, "test.txt")
 
@@ -174,6 +178,7 @@ func TestEditTool_EmptyOldString(t *testing.T) {
 
 // TestEditTool_MultilineString tests replacing a multi-line string.
 func TestEditTool_MultilineString(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	filePath := filepath.Join(tmpDir, "test.txt")
 
@@ -213,6 +218,7 @@ func TestEditTool_MultilineString(t *testing.T) {
 
 // TestEditTool_FileNotFound tests behavior when the file doesn't exist.
 func TestEditTool_FileNotFound(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	filePath := filepath.Join(tmpDir, "nonexistent.txt")
 
@@ -238,6 +244,7 @@ func TestEditTool_FileNotFound(t *testing.T) {
 
 // TestEditTool_ToolStructure verifies the tool is properly configured.
 func TestEditTool_ToolStructure(t *testing.T) {
+	t.Parallel()
 	tool := editTool()
 
 	// Verify basic structure
@@ -288,6 +295,7 @@ func TestEditTool_ToolStructure(t *testing.T) {
 
 // TestEditTool_NoReplaceAllDefault tests that replace_all defaults to false.
 func TestEditTool_NoReplaceAllDefault(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	filePath := filepath.Join(tmpDir, "test.txt")
 
@@ -327,6 +335,7 @@ func TestEditTool_NoReplaceAllDefault(t *testing.T) {
 
 // TestBuildDefaultTools verifies editTool is included in default tools.
 func TestBuildDefaultTools(t *testing.T) {
+	t.Parallel()
 	tools := BuildDefaultTools()
 
 	if len(tools) == 0 {

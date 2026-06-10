@@ -8,6 +8,7 @@ import (
 )
 
 func TestWriteTool_WriteNewFile(t *testing.T) {
+	t.Parallel()
 	tool := writeTool()
 	tmpDir := t.TempDir()
 	filePath := filepath.Join(tmpDir, "test.txt")
@@ -44,6 +45,7 @@ func TestWriteTool_WriteNewFile(t *testing.T) {
 }
 
 func TestWriteTool_OverwriteExistingFile(t *testing.T) {
+	t.Parallel()
 	tool := writeTool()
 	tmpDir := t.TempDir()
 	filePath := filepath.Join(tmpDir, "test.txt")
@@ -79,6 +81,7 @@ func TestWriteTool_OverwriteExistingFile(t *testing.T) {
 }
 
 func TestWriteTool_WriteToNestedDirectory(t *testing.T) {
+	t.Parallel()
 	tool := writeTool()
 	tmpDir := t.TempDir()
 	filePath := filepath.Join(tmpDir, "a", "b", "c", "test.txt")
@@ -117,6 +120,7 @@ func TestWriteTool_WriteToNestedDirectory(t *testing.T) {
 }
 
 func TestWriteTool_MultilineContent(t *testing.T) {
+	t.Parallel()
 	tool := writeTool()
 	tmpDir := t.TempDir()
 	filePath := filepath.Join(tmpDir, "multiline.txt")
@@ -154,6 +158,7 @@ func TestWriteTool_MultilineContent(t *testing.T) {
 }
 
 func TestWriteTool_EmptyContent(t *testing.T) {
+	t.Parallel()
 	tool := writeTool()
 	tmpDir := t.TempDir()
 	filePath := filepath.Join(tmpDir, "empty.txt")
@@ -190,6 +195,7 @@ func TestWriteTool_EmptyContent(t *testing.T) {
 }
 
 func TestWriteTool_SpecialCharacters(t *testing.T) {
+	t.Parallel()
 	tool := writeTool()
 	tmpDir := t.TempDir()
 	filePath := filepath.Join(tmpDir, "special.txt")
@@ -220,6 +226,7 @@ func TestWriteTool_SpecialCharacters(t *testing.T) {
 }
 
 func TestWriteTool_LargeContent(t *testing.T) {
+	t.Parallel()
 	tool := writeTool()
 	tmpDir := t.TempDir()
 	filePath := filepath.Join(tmpDir, "large.txt")
@@ -257,6 +264,7 @@ func TestWriteTool_LargeContent(t *testing.T) {
 }
 
 func TestWriteTool_ToolMetadata(t *testing.T) {
+	t.Parallel()
 	tool := writeTool()
 
 	if tool.Name != "write" {
@@ -283,6 +291,7 @@ func TestWriteTool_ToolMetadata(t *testing.T) {
 }
 
 func TestWriteTool_MissingFilePath(t *testing.T) {
+	t.Parallel()
 	tool := writeTool()
 
 	result, err := tool.Execute(map[string]any{
@@ -301,6 +310,7 @@ func TestWriteTool_MissingFilePath(t *testing.T) {
 }
 
 func TestWriteTool_FilePermissions(t *testing.T) {
+	t.Parallel()
 	tool := writeTool()
 	tmpDir := t.TempDir()
 	filePath := filepath.Join(tmpDir, "perms.txt")
@@ -334,6 +344,7 @@ func TestWriteTool_FilePermissions(t *testing.T) {
 }
 
 func TestWriteTool_DirectoryPermissions(t *testing.T) {
+	t.Parallel()
 	tool := writeTool()
 	tmpDir := t.TempDir()
 	filePath := filepath.Join(tmpDir, "x", "y", "z", "test.txt")
@@ -377,6 +388,7 @@ func TestWriteTool_DirectoryPermissions(t *testing.T) {
 }
 
 func TestWriteTool_UnicodeContent(t *testing.T) {
+	t.Parallel()
 	tool := writeTool()
 	tmpDir := t.TempDir()
 	filePath := filepath.Join(tmpDir, "unicode.txt")
@@ -407,6 +419,7 @@ func TestWriteTool_UnicodeContent(t *testing.T) {
 }
 
 func TestWriteTool_ResultType(t *testing.T) {
+	t.Parallel()
 	tool := writeTool()
 	tmpDir := t.TempDir()
 	filePath := filepath.Join(tmpDir, "test.txt")

@@ -12,6 +12,7 @@ import (
 
 // TestContextEdge_NilSummarizeCallback tests CompactLLM when summarize callback is nil
 func TestContextEdge_NilSummarizeCallback(t *testing.T) {
+	t.Parallel()
 	messages := make([]typ.Message, 20)
 	for i := 0; i < 20; i++ {
 		role := typ.RoleUser
@@ -49,6 +50,7 @@ func TestContextEdge_NilSummarizeCallback(t *testing.T) {
 
 // TestContextEdge_SummarizeErrorFallback tests CompactLLM when summarize returns error
 func TestContextEdge_SummarizeErrorFallback(t *testing.T) {
+	t.Parallel()
 	messages := make([]typ.Message, 20)
 	for i := 0; i < 20; i++ {
 		role := typ.RoleUser
@@ -85,6 +87,7 @@ func TestContextEdge_SummarizeErrorFallback(t *testing.T) {
 
 // TestContextEdge_CompactLLMSmallMessageList tests CompactLLM with messages <= keepLastN+1
 func TestContextEdge_CompactLLMSmallMessageList(t *testing.T) {
+	t.Parallel()
 	messages := []typ.Message{
 		{Role: typ.RoleUser, Content: textContent("msg1")},
 		{Role: typ.RoleAssistant, Content: textContent("msg2")},
@@ -109,6 +112,7 @@ func TestContextEdge_CompactLLMSmallMessageList(t *testing.T) {
 
 // TestContextEdge_CompactLLMEmptyMessageList tests CompactLLM with empty message list
 func TestContextEdge_CompactLLMEmptyMessageList(t *testing.T) {
+	t.Parallel()
 	messages := []typ.Message{}
 
 	result, err := CompactLLM(messages, 5, nil)
@@ -123,13 +127,14 @@ func TestContextEdge_CompactLLMEmptyMessageList(t *testing.T) {
 
 // TestContextEdge_ExtractKeyContentWithEmptyBlocks tests extractKeyContent with empty content blocks
 func TestContextEdge_ExtractKeyContentWithEmptyBlocks(t *testing.T) {
+	t.Parallel()
 	messages := []typ.Message{
 		{
 			Role: typ.RoleUser,
 			Content: []typ.ContentBlock{
-				{Type: "text", Text: ""},           // empty text
-				{Type: "text", Text: "real text"},  // real text
-				{Type: "text", Text: ""},           // another empty
+				{Type: "text", Text: ""},          // empty text
+				{Type: "text", Text: "real text"}, // real text
+				{Type: "text", Text: ""},          // another empty
 			},
 		},
 		{
@@ -158,6 +163,7 @@ func TestContextEdge_ExtractKeyContentWithEmptyBlocks(t *testing.T) {
 
 // TestContextEdge_ExtractKeyContentWithToolUse tests extractKeyContent with tool use blocks
 func TestContextEdge_ExtractKeyContentWithToolUse(t *testing.T) {
+	t.Parallel()
 	messages := []typ.Message{
 		{
 			Role: typ.RoleAssistant,
@@ -178,6 +184,7 @@ func TestContextEdge_ExtractKeyContentWithToolUse(t *testing.T) {
 
 // TestContextEdge_ExtractKeyContentWithToolResult tests extractKeyContent with tool result blocks
 func TestContextEdge_ExtractKeyContentWithToolResult(t *testing.T) {
+	t.Parallel()
 	messages := []typ.Message{
 		{
 			Role: typ.RoleTool,
@@ -200,6 +207,7 @@ func TestContextEdge_ExtractKeyContentWithToolResult(t *testing.T) {
 
 // TestContextEdge_ExtractKeyContentTruncation tests that extractKeyContent truncates at 2000 chars
 func TestContextEdge_ExtractKeyContentTruncation(t *testing.T) {
+	t.Parallel()
 	// Create a very large message
 	largeText := strings.Repeat("x", 3000)
 	messages := []typ.Message{
@@ -216,6 +224,7 @@ func TestContextEdge_ExtractKeyContentTruncation(t *testing.T) {
 
 // TestContextEdge_NeedsCompactionWithMaxMessagesZero tests NeedsCompaction when MaxMessages is 0
 func TestContextEdge_NeedsCompactionWithMaxMessagesZero(t *testing.T) {
+	t.Parallel()
 	messages := make([]typ.Message, 50)
 	for i := 0; i < 50; i++ {
 		messages[i] = typ.Message{Role: typ.RoleUser, Content: textContent("x")}
@@ -237,6 +246,7 @@ func TestContextEdge_NeedsCompactionWithMaxMessagesZero(t *testing.T) {
 
 // TestContextEdge_NeedsCompactionWithEmptyMessages tests NeedsCompaction with empty message list
 func TestContextEdge_NeedsCompactionWithEmptyMessages(t *testing.T) {
+	t.Parallel()
 	messages := []typ.Message{}
 
 	cfg := CompactionConfig{
@@ -253,6 +263,7 @@ func TestContextEdge_NeedsCompactionWithEmptyMessages(t *testing.T) {
 
 // TestContextEdge_NeedsCompactionWithThreshold0 tests when threshold is 0
 func TestContextEdge_NeedsCompactionWithThreshold0(t *testing.T) {
+	t.Parallel()
 	messages := []typ.Message{
 		{Role: typ.RoleUser, Content: textContent("hi")},
 	}
@@ -271,6 +282,7 @@ func TestContextEdge_NeedsCompactionWithThreshold0(t *testing.T) {
 
 // TestContextEdge_NeedsCompactionWithThreshold100 tests when threshold is 100 (almost never triggers)
 func TestContextEdge_NeedsCompactionWithThreshold100(t *testing.T) {
+	t.Parallel()
 	largeText := ""
 	for i := 0; i < 200; i++ {
 		largeText += "This is a long message to fill up tokens. "
@@ -293,6 +305,7 @@ func TestContextEdge_NeedsCompactionWithThreshold100(t *testing.T) {
 
 // TestContextEdge_CompactSlidingWithZeroKeepLastN tests CompactSliding boundary at 0
 func TestContextEdge_CompactSlidingWithZeroKeepLastN(t *testing.T) {
+	t.Parallel()
 	messages := make([]typ.Message, 20)
 	for i := 0; i < 20; i++ {
 		messages[i] = typ.Message{Role: typ.RoleUser, Content: textContent("msg")}
@@ -307,6 +320,7 @@ func TestContextEdge_CompactSlidingWithZeroKeepLastN(t *testing.T) {
 
 // TestContextEdge_CompactSlidingWithNegativeKeepLastN tests CompactSliding boundary at negative
 func TestContextEdge_CompactSlidingWithNegativeKeepLastN(t *testing.T) {
+	t.Parallel()
 	messages := make([]typ.Message, 20)
 	for i := 0; i < 20; i++ {
 		messages[i] = typ.Message{Role: typ.RoleUser, Content: textContent("msg")}
@@ -321,6 +335,7 @@ func TestContextEdge_CompactSlidingWithNegativeKeepLastN(t *testing.T) {
 
 // TestContextEdge_SanitizeMessagesWithEmptyTextBlocks tests sanitizeMessages filtering empty text
 func TestContextEdge_SanitizeMessagesWithEmptyTextBlocks(t *testing.T) {
+	t.Parallel()
 	messages := []typ.Message{
 		{
 			Role: typ.RoleUser,
@@ -350,6 +365,7 @@ func TestContextEdge_SanitizeMessagesWithEmptyTextBlocks(t *testing.T) {
 
 // TestContextEdge_SanitizeMessagesWithDuplicateTextBlocks tests deduplication
 func TestContextEdge_SanitizeMessagesWithDuplicateTextBlocks(t *testing.T) {
+	t.Parallel()
 	messages := []typ.Message{
 		{
 			Role: typ.RoleUser,
@@ -380,6 +396,7 @@ func TestContextEdge_SanitizeMessagesWithDuplicateTextBlocks(t *testing.T) {
 
 // TestContextEdge_SanitizeMessagesWithConsecutiveSameRole tests merging of same-role messages
 func TestContextEdge_SanitizeMessagesWithConsecutiveSameRole(t *testing.T) {
+	t.Parallel()
 	messages := []typ.Message{
 		{Role: typ.RoleUser, Content: textContent("msg1")},
 		{Role: typ.RoleUser, Content: textContent("msg2")}, // Same role, should merge
@@ -416,6 +433,7 @@ func TestContextEdge_SanitizeMessagesWithConsecutiveSameRole(t *testing.T) {
 
 // TestContextEdge_SanitizeMessagesWithToolMessages tests that tool messages don't merge
 func TestContextEdge_SanitizeMessagesWithToolMessages(t *testing.T) {
+	t.Parallel()
 	messages := []typ.Message{
 		{Role: typ.RoleTool, Content: textContent("result1")},
 		{Role: typ.RoleTool, Content: textContent("result2")}, // Should NOT merge
@@ -431,6 +449,7 @@ func TestContextEdge_SanitizeMessagesWithToolMessages(t *testing.T) {
 
 // TestContextEdge_SanitizeMessagesWithEmptyContent tests sanitize with empty content
 func TestContextEdge_SanitizeMessagesWithEmptyContent(t *testing.T) {
+	t.Parallel()
 	messages := []typ.Message{
 		{Role: typ.RoleUser, Content: textContent("msg1")},
 		{Role: typ.RoleAssistant, Content: []typ.ContentBlock{}}, // Empty content
@@ -451,6 +470,7 @@ func TestContextEdge_SanitizeMessagesWithEmptyContent(t *testing.T) {
 
 // TestContextEdge_NodeToMessagesWithSystemRole tests nodesToMessages with system role
 func TestContextEdge_NodeToMessagesWithSystemRole(t *testing.T) {
+	t.Parallel()
 	nodes := []Node{
 		{ID: "1", Role: "system", Content: textContent("system prompt"), TokenCount: 10},
 		{ID: "2", Role: "user", Content: textContent("user message"), TokenCount: 10},
@@ -473,6 +493,7 @@ func TestContextEdge_NodeToMessagesWithSystemRole(t *testing.T) {
 
 // TestContextEdge_NodeToMessagesPreservesContent tests that nodesToMessages preserves content
 func TestContextEdge_NodeToMessagesPreservesContent(t *testing.T) {
+	t.Parallel()
 	content := []typ.ContentBlock{
 		{Type: "text", Text: "test content"},
 		{Type: "tool_use", Name: "TestTool"},
@@ -497,6 +518,7 @@ func TestContextEdge_NodeToMessagesPreservesContent(t *testing.T) {
 
 // TestContextEdge_DefaultCompactionConfigWithNegativeThreshold tests negative threshold handling
 func TestContextEdge_DefaultCompactionConfigWithNegativeThreshold(t *testing.T) {
+	t.Parallel()
 	cfg := CompactionConfig{
 		Threshold:     -10, // Negative threshold
 		KeepLastN:     5,
@@ -512,6 +534,7 @@ func TestContextEdge_DefaultCompactionConfigWithNegativeThreshold(t *testing.T) 
 
 // TestContextEdge_CompactSlidingWithVeryLargeKeepLastN tests when keepLastN > message count
 func TestContextEdge_CompactSlidingWithVeryLargeKeepLastN(t *testing.T) {
+	t.Parallel()
 	messages := []typ.Message{
 		{Role: typ.RoleUser, Content: textContent("msg1")},
 		{Role: typ.RoleAssistant, Content: textContent("msg2")},
@@ -529,6 +552,7 @@ func TestContextEdge_CompactSlidingWithVeryLargeKeepLastN(t *testing.T) {
 
 // TestContextEdge_ExtractKeyContentWithAllRoles tests all role types in extractKeyContent
 func TestContextEdge_ExtractKeyContentWithAllRoles(t *testing.T) {
+	t.Parallel()
 	messages := []typ.Message{
 		{Role: typ.RoleSystem, Content: textContent("system content")},
 		{Role: typ.RoleUser, Content: textContent("user content")},
@@ -552,6 +576,7 @@ func TestContextEdge_ExtractKeyContentWithAllRoles(t *testing.T) {
 
 // TestContextEdge_CompactSlidingEdgeBoundary tests exact edge case at keepLastN+1
 func TestContextEdge_CompactSlidingEdgeBoundary(t *testing.T) {
+	t.Parallel()
 	// Create exactly keepLastN+1 messages
 	keepN := 5
 	messages := make([]typ.Message, keepN+1)
@@ -581,6 +606,7 @@ func TestContextEdge_CompactSlidingEdgeBoundary(t *testing.T) {
 
 // TestContextEdge_CompactLLMWithNegativeKeepLastN tests CompactLLM with negative keepLastN
 func TestContextEdge_CompactLLMWithNegativeKeepLastN(t *testing.T) {
+	t.Parallel()
 	messages := make([]typ.Message, 20)
 	for i := 0; i < 20; i++ {
 		messages[i] = typ.Message{
@@ -603,6 +629,7 @@ func TestContextEdge_CompactLLMWithNegativeKeepLastN(t *testing.T) {
 
 // TestContextEdge_ExtractKeyContentWithMixedEmptyBlocks tests mixed empty and non-empty blocks
 func TestContextEdge_ExtractKeyContentWithMixedEmptyBlocks(t *testing.T) {
+	t.Parallel()
 	messages := []typ.Message{
 		{
 			Role: typ.RoleUser,
@@ -633,6 +660,7 @@ func TestContextEdge_ExtractKeyContentWithMixedEmptyBlocks(t *testing.T) {
 // TestContextEdge_SanitizeMessagesDropsThinkingRole tests that thinking-role
 // messages are filtered out before sending to the API.
 func TestContextEdge_SanitizeMessagesDropsThinkingRole(t *testing.T) {
+	t.Parallel()
 	messages := []typ.Message{
 		{Role: typ.RoleUser, Content: []typ.ContentBlock{{Type: "text", Text: "hi"}}},
 		{Role: typ.RoleAssistant, Content: []typ.ContentBlock{{Type: "text", Text: "hello"}}},
@@ -656,6 +684,7 @@ func TestContextEdge_SanitizeMessagesDropsThinkingRole(t *testing.T) {
 // trailing whitespace on the final assistant message is trimmed (Anthropic API
 // rejects "final assistant content cannot end with trailing whitespace").
 func TestContextEdge_SanitizeMessagesTrimsTrailingAssistantWhitespace(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		messages []typ.Message
@@ -724,9 +753,10 @@ func TestContextEdge_SanitizeMessagesTrimsTrailingAssistantWhitespace(t *testing
 // sanitizeMessages appends a "Continue." user message when the conversation ends
 // with an assistant message, preventing "does not support assistant message prefill" errors.
 func TestContextEdge_SanitizeMessagesAppendsUserWhenEndsWithAssistant(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
-		name        string
-		messages    []typ.Message
+		name         string
+		messages     []typ.Message
 		wantLastRole typ.Role
 	}{
 		{

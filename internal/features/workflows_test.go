@@ -68,6 +68,7 @@ func (m *mockProvider) StreamComplete(ctx context.Context, _ string, _ []typ.Mes
 
 // TestRunSequential_ReturnsEmptyOnNoAgents tests RunSequential returns empty string with no agents.
 func TestRunSequential_ReturnsEmptyOnNoAgents(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	mgr := NewSubAgentManager()
 	provider := &mockProvider{name: "test", modelID: "test-model", cannedText: "response"}
@@ -85,6 +86,7 @@ func TestRunSequential_ReturnsEmptyOnNoAgents(t *testing.T) {
 
 // TestRunParallel_ReturnsEmptySliceOnNoAgents tests RunParallel returns empty slice with no agents.
 func TestRunParallel_ReturnsEmptySliceOnNoAgents(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	mgr := NewSubAgentManager()
 	provider := &mockProvider{name: "test", modelID: "test-model", cannedText: "response"}
@@ -102,6 +104,7 @@ func TestRunParallel_ReturnsEmptySliceOnNoAgents(t *testing.T) {
 
 // TestRunLoop_ReturnsEmptyOnNoIterations tests RunLoop with maxIterations=0 and immediate shouldStop.
 func TestRunLoop_ReturnsEmptyOnNoIterations(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	mgr := NewSubAgentManager()
 	provider := &mockProvider{name: "test", modelID: "test-model", cannedText: "response"}
@@ -123,6 +126,7 @@ func TestRunLoop_ReturnsEmptyOnNoIterations(t *testing.T) {
 
 // TestRunSequential_CallsSpawnWithProvider verifies RunSequential calls SpawnWithProvider for each agent.
 func TestRunSequential_CallsSpawnForEachAgent(t *testing.T) {
+	t.Parallel()
 	// We test the behavior without mocking by verifying function structure
 	ctx := context.Background()
 	mgr := NewSubAgentManager()
@@ -152,6 +156,7 @@ func TestRunSequential_CallsSpawnForEachAgent(t *testing.T) {
 
 // TestRunParallel_ReturnsCorrectSliceLength verifies RunParallel returns results for each agent.
 func TestRunParallel_ReturnsCorrectSliceLength(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	mgr := NewSubAgentManager()
 	provider := &mockProvider{name: "test", modelID: "test-model", cannedText: "response"}
@@ -177,6 +182,7 @@ func TestRunParallel_ReturnsCorrectSliceLength(t *testing.T) {
 
 // TestRunLoop_HasCorrectSignature verifies RunLoop accepts all expected parameters.
 func TestRunLoop_HasCorrectSignature(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	mgr := NewSubAgentManager()
 	provider := &mockProvider{name: "test", modelID: "test-model", cannedText: "response"}
@@ -232,6 +238,7 @@ func BenchmarkRunParallel_EmptyAgents(b *testing.B) {
 
 // TestWorkflowsConcurrency is a stress test for concurrent operations.
 func TestWorkflowsConcurrency(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("skipping concurrency test in short mode")
 	}
@@ -284,6 +291,7 @@ func TestWorkflowsConcurrency(t *testing.T) {
 
 // TestRunSequential_TaskAppending verifies the task appending logic
 func TestRunSequential_TaskAppending(t *testing.T) {
+	t.Parallel()
 	// This is a code structure test - we verify the function processes agents sequentially
 	// The actual task appending happens in the loop at lines 24-25 of workflows.go
 
@@ -307,6 +315,7 @@ func TestRunSequential_TaskAppending(t *testing.T) {
 
 // TestRunLoop_IterationControl tests the iteration control logic
 func TestRunLoop_IterationControl(t *testing.T) {
+	t.Parallel()
 	// Test that maxIterations parameter is honored
 	tests := []struct {
 		name        string
@@ -352,6 +361,7 @@ func TestRunLoop_IterationControl(t *testing.T) {
 
 // TestRunParallel_WaitGroupSynchronization tests that RunParallel properly waits for all agents
 func TestRunParallel_WaitGroupSynchronization(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("skipping sync test in short mode")
 	}

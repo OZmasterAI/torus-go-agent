@@ -13,6 +13,7 @@ import (
 
 // TestNewTelemetryCollector verifies the collector is initialized correctly.
 func TestNewTelemetryCollector(t *testing.T) {
+	t.Parallel()
 	tc := NewTelemetryCollector()
 	if tc == nil {
 		t.Fatal("NewTelemetryCollector returned nil")
@@ -25,6 +26,7 @@ func TestNewTelemetryCollector(t *testing.T) {
 
 // TestGetMetricsInitialState verifies initial metrics are zero-valued.
 func TestGetMetricsInitialState(t *testing.T) {
+	t.Parallel()
 	tc := NewTelemetryCollector()
 	metrics := tc.GetMetrics()
 
@@ -65,6 +67,7 @@ func TestGetMetricsInitialState(t *testing.T) {
 
 // TestGetSpansInitialState verifies initial spans list is empty.
 func TestGetSpansInitialState(t *testing.T) {
+	t.Parallel()
 	tc := NewTelemetryCollector()
 	spans := tc.GetSpans()
 	if spans == nil {
@@ -77,6 +80,7 @@ func TestGetSpansInitialState(t *testing.T) {
 
 // TestSummaryEmptyMetrics verifies summary format with no activity.
 func TestSummaryEmptyMetrics(t *testing.T) {
+	t.Parallel()
 	tc := NewTelemetryCollector()
 	summary := tc.Summary()
 
@@ -99,6 +103,7 @@ func TestSummaryEmptyMetrics(t *testing.T) {
 
 // TestRegisterHooksBeforeLLMCall verifies LLM timing hooks are registered and triggered.
 func TestRegisterHooksBeforeLLMCall(t *testing.T) {
+	t.Parallel()
 	tc := NewTelemetryCollector()
 	hooks := core.NewHookRegistry()
 	tc.RegisterHooks(hooks)
@@ -127,6 +132,7 @@ func TestRegisterHooksBeforeLLMCall(t *testing.T) {
 
 // TestRegisterHooksAfterLLMCall verifies LLM metrics are tracked.
 func TestRegisterHooksAfterLLMCall(t *testing.T) {
+	t.Parallel()
 	tc := NewTelemetryCollector()
 	hooks := core.NewHookRegistry()
 	tc.RegisterHooks(hooks)
@@ -184,6 +190,7 @@ func TestRegisterHooksAfterLLMCall(t *testing.T) {
 
 // TestRegisterHooksBeforeToolCall verifies tool timing start hook.
 func TestRegisterHooksBeforeToolCall(t *testing.T) {
+	t.Parallel()
 	tc := NewTelemetryCollector()
 	hooks := core.NewHookRegistry()
 	tc.RegisterHooks(hooks)
@@ -206,6 +213,7 @@ func TestRegisterHooksBeforeToolCall(t *testing.T) {
 
 // TestRegisterHooksAfterToolCall verifies tool call metrics are tracked.
 func TestRegisterHooksAfterToolCall(t *testing.T) {
+	t.Parallel()
 	tc := NewTelemetryCollector()
 	hooks := core.NewHookRegistry()
 	tc.RegisterHooks(hooks)
@@ -252,6 +260,7 @@ func TestRegisterHooksAfterToolCall(t *testing.T) {
 
 // TestRegisterHooksAfterToolCallWithError verifies tool error tracking.
 func TestRegisterHooksAfterToolCallWithError(t *testing.T) {
+	t.Parallel()
 	tc := NewTelemetryCollector()
 	hooks := core.NewHookRegistry()
 	tc.RegisterHooks(hooks)
@@ -287,6 +296,7 @@ func TestRegisterHooksAfterToolCallWithError(t *testing.T) {
 
 // TestRegisterHooksOnTurnEnd verifies turn counting.
 func TestRegisterHooksOnTurnEnd(t *testing.T) {
+	t.Parallel()
 	tc := NewTelemetryCollector()
 	hooks := core.NewHookRegistry()
 	tc.RegisterHooks(hooks)
@@ -312,6 +322,7 @@ func TestRegisterHooksOnTurnEnd(t *testing.T) {
 
 // TestRegisterHooksOnError verifies error counting.
 func TestRegisterHooksOnError(t *testing.T) {
+	t.Parallel()
 	tc := NewTelemetryCollector()
 	hooks := core.NewHookRegistry()
 	tc.RegisterHooks(hooks)
@@ -337,6 +348,7 @@ func TestRegisterHooksOnError(t *testing.T) {
 
 // TestRegisterHooksPostCompact verifies compaction counting.
 func TestRegisterHooksPostCompact(t *testing.T) {
+	t.Parallel()
 	tc := NewTelemetryCollector()
 	hooks := core.NewHookRegistry()
 	tc.RegisterHooks(hooks)
@@ -362,6 +374,7 @@ func TestRegisterHooksPostCompact(t *testing.T) {
 
 // TestRegisterHooksOnSubagentComplete verifies subagent counting.
 func TestRegisterHooksOnSubagentComplete(t *testing.T) {
+	t.Parallel()
 	tc := NewTelemetryCollector()
 	hooks := core.NewHookRegistry()
 	tc.RegisterHooks(hooks)
@@ -387,6 +400,7 @@ func TestRegisterHooksOnSubagentComplete(t *testing.T) {
 
 // TestMultipleLLMCalls verifies accumulation across multiple LLM calls.
 func TestMultipleLLMCalls(t *testing.T) {
+	t.Parallel()
 	tc := NewTelemetryCollector()
 	hooks := core.NewHookRegistry()
 	tc.RegisterHooks(hooks)
@@ -435,6 +449,7 @@ func TestMultipleLLMCalls(t *testing.T) {
 
 // TestMultipleToolCalls verifies accumulation across multiple tool calls.
 func TestMultipleToolCalls(t *testing.T) {
+	t.Parallel()
 	tc := NewTelemetryCollector()
 	hooks := core.NewHookRegistry()
 	tc.RegisterHooks(hooks)
@@ -479,6 +494,7 @@ func TestMultipleToolCalls(t *testing.T) {
 
 // TestSummaryWithMetrics verifies summary includes actual metrics.
 func TestSummaryWithMetrics(t *testing.T) {
+	t.Parallel()
 	tc := NewTelemetryCollector()
 	hooks := core.NewHookRegistry()
 	tc.RegisterHooks(hooks)
@@ -515,6 +531,7 @@ func TestSummaryWithMetrics(t *testing.T) {
 
 // TestConcurrentAccess verifies goroutine-safety of the collector.
 func TestConcurrentAccess(t *testing.T) {
+	t.Parallel()
 	tc := NewTelemetryCollector()
 	hooks := core.NewHookRegistry()
 	tc.RegisterHooks(hooks)
@@ -559,6 +576,7 @@ func TestConcurrentAccess(t *testing.T) {
 
 // TestGetSpansMakesACopy verifies that GetSpans returns a copy, not a reference.
 func TestGetSpansMakesACopy(t *testing.T) {
+	t.Parallel()
 	tc := NewTelemetryCollector()
 	hooks := core.NewHookRegistry()
 	tc.RegisterHooks(hooks)
@@ -599,6 +617,7 @@ func TestGetSpansMakesACopy(t *testing.T) {
 
 // TestSpanMetadata verifies that span metadata is correctly captured.
 func TestSpanMetadata(t *testing.T) {
+	t.Parallel()
 	tc := NewTelemetryCollector()
 	hooks := core.NewHookRegistry()
 	tc.RegisterHooks(hooks)
@@ -632,6 +651,7 @@ func TestSpanMetadata(t *testing.T) {
 
 // TestToolSpanNames verifies tool spans have correct names.
 func TestToolSpanNames(t *testing.T) {
+	t.Parallel()
 	tc := NewTelemetryCollector()
 	hooks := core.NewHookRegistry()
 	tc.RegisterHooks(hooks)
@@ -667,6 +687,7 @@ func TestToolSpanNames(t *testing.T) {
 
 // TestAverageLLMTimeCalculation verifies average LLM time in summary.
 func TestAverageLLMTimeCalculation(t *testing.T) {
+	t.Parallel()
 	tc := NewTelemetryCollector()
 	hooks := core.NewHookRegistry()
 	tc.RegisterHooks(hooks)

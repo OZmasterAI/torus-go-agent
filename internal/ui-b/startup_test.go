@@ -11,6 +11,7 @@ import (
 // ── Scroll offset ────────────────────────────────────────────────────────────
 
 func TestStartupClampScrollOffset(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name         string
 		cursor       int
@@ -44,6 +45,7 @@ func TestStartupClampScrollOffset(t *testing.T) {
 // ── Filter ───────────────────────────────────────────────────────────────────
 
 func TestStartupFilteredIndices_NoFilter(t *testing.T) {
+	t.Parallel()
 	labels := []string{"Alpha", "Beta", "Gamma"}
 	got := startupFilteredIndices(3, func(i int) string { return labels[i] }, "")
 	if len(got) != 3 {
@@ -57,6 +59,7 @@ func TestStartupFilteredIndices_NoFilter(t *testing.T) {
 }
 
 func TestStartupFilteredIndices_MatchSubstring(t *testing.T) {
+	t.Parallel()
 	labels := []string{"OpenRouter", "NVIDIA NIM", "Anthropic Claude", "OpenAI"}
 	got := startupFilteredIndices(4, func(i int) string { return labels[i] }, "open")
 	if len(got) != 2 {
@@ -68,6 +71,7 @@ func TestStartupFilteredIndices_MatchSubstring(t *testing.T) {
 }
 
 func TestStartupFilteredIndices_CaseInsensitive(t *testing.T) {
+	t.Parallel()
 	labels := []string{"Claude Opus", "GPT-4o", "Gemini Pro"}
 	got := startupFilteredIndices(3, func(i int) string { return labels[i] }, "CLAUDE")
 	if len(got) != 1 || got[0] != 0 {
@@ -76,6 +80,7 @@ func TestStartupFilteredIndices_CaseInsensitive(t *testing.T) {
 }
 
 func TestStartupFilteredIndices_NoMatch(t *testing.T) {
+	t.Parallel()
 	labels := []string{"Alpha", "Beta"}
 	got := startupFilteredIndices(2, func(i int) string { return labels[i] }, "xyz")
 	if len(got) != 0 {
@@ -86,6 +91,7 @@ func TestStartupFilteredIndices_NoMatch(t *testing.T) {
 // ── Resolve filtered index ──────────────────────────────────────────────────
 
 func TestStartupResolveFilteredIndex_NoFilter(t *testing.T) {
+	t.Parallel()
 	m := startupModel{cursor: 2}
 	if got := m.startupResolveFilteredIndex(); got != 2 {
 		t.Errorf("no filter: got %d, want 2", got)
@@ -93,6 +99,7 @@ func TestStartupResolveFilteredIndex_NoFilter(t *testing.T) {
 }
 
 func TestStartupResolveFilteredIndex_WithFilter(t *testing.T) {
+	t.Parallel()
 	groups := []startupProviderGroup{
 		{Name: "OpenRouter", ProviderKey: "openrouter"},
 		{Name: "NVIDIA NIM", ProviderKey: "nvidia"},
@@ -114,6 +121,7 @@ func TestStartupResolveFilteredIndex_WithFilter(t *testing.T) {
 // ── Filterable phase ────────────────────────────────────────────────────────
 
 func TestStartupFilterablePhase(t *testing.T) {
+	t.Parallel()
 	for _, phase := range []int{1, 3, 4, 7} {
 		m := startupModel{phase: phase}
 		if !m.startupFilterablePhase() {
@@ -131,6 +139,7 @@ func TestStartupFilterablePhase(t *testing.T) {
 // ── Model picker ────────────────────────────────────────────────────────────
 
 func TestBuildStartupModelPickerItems(t *testing.T) {
+	t.Parallel()
 	groups := []startupProviderGroup{
 		{
 			Name:        "Anthropic",
@@ -188,6 +197,7 @@ func TestBuildStartupModelPickerItems(t *testing.T) {
 // ── FormatProviderModel ─────────────────────────────────────────────────────
 
 func TestFormatStartupProviderModel(t *testing.T) {
+	t.Parallel()
 	tests := []struct{ input, want string }{
 		{"anthropic:claude-haiku-4-5", "claude-haiku-4-5 (anthropic)"},
 		{"nvidia:z-ai/glm5", "z-ai/glm5 (nvidia)"},
@@ -205,6 +215,7 @@ func TestFormatStartupProviderModel(t *testing.T) {
 // ── Config overrides ────────────────────────────────────────────────────────
 
 func TestStartupConfigOverrides_GetSetValue(t *testing.T) {
+	t.Parallel()
 	o := defaultStartupOverrides()
 
 	// Compaction (idx 0) - cycle
@@ -241,6 +252,7 @@ func TestStartupConfigOverrides_GetSetValue(t *testing.T) {
 }
 
 func TestStartupConfigOverrides_CycleOption(t *testing.T) {
+	t.Parallel()
 	o := defaultStartupOverrides()
 	// Compaction starts at "llm" (idx 0 in options)
 	o.cycleOption(0, 1) // llm -> sliding
@@ -264,6 +276,7 @@ func TestStartupConfigOverrides_CycleOption(t *testing.T) {
 // ── OverridesFromAgentConfig ────────────────────────────────────────────────
 
 func TestOverridesFromAgentConfig(t *testing.T) {
+	t.Parallel()
 	cfg := config.DefaultAgentConfig()
 	cfg.SteeringMode = ""
 	o := overridesFromAgentConfig(cfg)
@@ -281,6 +294,7 @@ func TestOverridesFromAgentConfig(t *testing.T) {
 // ── Torus rendering ─────────────────────────────────────────────────────────
 
 func TestRenderStartupTorus_NonEmpty(t *testing.T) {
+	t.Parallel()
 	frame := renderStartupTorus(0.0, 0.0)
 	if len(frame) == 0 {
 		t.Fatal("torus frame should not be empty")
@@ -304,6 +318,7 @@ func TestRenderStartupTorus_NonEmpty(t *testing.T) {
 }
 
 func TestRenderStartupTorus_DifferentAngles(t *testing.T) {
+	t.Parallel()
 	f1 := renderStartupTorus(0.0, 0.0)
 	f2 := renderStartupTorus(1.0, 0.5)
 	if f1 == f2 {
@@ -312,6 +327,7 @@ func TestRenderStartupTorus_DifferentAngles(t *testing.T) {
 }
 
 func TestColorStartupTorus_RendersAllBuckets(t *testing.T) {
+	t.Parallel()
 	// Test with a frame that includes characters from all luminance buckets
 	testFrame := ".,-~:;=!*#$@ \n"
 	colored := colorStartupTorus(testFrame)
@@ -331,6 +347,7 @@ func TestColorStartupTorus_RendersAllBuckets(t *testing.T) {
 // ── Animated title ──────────────────────────────────────────────────────────
 
 func TestRenderStartupAnimatedTitle_NonEmpty(t *testing.T) {
+	t.Parallel()
 	out := renderStartupAnimatedTitle(startupASCIITitle, 0.0)
 	if len(out) == 0 {
 		t.Fatal("animated title should not be empty")
@@ -338,6 +355,7 @@ func TestRenderStartupAnimatedTitle_NonEmpty(t *testing.T) {
 }
 
 func TestRenderStartupAnimatedTitle_PhaseDiffers(t *testing.T) {
+	t.Parallel()
 	// In headless mode, lipgloss strips ANSI codes so both phases render identically.
 	// Use a short test string where phase shift creates a visible color index difference.
 	// The test verifies the function does not panic and produces output.
@@ -354,6 +372,7 @@ func TestRenderStartupAnimatedTitle_PhaseDiffers(t *testing.T) {
 // ── Menu length ─────────────────────────────────────────────────────────────
 
 func TestStartupMenuLen(t *testing.T) {
+	t.Parallel()
 	m := startupModel{groups: defaultStartupProviderGroups()}
 
 	// Phase 0: main menu = 2 items
@@ -387,6 +406,7 @@ func TestStartupMenuLen(t *testing.T) {
 // ── Default provider groups ─────────────────────────────────────────────────
 
 func TestDefaultStartupProviderGroups(t *testing.T) {
+	t.Parallel()
 	groups := defaultStartupProviderGroups()
 	if len(groups) < 8 {
 		t.Fatalf("expected at least 8 provider groups, got %d", len(groups))
@@ -417,6 +437,7 @@ func TestDefaultStartupProviderGroups(t *testing.T) {
 // ── StartupModel Update ─────────────────────────────────────────────────────
 
 func TestStartupModel_TickAdvancesAnimation(t *testing.T) {
+	t.Parallel()
 	m := newStartupModel()
 	m.width, m.height, m.ready = 120, 40, true
 
@@ -436,6 +457,7 @@ func TestStartupModel_TickAdvancesAnimation(t *testing.T) {
 }
 
 func TestStartupModel_WindowSizeMsg(t *testing.T) {
+	t.Parallel()
 	m := startupModel{}
 	updated, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
 	if !updated.ready {
@@ -447,6 +469,7 @@ func TestStartupModel_WindowSizeMsg(t *testing.T) {
 }
 
 func TestStartupModel_Navigation(t *testing.T) {
+	t.Parallel()
 	m := newStartupModel()
 	m.width, m.height, m.ready = 120, 40, true
 
@@ -465,6 +488,7 @@ func TestStartupModel_Navigation(t *testing.T) {
 }
 
 func TestStartupModel_SelectExistingConfig(t *testing.T) {
+	t.Parallel()
 	m := newStartupModel()
 	m.width, m.height, m.ready = 120, 40, true
 	m.phase = 0
@@ -480,6 +504,7 @@ func TestStartupModel_SelectExistingConfig(t *testing.T) {
 }
 
 func TestStartupModel_SelectProvider(t *testing.T) {
+	t.Parallel()
 	m := newStartupModel()
 	m.width, m.height, m.ready = 120, 40, true
 	m.phase = 1
@@ -498,6 +523,7 @@ func TestStartupModel_SelectProvider(t *testing.T) {
 }
 
 func TestStartupModel_CustomProviderInput(t *testing.T) {
+	t.Parallel()
 	m := newStartupModel()
 	m.width, m.height, m.ready = 120, 40, true
 	m.phase = 1
@@ -513,6 +539,7 @@ func TestStartupModel_CustomProviderInput(t *testing.T) {
 }
 
 func TestStartupModel_View(t *testing.T) {
+	t.Parallel()
 	m := newStartupModel()
 	m.width, m.height, m.ready = 120, 40, true
 	m.torusFrame = renderStartupTorus(m.torusA, m.torusB)
@@ -527,6 +554,7 @@ func TestStartupModel_View(t *testing.T) {
 }
 
 func TestStartupModel_ViewNotReadyEmpty(t *testing.T) {
+	t.Parallel()
 	m := startupModel{ready: false}
 	view := m.View()
 	if view != "" {
@@ -535,6 +563,7 @@ func TestStartupModel_ViewNotReadyEmpty(t *testing.T) {
 }
 
 func TestStartupModel_EscNavigatesBack(t *testing.T) {
+	t.Parallel()
 	m := newStartupModel()
 	m.width, m.height, m.ready = 120, 40, true
 	m.phase = 1
@@ -546,6 +575,7 @@ func TestStartupModel_EscNavigatesBack(t *testing.T) {
 }
 
 func TestStartupModel_EscClearsFilterFirst(t *testing.T) {
+	t.Parallel()
 	m := newStartupModel()
 	m.width, m.height, m.ready = 120, 40, true
 	m.phase = 1
@@ -563,6 +593,7 @@ func TestStartupModel_EscClearsFilterFirst(t *testing.T) {
 // ── NewModelWithStartup ─────────────────────────────────────────────────────
 
 func TestNewModelWithStartup(t *testing.T) {
+	t.Parallel()
 	m := NewModelWithStartup(nil, "test-model", config.AgentConfig{}, nil, nil)
 	if !m.startupPhase {
 		t.Error("startupPhase should be true")
@@ -573,6 +604,7 @@ func TestNewModelWithStartup(t *testing.T) {
 }
 
 func TestNewModelWithStartup_Init(t *testing.T) {
+	t.Parallel()
 	m := NewModelWithStartup(nil, "test-model", config.AgentConfig{}, nil, nil)
 	cmd := m.Init()
 	if cmd == nil {

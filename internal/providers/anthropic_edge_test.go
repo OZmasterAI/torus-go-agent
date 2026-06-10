@@ -16,6 +16,7 @@ import (
 
 // TestAnthropicEdge_InvalidAPIKey tests that invalid API keys are rejected.
 func TestAnthropicEdge_InvalidAPIKey(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name    string
 		apiKey  string
@@ -42,6 +43,7 @@ func TestAnthropicEdge_InvalidAPIKey(t *testing.T) {
 
 // TestAnthropicEdge_MalformedJSONResponse tests handling of malformed JSON responses.
 func TestAnthropicEdge_MalformedJSONResponse(t *testing.T) {
+	t.Parallel()
 	p := NewAnthropicProvider("sk-ant-test123", "claude-3-5-sonnet-20241022")
 
 	p.client = &http.Client{
@@ -70,6 +72,7 @@ func TestAnthropicEdge_MalformedJSONResponse(t *testing.T) {
 
 // TestAnthropicEdge_EmptyJSONResponse tests handling of empty JSON responses.
 func TestAnthropicEdge_EmptyJSONResponse(t *testing.T) {
+	t.Parallel()
 	p := NewAnthropicProvider("sk-ant-test123", "claude-3-5-sonnet-20241022")
 
 	p.client = &http.Client{
@@ -101,6 +104,7 @@ func TestAnthropicEdge_EmptyJSONResponse(t *testing.T) {
 
 // TestAnthropicEdge_RateLimitResponse tests 429 Too Many Requests handling.
 func TestAnthropicEdge_RateLimitResponse(t *testing.T) {
+	t.Parallel()
 	p := NewAnthropicProvider("sk-ant-test123", "claude-3-5-sonnet-20241022")
 
 	p.client = &http.Client{
@@ -129,6 +133,7 @@ func TestAnthropicEdge_RateLimitResponse(t *testing.T) {
 
 // TestAnthropicEdge_AuthenticationError tests 401 Unauthorized handling.
 func TestAnthropicEdge_AuthenticationError(t *testing.T) {
+	t.Parallel()
 	p := NewAnthropicProvider("sk-ant-invalid", "claude-3-5-sonnet-20241022")
 
 	p.client = &http.Client{
@@ -157,6 +162,7 @@ func TestAnthropicEdge_AuthenticationError(t *testing.T) {
 
 // TestAnthropicEdge_ServerError tests 500 Internal Server Error handling.
 func TestAnthropicEdge_ServerError(t *testing.T) {
+	t.Parallel()
 	p := NewAnthropicProvider("sk-ant-test123", "claude-3-5-sonnet-20241022")
 
 	p.client = &http.Client{
@@ -185,6 +191,7 @@ func TestAnthropicEdge_ServerError(t *testing.T) {
 
 // TestAnthropicEdge_ContextCancellation tests that cancelled contexts don't break the request building.
 func TestAnthropicEdge_ContextCancellation(t *testing.T) {
+	t.Parallel()
 	p := NewAnthropicProvider("sk-ant-test123", "claude-3-5-sonnet-20241022")
 
 	p.client = &http.Client{
@@ -226,6 +233,7 @@ func TestAnthropicEdge_ContextCancellation(t *testing.T) {
 
 // TestAnthropicEdge_ContextTimeout tests that request timeouts are handled properly.
 func TestAnthropicEdge_ContextTimeout(t *testing.T) {
+	t.Parallel()
 	p := NewAnthropicProvider("sk-ant-test123", "claude-3-5-sonnet-20241022")
 
 	p.client = &http.Client{
@@ -258,6 +266,7 @@ func TestAnthropicEdge_ContextTimeout(t *testing.T) {
 
 // TestAnthropicEdge_NetworkError tests network connectivity errors.
 func TestAnthropicEdge_NetworkError(t *testing.T) {
+	t.Parallel()
 	p := NewAnthropicProvider("sk-ant-test123", "claude-3-5-sonnet-20241022")
 
 	p.client = &http.Client{
@@ -282,10 +291,11 @@ func TestAnthropicEdge_NetworkError(t *testing.T) {
 
 // TestAnthropicEdge_MaxTokensCapping tests that max tokens are capped correctly.
 func TestAnthropicEdge_MaxTokensCapping(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
-		name      string
-		input     int
-		expected  int
+		name     string
+		input    int
+		expected int
 	}{
 		{"Zero tokens", 0, 8192},
 		{"Negative tokens", -1, 8192},
@@ -333,6 +343,7 @@ func TestAnthropicEdge_MaxTokensCapping(t *testing.T) {
 // preventing "final assistant content cannot end with trailing whitespace" errors
 // even when hooks modify messages after sanitizeMessages runs.
 func TestAnthropicEdge_TrailingWhitespaceTrimmedAtProviderBoundary(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		text     string
@@ -374,6 +385,7 @@ func TestAnthropicEdge_TrailingWhitespaceTrimmedAtProviderBoundary(t *testing.T)
 
 // TestAnthropicEdge_EmptyMessages tests handling of empty message lists.
 func TestAnthropicEdge_EmptyMessages(t *testing.T) {
+	t.Parallel()
 	p := NewAnthropicProvider("sk-ant-test123", "claude-3-5-sonnet-20241022")
 
 	p.client = &http.Client{
@@ -406,6 +418,7 @@ func TestAnthropicEdge_EmptyMessages(t *testing.T) {
 
 // TestAnthropicEdge_SystemRoleFiltering tests that system messages are filtered out.
 func TestAnthropicEdge_SystemRoleFiltering(t *testing.T) {
+	t.Parallel()
 	p := NewAnthropicProvider("sk-ant-test123", "claude-3-5-sonnet-20241022")
 
 	var capturedMessages []anthropicMsg
@@ -442,6 +455,7 @@ func TestAnthropicEdge_SystemRoleFiltering(t *testing.T) {
 
 // TestAnthropicEdge_ResponseWithMultipleContentBlocks tests handling of responses with multiple content blocks.
 func TestAnthropicEdge_ResponseWithMultipleContentBlocks(t *testing.T) {
+	t.Parallel()
 	p := NewAnthropicProvider("sk-ant-test123", "claude-3-5-sonnet-20241022")
 
 	p.client = &http.Client{
@@ -488,6 +502,7 @@ func TestAnthropicEdge_ResponseWithMultipleContentBlocks(t *testing.T) {
 
 // TestAnthropicEdge_ZeroTokenUsage tests responses with zero token usage.
 func TestAnthropicEdge_ZeroTokenUsage(t *testing.T) {
+	t.Parallel()
 	p := NewAnthropicProvider("sk-ant-test123", "claude-3-5-sonnet-20241022")
 
 	p.client = &http.Client{

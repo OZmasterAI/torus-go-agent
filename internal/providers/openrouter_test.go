@@ -22,6 +22,7 @@ func newMockHTTPResponse(statusCode int, body string) *http.Response {
 
 // TestNewOpenRouterProvider verifies provider name and model ID are set correctly.
 func TestNewOpenRouterProvider(t *testing.T) {
+	t.Parallel()
 	apiKey := "test-key"
 	model := "mistral-7b"
 
@@ -49,6 +50,7 @@ func TestNewOpenRouterProvider(t *testing.T) {
 
 // TestNewNvidiaProvider verifies NVIDIA provider is configured correctly.
 func TestNewNvidiaProvider(t *testing.T) {
+	t.Parallel()
 	apiKey := "nvidia-key"
 	model := "llama-70b"
 
@@ -70,6 +72,7 @@ func TestNewNvidiaProvider(t *testing.T) {
 
 // TestNewOpenAIProvider verifies OpenAI provider is configured correctly.
 func TestNewOpenAIProvider(t *testing.T) {
+	t.Parallel()
 	apiKey := "sk-..."
 	model := "gpt-4o"
 
@@ -91,6 +94,7 @@ func TestNewOpenAIProvider(t *testing.T) {
 
 // TestNewGrokProvider verifies Grok provider is configured correctly.
 func TestNewGrokProvider(t *testing.T) {
+	t.Parallel()
 	apiKey := "grok-key"
 	model := "grok-2"
 
@@ -112,6 +116,7 @@ func TestNewGrokProvider(t *testing.T) {
 
 // TestNewAzureOpenAIProvider verifies Azure provider configuration.
 func TestNewAzureOpenAIProvider(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name       string
 		apiKey     string
@@ -176,6 +181,7 @@ func TestNewAzureOpenAIProvider(t *testing.T) {
 
 // TestSetAuthHeaderBearer verifies Bearer token auth header.
 func TestSetAuthHeaderBearer(t *testing.T) {
+	t.Parallel()
 	p := NewOpenRouterProvider("test-key", "model")
 	req, _ := http.NewRequest("POST", "http://test", nil)
 
@@ -190,6 +196,7 @@ func TestSetAuthHeaderBearer(t *testing.T) {
 
 // TestSetAuthHeaderAPIKey verifies API key header for Azure.
 func TestSetAuthHeaderAPIKey(t *testing.T) {
+	t.Parallel()
 	p := NewAzureOpenAIProvider("azure-key", "res", "deploy", "2024-06-01")
 	req, _ := http.NewRequest("POST", "http://test", nil)
 
@@ -209,6 +216,7 @@ func TestSetAuthHeaderAPIKey(t *testing.T) {
 
 // TestChatEndpointDefault verifies default endpoint path.
 func TestChatEndpointDefault(t *testing.T) {
+	t.Parallel()
 	p := NewOpenRouterProvider("key", "model")
 	endpoint := p.chatEndpoint()
 
@@ -220,6 +228,7 @@ func TestChatEndpointDefault(t *testing.T) {
 
 // TestChatEndpointCustom verifies custom endpoint path.
 func TestChatEndpointCustom(t *testing.T) {
+	t.Parallel()
 	p := NewAzureOpenAIProvider("key", "res", "deploy", "2024-06-01")
 	endpoint := p.chatEndpoint()
 
@@ -231,6 +240,7 @@ func TestChatEndpointCustom(t *testing.T) {
 
 // TestOpenRouterCompleteBasicTextResponse verifies Complete with a simple text response.
 func TestOpenRouterCompleteBasicTextResponse(t *testing.T) {
+	t.Parallel()
 	p := NewOpenRouterProvider("test-key", "gpt-3.5")
 
 	// Mock response body
@@ -298,6 +308,7 @@ func TestOpenRouterCompleteBasicTextResponse(t *testing.T) {
 
 // TestOpenRouterCompleteWithToolCalls verifies Complete with tool calls in response.
 func TestOpenRouterCompleteWithToolCalls(t *testing.T) {
+	t.Parallel()
 	p := NewOpenRouterProvider("test-key", "gpt-4")
 
 	respBody := openaiResponse{
@@ -378,6 +389,7 @@ func TestOpenRouterCompleteWithToolCalls(t *testing.T) {
 
 // TestOpenRouterCompleteHTTPError verifies error handling for HTTP failures.
 func TestOpenRouterCompleteHTTPError(t *testing.T) {
+	t.Parallel()
 	p := NewOpenRouterProvider("test-key", "gpt-4")
 
 	errorResp := `{"error": {"message": "Invalid API key"}}`
@@ -403,6 +415,7 @@ func TestOpenRouterCompleteHTTPError(t *testing.T) {
 
 // TestOpenRouterCompleteNoChoices verifies error when response has no choices.
 func TestOpenRouterCompleteNoChoices(t *testing.T) {
+	t.Parallel()
 	p := NewOpenRouterProvider("test-key", "gpt-4")
 
 	respBody := openaiResponse{
@@ -437,6 +450,7 @@ func TestOpenRouterCompleteNoChoices(t *testing.T) {
 
 // TestOpenRouterCompleteInvalidJSON verifies error handling for malformed response.
 func TestOpenRouterCompleteInvalidJSON(t *testing.T) {
+	t.Parallel()
 	p := NewOpenRouterProvider("test-key", "gpt-4")
 
 	p.client = &http.Client{
@@ -470,6 +484,7 @@ func (m *mockTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 
 // TestOpenRouterStreamCompleteBasic verifies streaming with text chunks.
 func TestOpenRouterStreamCompleteBasic(t *testing.T) {
+	t.Parallel()
 	p := NewOpenRouterProvider("test-key", "gpt-4")
 
 	// Build SSE stream response
@@ -538,6 +553,7 @@ data: [DONE]
 
 // TestOpenRouterStreamCompleteHTTPError verifies error handling for stream HTTP failures.
 func TestOpenRouterStreamCompleteHTTPError(t *testing.T) {
+	t.Parallel()
 	p := NewOpenRouterProvider("test-key", "gpt-4")
 
 	p.client = &http.Client{
@@ -561,6 +577,7 @@ func TestOpenRouterStreamCompleteHTTPError(t *testing.T) {
 
 // TestProviderInterfaceImplementation verifies that OpenRouterProvider implements tp.Provider.
 func TestProviderInterfaceImplementation(t *testing.T) {
+	t.Parallel()
 	var _ tp.Provider = (*OpenRouterProvider)(nil)
 
 	// Verify all required methods exist and have correct signatures.
@@ -580,6 +597,7 @@ func TestProviderInterfaceImplementation(t *testing.T) {
 // TestOpenRouterStreamReasoningContent verifies that reasoning_content in stream
 // deltas emits EventThinkingDelta events (covers DeepSeek, NIM, Grok).
 func TestOpenRouterStreamReasoningContent(t *testing.T) {
+	t.Parallel()
 	p := NewOpenRouterProvider("test-key", "deepseek-r1")
 
 	sseBody := `data: {"id":"1","model":"deepseek-r1","choices":[{"index":0,"delta":{"role":"assistant","reasoning_content":"Let me think"},"finish_reason":null}]}
@@ -629,6 +647,7 @@ data: [DONE]
 // TestOpenRouterStreamReasoningContentOnly verifies stream with only reasoning_content
 // and no regular content (model still thinking when stopped).
 func TestOpenRouterStreamReasoningContentOnly(t *testing.T) {
+	t.Parallel()
 	p := NewNvidiaProvider("test-key", "deepseek-r1")
 
 	sseBody := `data: {"id":"1","model":"deepseek-r1","choices":[{"index":0,"delta":{"role":"assistant","reasoning_content":"Step 1: "},"finish_reason":null}]}
@@ -669,6 +688,7 @@ data: [DONE]
 // TestOpenRouterCompleteWithReasoningContent verifies non-streaming Complete produces
 // a ContentBlock{Type:"thinking"} when reasoning_content is present in the response.
 func TestOpenRouterCompleteWithReasoningContent(t *testing.T) {
+	t.Parallel()
 	p := NewOpenRouterProvider("test-key", "deepseek-r1")
 
 	respBody := `{
@@ -723,6 +743,7 @@ func TestOpenRouterCompleteWithReasoningContent(t *testing.T) {
 // TestOpenRouterCompleteNoReasoningContent verifies that responses without
 // reasoning_content still work normally (no thinking block added).
 func TestOpenRouterCompleteNoReasoningContent(t *testing.T) {
+	t.Parallel()
 	p := NewOpenRouterProvider("test-key", "gpt-4o")
 
 	respBody := `{

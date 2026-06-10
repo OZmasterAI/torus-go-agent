@@ -24,6 +24,7 @@ type Agent struct {
 	steeringMode  string // "mild" (default) or "aggressive"
 	activeFiles   []string       // recently-touched file paths from tool calls
 	activeFilesMu sync.RWMutex   // guards activeFiles
+	promptMu      sync.RWMutex   // guards config.SystemPrompt (written by PromptReloader goroutine)
 	Summarize     func(string) (string, error)
 	OnStreamDelta func(delta string)
 	OnToolUse     func(name string, args map[string]any, result *t.ToolResult)
@@ -224,6 +225,10 @@ func (a *Agent) runLoop(ctx context.Context, userMessage string, ch chan<- Agent
 
 		toolDefs := append([]t.Tool(nil), a.config.Tools...)
 
+		// Snapshot the system prompt once per turn — the PromptReloader
+		// goroutine may swap it concurrently (guarded by promptMu).
+		systemPrompt := a.SystemPrompt()
+
 		activeProvider := a.provider
 		if a.RouteProvider != nil {
 			activeProvider = a.RouteProvider(userMessage)
@@ -234,7 +239,7 @@ func (a *Agent) runLoop(ctx context.Context, userMessage string, ch chan<- Agent
 		// max_completion_tokens == context_window (common with free OpenRouter models).
 		maxTokens := a.config.Provider.MaxTokens
 		if a.config.ContextWindow > 0 {
-			inputCost := EstimatePromptCost(a.config.SystemPrompt, messages, toolDefs)
+			inputCost := EstimatePromptCost(systemPrompt, messages, toolDefs)
 			available := a.config.ContextWindow - inputCost
 			if available < 1024 {
 				available = 1024 // absolute floor so we always get some output
@@ -270,7 +275,7 @@ func (a *Agent) runLoop(ctx context.Context, userMessage string, ch chan<- Agent
 				log.Printf("[loop] retrying LLM call (attempt %d/4) after transient error", attempt+1)
 			}
 			if streaming {
-				streamCh, streamErr := activeProvider.StreamComplete(ctx, a.config.SystemPrompt, messages, toolDefs, maxTokens)
+				streamCh, streamErr := activeProvider.StreamComplete(ctx, systemPrompt, messages, toolDefs, maxTokens)
 				if streamErr != nil {
 					llmErr = streamErr
 					var te *t.TransientError
@@ -286,7 +291,7 @@ func (a *Agent) runLoop(ctx context.Context, userMessage string, ch chan<- Agent
 				}
 			} else {
 				var completeErr error
-				resp, completeErr = activeProvider.Complete(ctx, a.config.SystemPrompt, messages, toolDefs, maxTokens)
+				resp, completeErr = activeProvider.Complete(ctx, systemPrompt, messages, toolDefs, maxTokens)
 				if completeErr != nil {
 					llmErr = completeErr
 					var te *t.TransientError
@@ -474,7 +479,14 @@ func (a *Agent) findTool(name string) *t.Tool {
 func (a *Agent) DAG() *DAG                { return a.dag }
 func (a *Agent) Hooks() *HookRegistry     { return a.hooks }
 func (a *Agent) Provider() t.Provider     { return a.provider }
-func (a *Agent) SystemPrompt() string     { return a.config.SystemPrompt }
+
+// SystemPrompt returns the current system prompt (safe to call concurrently
+// with ReloadSystemPrompt).
+func (a *Agent) SystemPrompt() string {
+	a.promptMu.RLock()
+	defer a.promptMu.RUnlock()
+	return a.config.SystemPrompt
+}
 func (a *Agent) AddTool(tool t.Tool)        { a.config.Tools = append(a.config.Tools, tool) }
 
 // maxActiveFiles caps the number of tracked file paths.
@@ -530,7 +542,9 @@ func (a *Agent) ReloadSystemPrompt(ctx context.Context, newPrompt string) {
 	if data.AdditionalContext != "" {
 		newPrompt = newPrompt + "\n\n" + data.AdditionalContext
 	}
+	a.promptMu.Lock()
 	a.config.SystemPrompt = newPrompt
+	a.promptMu.Unlock()
 }
 func (a *Agent) SetSteeringMode(mode string) { a.steeringMode = mode }
 func (a *Agent) GetSteeringMode() string {

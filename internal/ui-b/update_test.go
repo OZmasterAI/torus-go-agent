@@ -9,6 +9,7 @@ import (
 )
 
 func TestUpdateWindowSize(t *testing.T) {
+	t.Parallel()
 	m := NewModel(nil, "test", config.AgentConfig{}, nil, nil)
 	newM, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
 	model := newM.(Model)
@@ -24,6 +25,7 @@ func TestUpdateWindowSize(t *testing.T) {
 }
 
 func TestUpdateRoutesToOverlay(t *testing.T) {
+	t.Parallel()
 	m := NewModel(nil, "test", config.AgentConfig{}, nil, nil)
 	m.width, m.height, m.ready = 80, 24, true
 	m.overlay.Open("help", nil)
@@ -35,6 +37,7 @@ func TestUpdateRoutesToOverlay(t *testing.T) {
 }
 
 func TestUpdateCtrlDQuits(t *testing.T) {
+	t.Parallel()
 	m := NewModel(nil, "test", config.AgentConfig{}, nil, nil)
 	m.width, m.height, m.ready = 80, 24, true
 	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlD})
@@ -44,6 +47,7 @@ func TestUpdateCtrlDQuits(t *testing.T) {
 }
 
 func TestUpdateTickMsg(t *testing.T) {
+	t.Parallel()
 	m := NewModel(nil, "test", config.AgentConfig{}, nil, nil)
 	m.width, m.height, m.ready = 80, 24, true
 	m.status.processing = true
@@ -55,6 +59,7 @@ func TestUpdateTickMsg(t *testing.T) {
 }
 
 func TestTypedSkillCommandEnterSubmits(t *testing.T) {
+	t.Parallel()
 	m := newSkillTestModel(t)
 	m.input.SetValue("/brainstorm topic")
 
@@ -83,6 +88,7 @@ func TestTypedSkillCommandEnterSubmits(t *testing.T) {
 }
 
 func TestSkillDispatchWhileProcessingIsNoop(t *testing.T) {
+	t.Parallel()
 	m := newSkillTestModel(t)
 	m.status.processing = true
 	m.input.SetValue("/brainstorm")
@@ -101,6 +107,7 @@ func TestSkillDispatchWhileProcessingIsNoop(t *testing.T) {
 }
 
 func TestStreamThinkingDeltaAppends(t *testing.T) {
+	t.Parallel()
 	m := NewModel(nil, "test", config.AgentConfig{}, nil, nil)
 	m.width, m.height, m.ready = 80, 24, true
 	m.chat.streaming = true
@@ -116,6 +123,7 @@ func TestStreamThinkingDeltaAppends(t *testing.T) {
 }
 
 func TestThinkingCollapseOnAgentDone(t *testing.T) {
+	t.Parallel()
 	m := NewModel(nil, "test", config.AgentConfig{}, nil, nil)
 	m.width, m.height, m.ready = 80, 24, true
 	m.chat.streaming = true
@@ -134,6 +142,7 @@ func TestThinkingCollapseOnAgentDone(t *testing.T) {
 }
 
 func TestCtrlOToggleThinking(t *testing.T) {
+	t.Parallel()
 	m := NewModel(nil, "test", config.AgentConfig{}, nil, nil)
 	m.width, m.height, m.ready = 80, 24, true
 

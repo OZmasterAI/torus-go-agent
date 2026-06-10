@@ -16,6 +16,7 @@ func textContent(s string) []typ.ContentBlock {
 // ---- 1. NewDAG ----
 
 func TestNewDAG_CreatesMainBranch(tt *testing.T) {
+	tt.Parallel()
 	d := newTestDAG(tt)
 
 	// Must have exactly one branch named "main".
@@ -38,6 +39,7 @@ func TestNewDAG_CreatesMainBranch(tt *testing.T) {
 }
 
 func TestNewDAG_ReopenPreservesData(tt *testing.T) {
+	tt.Parallel()
 	dir := tt.TempDir()
 	dbPath := filepath.Join(dir, "test.db")
 
@@ -71,6 +73,7 @@ func TestNewDAG_ReopenPreservesData(tt *testing.T) {
 // ---- 2. AddNode ----
 
 func TestAddNode_InsertsAndUpdatesHead(tt *testing.T) {
+	tt.Parallel()
 	d := newTestDAG(tt)
 
 	id1, err := d.AddNode("", typ.RoleUser, textContent("msg1"), "model-a", "prov-a", 10)
@@ -131,6 +134,7 @@ func TestAddNode_InsertsAndUpdatesHead(tt *testing.T) {
 // ---- 3. RemoveNode ----
 
 func TestRemoveNode_DeletesAndRewindsHead(tt *testing.T) {
+	tt.Parallel()
 	d := newTestDAG(tt)
 
 	id1, _ := d.AddNode("", typ.RoleUser, textContent("first"), "", "", 0)
@@ -153,6 +157,7 @@ func TestRemoveNode_DeletesAndRewindsHead(tt *testing.T) {
 }
 
 func TestRemoveNode_RootRewindsToEmpty(tt *testing.T) {
+	tt.Parallel()
 	d := newTestDAG(tt)
 
 	id1, _ := d.AddNode("", typ.RoleUser, textContent("only"), "", "", 0)
@@ -166,6 +171,7 @@ func TestRemoveNode_RootRewindsToEmpty(tt *testing.T) {
 }
 
 func TestRemoveNode_NotFound(tt *testing.T) {
+	tt.Parallel()
 	d := newTestDAG(tt)
 	err := d.RemoveNode("nd_nonexistent")
 	if err == nil {
@@ -176,6 +182,7 @@ func TestRemoveNode_NotFound(tt *testing.T) {
 // ---- 4. GetNode ----
 
 func TestGetNode_NotFound(tt *testing.T) {
+	tt.Parallel()
 	d := newTestDAG(tt)
 	_, err := d.GetNode("nd_doesnotexist")
 	if err != sql.ErrNoRows {
@@ -186,6 +193,7 @@ func TestGetNode_NotFound(tt *testing.T) {
 // ---- 5. GetHead ----
 
 func TestGetHead_EmptyOnFreshBranch(tt *testing.T) {
+	tt.Parallel()
 	d := newTestDAG(tt)
 	head, err := d.GetHead()
 	if err != nil {
@@ -199,6 +207,7 @@ func TestGetHead_EmptyOnFreshBranch(tt *testing.T) {
 // ---- 6. GetAncestors ----
 
 func TestGetAncestors_Chain(tt *testing.T) {
+	tt.Parallel()
 	d := newTestDAG(tt)
 
 	id1, _ := d.AddNode("", typ.RoleUser, textContent("a"), "", "", 0)
@@ -219,6 +228,7 @@ func TestGetAncestors_Chain(tt *testing.T) {
 }
 
 func TestGetAncestors_SingleNode(tt *testing.T) {
+	tt.Parallel()
 	d := newTestDAG(tt)
 	id1, _ := d.AddNode("", typ.RoleUser, textContent("solo"), "", "", 0)
 
@@ -232,6 +242,7 @@ func TestGetAncestors_SingleNode(tt *testing.T) {
 }
 
 func TestGetAncestors_NonExistentReturnsEmpty(tt *testing.T) {
+	tt.Parallel()
 	d := newTestDAG(tt)
 	anc, err := d.GetAncestors("nd_ghost")
 	if err != nil {
@@ -245,6 +256,7 @@ func TestGetAncestors_NonExistentReturnsEmpty(tt *testing.T) {
 // ---- 7. Alias CRUD ----
 
 func TestSetAlias_AndResolve(tt *testing.T) {
+	tt.Parallel()
 	d := newTestDAG(tt)
 	id1, _ := d.AddNode("", typ.RoleUser, textContent("msg"), "", "", 0)
 
@@ -261,6 +273,7 @@ func TestSetAlias_AndResolve(tt *testing.T) {
 }
 
 func TestSetAlias_Overwrite(tt *testing.T) {
+	tt.Parallel()
 	d := newTestDAG(tt)
 	id1, _ := d.AddNode("", typ.RoleUser, textContent("a"), "", "", 0)
 	id2, _ := d.AddNode(id1, typ.RoleAssistant, textContent("b"), "", "", 0)
@@ -278,6 +291,7 @@ func TestSetAlias_Overwrite(tt *testing.T) {
 }
 
 func TestDeleteAlias(tt *testing.T) {
+	tt.Parallel()
 	d := newTestDAG(tt)
 	id1, _ := d.AddNode("", typ.RoleUser, textContent("msg"), "", "", 0)
 
@@ -292,6 +306,7 @@ func TestDeleteAlias(tt *testing.T) {
 }
 
 func TestGetAliases(tt *testing.T) {
+	tt.Parallel()
 	d := newTestDAG(tt)
 	id1, _ := d.AddNode("", typ.RoleUser, textContent("msg"), "", "", 0)
 
@@ -316,6 +331,7 @@ func TestGetAliases(tt *testing.T) {
 }
 
 func TestGetAliases_Empty(tt *testing.T) {
+	tt.Parallel()
 	d := newTestDAG(tt)
 	id1, _ := d.AddNode("", typ.RoleUser, textContent("msg"), "", "", 0)
 
@@ -329,6 +345,7 @@ func TestGetAliases_Empty(tt *testing.T) {
 }
 
 func TestResolveAlias_NotFound(tt *testing.T) {
+	tt.Parallel()
 	d := newTestDAG(tt)
 	_, err := d.ResolveAlias("nope")
 	if err != sql.ErrNoRows {
@@ -339,6 +356,7 @@ func TestResolveAlias_NotFound(tt *testing.T) {
 // ---- 8. NextAutoAlias ----
 
 func TestNextAutoAlias_Incrementing(tt *testing.T) {
+	tt.Parallel()
 	d := newTestDAG(tt)
 
 	// No aliases yet: should start at a1.
@@ -362,6 +380,7 @@ func TestNextAutoAlias_Incrementing(tt *testing.T) {
 }
 
 func TestNextAutoAlias_IgnoresNonAutoAliases(tt *testing.T) {
+	tt.Parallel()
 	d := newTestDAG(tt)
 	id1, _ := d.AddNode("", typ.RoleUser, textContent("msg"), "", "", 0)
 
@@ -377,6 +396,7 @@ func TestNextAutoAlias_IgnoresNonAutoAliases(tt *testing.T) {
 // ---- 9. Branch / NewBranch / SwitchBranch / ListBranches ----
 
 func TestBranch_ForksFromNode(tt *testing.T) {
+	tt.Parallel()
 	d := newTestDAG(tt)
 
 	id1, _ := d.AddNode("", typ.RoleUser, textContent("root"), "", "", 0)
@@ -424,6 +444,7 @@ func TestBranch_ForksFromNode(tt *testing.T) {
 }
 
 func TestNewBranch_EmptyHead(tt *testing.T) {
+	tt.Parallel()
 	d := newTestDAG(tt)
 
 	// Add a node so main has a head.
@@ -456,6 +477,7 @@ func TestNewBranch_EmptyHead(tt *testing.T) {
 }
 
 func TestSwitchBranch(tt *testing.T) {
+	tt.Parallel()
 	d := newTestDAG(tt)
 
 	mainBranch := d.CurrentBranchID()
@@ -476,6 +498,7 @@ func TestSwitchBranch(tt *testing.T) {
 }
 
 func TestSwitchBranch_NotFound(tt *testing.T) {
+	tt.Parallel()
 	d := newTestDAG(tt)
 	err := d.SwitchBranch("br_nonexistent")
 	if err == nil {
@@ -484,6 +507,7 @@ func TestSwitchBranch_NotFound(tt *testing.T) {
 }
 
 func TestListBranches_MultiplePresent(tt *testing.T) {
+	tt.Parallel()
 	d := newTestDAG(tt)
 
 	d.NewBranch("b1")
@@ -510,6 +534,7 @@ func TestListBranches_MultiplePresent(tt *testing.T) {
 // ---- 10. CurrentBranchInfo ----
 
 func TestCurrentBranchInfo_Basic(tt *testing.T) {
+	tt.Parallel()
 	d := newTestDAG(tt)
 
 	id1, _ := d.AddNode("", typ.RoleUser, textContent("first"), "", "", 0)
@@ -535,6 +560,7 @@ func TestCurrentBranchInfo_Basic(tt *testing.T) {
 }
 
 func TestCurrentBranchInfo_EmptyBranch(tt *testing.T) {
+	tt.Parallel()
 	d := newTestDAG(tt)
 
 	branchID, branchName, headNode, msgCount, err := d.CurrentBranchInfo()
@@ -553,6 +579,7 @@ func TestCurrentBranchInfo_EmptyBranch(tt *testing.T) {
 }
 
 func TestCurrentBranchInfo_BadBranch(tt *testing.T) {
+	tt.Parallel()
 	d := newTestDAG(tt)
 	// Force a bad branch ID.
 	d.branchID = "br_bogus"
@@ -565,6 +592,7 @@ func TestCurrentBranchInfo_BadBranch(tt *testing.T) {
 // ---- 11. forked_from migration ----
 
 func TestForkedFromMigration_ExistingDB(tt *testing.T) {
+	tt.Parallel()
 	// Simulate a DB that was created without the forked_from column:
 	// create schema without forked_from, then open with NewDAG which should migrate.
 	dir := tt.TempDir()
@@ -636,6 +664,7 @@ func TestForkedFromMigration_ExistingDB(tt *testing.T) {
 // ---- Additional coverage ----
 
 func TestResetHead(tt *testing.T) {
+	tt.Parallel()
 	d := newTestDAG(tt)
 	d.AddNode("", typ.RoleUser, textContent("msg"), "", "", 0)
 
@@ -649,6 +678,7 @@ func TestResetHead(tt *testing.T) {
 }
 
 func TestPromptFrom(tt *testing.T) {
+	tt.Parallel()
 	d := newTestDAG(tt)
 
 	id1, _ := d.AddNode("", typ.RoleUser, textContent("hello"), "", "", 0)
@@ -670,6 +700,7 @@ func TestPromptFrom(tt *testing.T) {
 }
 
 func TestResolveNodeOrAlias_ByAlias(tt *testing.T) {
+	tt.Parallel()
 	d := newTestDAG(tt)
 	id1, _ := d.AddNode("", typ.RoleUser, textContent("msg"), "", "", 0)
 	d.SetAlias(id1, "mark")
@@ -684,6 +715,7 @@ func TestResolveNodeOrAlias_ByAlias(tt *testing.T) {
 }
 
 func TestResolveNodeOrAlias_ByNodeID(tt *testing.T) {
+	tt.Parallel()
 	d := newTestDAG(tt)
 	id1, _ := d.AddNode("", typ.RoleUser, textContent("msg"), "", "", 0)
 
@@ -697,6 +729,7 @@ func TestResolveNodeOrAlias_ByNodeID(tt *testing.T) {
 }
 
 func TestResolveNodeOrAlias_NotFound(tt *testing.T) {
+	tt.Parallel()
 	d := newTestDAG(tt)
 	_, err := d.ResolveNodeOrAlias("unknown_thing")
 	if err == nil {
@@ -705,6 +738,7 @@ func TestResolveNodeOrAlias_NotFound(tt *testing.T) {
 }
 
 func TestSearchAll_FindsMatches(tt *testing.T) {
+	tt.Parallel()
 	d := newTestDAG(tt)
 	d.AddNode("", typ.RoleUser, textContent("the quick brown fox"), "", "", 0)
 	d.AddNode("", typ.RoleUser, textContent("lazy dog"), "", "", 0)
@@ -722,6 +756,7 @@ func TestSearchAll_FindsMatches(tt *testing.T) {
 }
 
 func TestSearchAll_NoResults(tt *testing.T) {
+	tt.Parallel()
 	d := newTestDAG(tt)
 	d.AddNode("", typ.RoleUser, textContent("hello"), "", "", 0)
 
@@ -735,6 +770,7 @@ func TestSearchAll_NoResults(tt *testing.T) {
 }
 
 func TestGetSubtree(tt *testing.T) {
+	tt.Parallel()
 	d := newTestDAG(tt)
 
 	root, _ := d.AddNode("", typ.RoleUser, textContent("root"), "", "", 0)
@@ -765,6 +801,7 @@ func TestGetSubtree(tt *testing.T) {
 // ---- Fork ----
 
 func TestFork_IndependentBranch(tt *testing.T) {
+	tt.Parallel()
 	d := newTestDAG(tt)
 
 	// Add a node on main branch

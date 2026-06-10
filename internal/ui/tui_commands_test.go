@@ -37,6 +37,7 @@ func addNode(t *testing.T, dag *core.DAG, parentID string, role types.Role, text
 // ---------------------------------------------------------------------------
 
 func TestFormatBranchList_Empty(t *testing.T) {
+	t.Parallel()
 	result := commands.FormatBranchList([]commands.BranchSummary{})
 	if result != "" {
 		t.Errorf("FormatBranchList with empty list should return empty string, got %q", result)
@@ -44,6 +45,7 @@ func TestFormatBranchList_Empty(t *testing.T) {
 }
 
 func TestFormatBranchList_SingleBranch(t *testing.T) {
+	t.Parallel()
 	branches := []commands.BranchSummary{
 		{
 			ID:        "br_abc123",
@@ -65,6 +67,7 @@ func TestFormatBranchList_SingleBranch(t *testing.T) {
 }
 
 func TestFormatBranchList_MultipleBranches(t *testing.T) {
+	t.Parallel()
 	branches := []commands.BranchSummary{
 		{
 			ID:        "br_abc123",
@@ -111,6 +114,7 @@ func TestFormatBranchList_MultipleBranches(t *testing.T) {
 }
 
 func TestFormatBranchList_LongBranchName(t *testing.T) {
+	t.Parallel()
 	branches := []commands.BranchSummary{
 		{
 			ID:        "br_abc123",
@@ -134,6 +138,7 @@ func TestFormatBranchList_LongBranchName(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestFormatMessageList_Empty(t *testing.T) {
+	t.Parallel()
 	result := commands.FormatMessageList([]commands.MessageSummary{})
 	if result != "" {
 		t.Errorf("FormatMessageList with empty list should return empty string, got %q", result)
@@ -141,6 +146,7 @@ func TestFormatMessageList_Empty(t *testing.T) {
 }
 
 func TestFormatMessageList_SingleMessage(t *testing.T) {
+	t.Parallel()
 	messages := []commands.MessageSummary{
 		{
 			NodeID:    "nd_abc123",
@@ -165,6 +171,7 @@ func TestFormatMessageList_SingleMessage(t *testing.T) {
 }
 
 func TestFormatMessageList_WithAliases(t *testing.T) {
+	t.Parallel()
 	messages := []commands.MessageSummary{
 		{
 			NodeID:    "nd_abc123",
@@ -189,6 +196,7 @@ func TestFormatMessageList_WithAliases(t *testing.T) {
 }
 
 func TestFormatMessageList_RoleTruncation(t *testing.T) {
+	t.Parallel()
 	messages := []commands.MessageSummary{
 		{
 			NodeID:    "nd_abc123",
@@ -211,6 +219,7 @@ func TestFormatMessageList_RoleTruncation(t *testing.T) {
 }
 
 func TestFormatMessageList_MultipleMessages(t *testing.T) {
+	t.Parallel()
 	messages := []commands.MessageSummary{
 		{
 			NodeID:  "nd_1",
@@ -257,6 +266,7 @@ func TestFormatMessageList_MultipleMessages(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestHandleAliasArgParsing(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name       string
 		args       string
@@ -334,6 +344,7 @@ func TestHandleAliasArgParsing(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestParseForkArgs_EmptyString(t *testing.T) {
+	t.Parallel()
 	action, value := commands.ParseForkArgs("")
 	if action != "head" || value != "" {
 		t.Errorf("empty fork args should default to 'head', got (%q, %q)", action, value)
@@ -341,6 +352,7 @@ func TestParseForkArgs_EmptyString(t *testing.T) {
 }
 
 func TestParseForkArgs_BackVariants(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		input      string
 		wantAction string
@@ -365,6 +377,7 @@ func TestParseForkArgs_BackVariants(t *testing.T) {
 }
 
 func TestParseForkArgs_BranchKeyword(t *testing.T) {
+	t.Parallel()
 	action, value := commands.ParseForkArgs("branch")
 	if action != "branch" || value != "" {
 		t.Errorf("'branch' should return ('branch', ''), got (%q, %q)", action, value)
@@ -372,6 +385,7 @@ func TestParseForkArgs_BranchKeyword(t *testing.T) {
 }
 
 func TestParseForkArgs_NodeID(t *testing.T) {
+	t.Parallel()
 	tests := []string{
 		"nd_abc123",
 		"some_node_id",
@@ -394,6 +408,7 @@ func TestParseForkArgs_NodeID(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestParseSwitchArgs_EmptyString(t *testing.T) {
+	t.Parallel()
 	mode, value := commands.ParseSwitchArgs("")
 	if mode != "list" || value != "" {
 		t.Errorf("empty switch args should default to 'list', got (%q, %q)", mode, value)
@@ -401,6 +416,7 @@ func TestParseSwitchArgs_EmptyString(t *testing.T) {
 }
 
 func TestParseSwitchArgs_IntegerIndex(t *testing.T) {
+	t.Parallel()
 	tests := []string{"0", "1", "42", "999"}
 
 	for _, idx := range tests {
@@ -415,6 +431,7 @@ func TestParseSwitchArgs_IntegerIndex(t *testing.T) {
 }
 
 func TestParseSwitchArgs_BranchID(t *testing.T) {
+	t.Parallel()
 	tests := []string{
 		"br_abc123",
 		"main",
@@ -438,6 +455,7 @@ func TestParseSwitchArgs_BranchID(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestDisplayMsg_Structure(t *testing.T) {
+	t.Parallel()
 	// Test that displayMsg can be created and used
 	msg := displayMsg{
 		role:    "assistant",
@@ -457,6 +475,7 @@ func TestDisplayMsg_Structure(t *testing.T) {
 }
 
 func TestDisplayMsg_ErrorMessage(t *testing.T) {
+	t.Parallel()
 	msg := displayMsg{
 		role:    "error",
 		text:    "Something went wrong",
@@ -476,6 +495,7 @@ func TestDisplayMsg_ErrorMessage(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestSteeringModeFormatting(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		mode     string
@@ -506,6 +526,7 @@ func TestSteeringModeFormatting(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestMessageListIntegration_WithDAG(t *testing.T) {
+	t.Parallel()
 	dag := newTestDAG(t)
 
 	// Add a chain of messages
@@ -560,6 +581,7 @@ func TestHandleStats_ShowsCompressionRuns(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestBranchListIntegration_WithDAG(t *testing.T) {
+	t.Parallel()
 	dag := newTestDAG(t)
 
 	// Add some messages on the main branch

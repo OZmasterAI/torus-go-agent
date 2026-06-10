@@ -9,6 +9,7 @@ import (
 
 // TestHelpersEdge_HasToolUse_NilMessage tests HasToolUse with nil message.
 func TestHelpersEdge_HasToolUse_NilMessage(t *testing.T) {
+	t.Parallel()
 	defer func() {
 		if r := recover(); r != nil {
 			t.Logf("panic recovered: %v", r)
@@ -24,6 +25,7 @@ func TestHelpersEdge_HasToolUse_NilMessage(t *testing.T) {
 
 // TestHelpersEdge_HasToolUse_NilContent tests HasToolUse with nil content slice.
 func TestHelpersEdge_HasToolUse_NilContent(t *testing.T) {
+	t.Parallel()
 	msg := &types.AssistantMessage{
 		Message: types.Message{
 			Content: nil,
@@ -37,6 +39,7 @@ func TestHelpersEdge_HasToolUse_NilContent(t *testing.T) {
 
 // TestHelpersEdge_HasToolUse_LargeNumberOfBlocks tests HasToolUse with many blocks.
 func TestHelpersEdge_HasToolUse_LargeNumberOfBlocks(t *testing.T) {
+	t.Parallel()
 	content := make([]types.ContentBlock, 1000)
 	for i := 0; i < 1000; i++ {
 		content[i] = types.ContentBlock{Type: "text", Text: "block"}
@@ -57,6 +60,7 @@ func TestHelpersEdge_HasToolUse_LargeNumberOfBlocks(t *testing.T) {
 
 // TestHelpersEdge_HasToolUse_EmptyTypeField tests HasToolUse with empty Type field.
 func TestHelpersEdge_HasToolUse_EmptyTypeField(t *testing.T) {
+	t.Parallel()
 	msg := &types.AssistantMessage{
 		Message: types.Message{
 			Content: []types.ContentBlock{
@@ -72,6 +76,7 @@ func TestHelpersEdge_HasToolUse_EmptyTypeField(t *testing.T) {
 
 // TestHelpersEdge_ExtractText_NilMessage tests ExtractText with nil message.
 func TestHelpersEdge_ExtractText_NilMessage(t *testing.T) {
+	t.Parallel()
 	defer func() {
 		if r := recover(); r != nil {
 			t.Logf("panic recovered: %v", r)
@@ -86,6 +91,7 @@ func TestHelpersEdge_ExtractText_NilMessage(t *testing.T) {
 
 // TestHelpersEdge_ExtractText_NilContent tests ExtractText with nil content slice.
 func TestHelpersEdge_ExtractText_NilContent(t *testing.T) {
+	t.Parallel()
 	msg := &types.AssistantMessage{
 		Message: types.Message{
 			Content: nil,
@@ -99,6 +105,7 @@ func TestHelpersEdge_ExtractText_NilContent(t *testing.T) {
 
 // TestHelpersEdge_ExtractText_SpecialCharacters tests ExtractText with special characters.
 func TestHelpersEdge_ExtractText_SpecialCharacters(t *testing.T) {
+	t.Parallel()
 	msg := &types.AssistantMessage{
 		Message: types.Message{
 			Content: []types.ContentBlock{
@@ -118,6 +125,7 @@ func TestHelpersEdge_ExtractText_SpecialCharacters(t *testing.T) {
 
 // TestHelpersEdge_ExtractText_VeryLongText tests ExtractText with very long strings.
 func TestHelpersEdge_ExtractText_VeryLongText(t *testing.T) {
+	t.Parallel()
 	longText := strings.Repeat("a", 100000)
 	msg := &types.AssistantMessage{
 		Message: types.Message{
@@ -136,6 +144,7 @@ func TestHelpersEdge_ExtractText_VeryLongText(t *testing.T) {
 
 // TestHelpersEdge_ExtractText_OnlyEmptyTextBlocks tests ExtractText with only empty text blocks.
 func TestHelpersEdge_ExtractText_OnlyEmptyTextBlocks(t *testing.T) {
+	t.Parallel()
 	msg := &types.AssistantMessage{
 		Message: types.Message{
 			Content: []types.ContentBlock{
@@ -153,6 +162,7 @@ func TestHelpersEdge_ExtractText_OnlyEmptyTextBlocks(t *testing.T) {
 
 // TestHelpersEdge_ExtractText_ManySmallBlocks tests ExtractText with many small text blocks.
 func TestHelpersEdge_ExtractText_ManySmallBlocks(t *testing.T) {
+	t.Parallel()
 	content := make([]types.ContentBlock, 1000)
 	for i := 0; i < 1000; i++ {
 		content[i] = types.ContentBlock{Type: "text", Text: "a"}
@@ -171,6 +181,7 @@ func TestHelpersEdge_ExtractText_ManySmallBlocks(t *testing.T) {
 
 // TestHelpersEdge_ExtractText_WhitespaceOnly tests ExtractText with whitespace-only blocks.
 func TestHelpersEdge_ExtractText_WhitespaceOnly(t *testing.T) {
+	t.Parallel()
 	msg := &types.AssistantMessage{
 		Message: types.Message{
 			Content: []types.ContentBlock{
@@ -189,6 +200,7 @@ func TestHelpersEdge_ExtractText_WhitespaceOnly(t *testing.T) {
 
 // TestHelpersEdge_ExtractToolCalls_NilMessage tests ExtractToolCalls with nil message.
 func TestHelpersEdge_ExtractToolCalls_NilMessage(t *testing.T) {
+	t.Parallel()
 	defer func() {
 		if r := recover(); r != nil {
 			t.Logf("panic recovered: %v", r)
@@ -203,6 +215,7 @@ func TestHelpersEdge_ExtractToolCalls_NilMessage(t *testing.T) {
 
 // TestHelpersEdge_ExtractToolCalls_NilContent tests ExtractToolCalls with nil content slice.
 func TestHelpersEdge_ExtractToolCalls_NilContent(t *testing.T) {
+	t.Parallel()
 	msg := &types.AssistantMessage{
 		Message: types.Message{
 			Content: nil,
@@ -216,6 +229,7 @@ func TestHelpersEdge_ExtractToolCalls_NilContent(t *testing.T) {
 
 // TestHelpersEdge_ExtractToolCalls_LargeNumberOfCalls tests ExtractToolCalls with many tool calls.
 func TestHelpersEdge_ExtractToolCalls_LargeNumberOfCalls(t *testing.T) {
+	t.Parallel()
 	content := make([]types.ContentBlock, 500)
 	for i := 0; i < 500; i++ {
 		content[i] = types.ContentBlock{
@@ -237,6 +251,7 @@ func TestHelpersEdge_ExtractToolCalls_LargeNumberOfCalls(t *testing.T) {
 
 // TestHelpersEdge_ExtractToolCalls_MixedWithEmptyNames tests ExtractToolCalls with empty tool names.
 func TestHelpersEdge_ExtractToolCalls_MixedWithEmptyNames(t *testing.T) {
+	t.Parallel()
 	msg := &types.AssistantMessage{
 		Message: types.Message{
 			Content: []types.ContentBlock{
@@ -260,6 +275,7 @@ func TestHelpersEdge_ExtractToolCalls_MixedWithEmptyNames(t *testing.T) {
 
 // TestHelpersEdge_ExtractToolCalls_DuplicateIDs tests ExtractToolCalls with duplicate IDs.
 func TestHelpersEdge_ExtractToolCalls_DuplicateIDs(t *testing.T) {
+	t.Parallel()
 	msg := &types.AssistantMessage{
 		Message: types.Message{
 			Content: []types.ContentBlock{
@@ -277,6 +293,7 @@ func TestHelpersEdge_ExtractToolCalls_DuplicateIDs(t *testing.T) {
 
 // TestHelpersEdge_ExtractToolCalls_SpecialCharactersInID tests ExtractToolCalls with special characters in IDs.
 func TestHelpersEdge_ExtractToolCalls_SpecialCharactersInID(t *testing.T) {
+	t.Parallel()
 	msg := &types.AssistantMessage{
 		Message: types.Message{
 			Content: []types.ContentBlock{
@@ -294,6 +311,7 @@ func TestHelpersEdge_ExtractToolCalls_SpecialCharactersInID(t *testing.T) {
 
 // TestHelpersEdge_ExtractToolCalls_EmptyIDField tests ExtractToolCalls with empty ID field.
 func TestHelpersEdge_ExtractToolCalls_EmptyIDField(t *testing.T) {
+	t.Parallel()
 	msg := &types.AssistantMessage{
 		Message: types.Message{
 			Content: []types.ContentBlock{
@@ -310,6 +328,7 @@ func TestHelpersEdge_ExtractToolCalls_EmptyIDField(t *testing.T) {
 
 // TestHelpersEdge_ExtractToolCalls_VeryLongInputs tests ExtractToolCalls with very long Input maps.
 func TestHelpersEdge_ExtractToolCalls_VeryLongInputs(t *testing.T) {
+	t.Parallel()
 	input := make(map[string]any)
 	for i := 0; i < 1000; i++ {
 		input["key"+string(rune(i))] = "value"
@@ -329,6 +348,7 @@ func TestHelpersEdge_ExtractToolCalls_VeryLongInputs(t *testing.T) {
 
 // TestHelpersEdge_ExtractToolCalls_AllNonToolTypes tests that non-tool types are excluded.
 func TestHelpersEdge_ExtractToolCalls_AllNonToolTypes(t *testing.T) {
+	t.Parallel()
 	msg := &types.AssistantMessage{
 		Message: types.Message{
 			Content: []types.ContentBlock{
@@ -347,6 +367,7 @@ func TestHelpersEdge_ExtractToolCalls_AllNonToolTypes(t *testing.T) {
 
 // TestHelpersEdge_ConcurrentAccess_HasToolUse tests concurrent access to HasToolUse.
 func TestHelpersEdge_ConcurrentAccess_HasToolUse(t *testing.T) {
+	t.Parallel()
 	msg := &types.AssistantMessage{
 		Message: types.Message{
 			Content: []types.ContentBlock{
@@ -374,6 +395,7 @@ func TestHelpersEdge_ConcurrentAccess_HasToolUse(t *testing.T) {
 
 // TestHelpersEdge_ConcurrentAccess_ExtractText tests concurrent access to ExtractText.
 func TestHelpersEdge_ConcurrentAccess_ExtractText(t *testing.T) {
+	t.Parallel()
 	msg := &types.AssistantMessage{
 		Message: types.Message{
 			Content: []types.ContentBlock{
@@ -402,6 +424,7 @@ func TestHelpersEdge_ConcurrentAccess_ExtractText(t *testing.T) {
 
 // TestHelpersEdge_ConcurrentAccess_ExtractToolCalls tests concurrent access to ExtractToolCalls.
 func TestHelpersEdge_ConcurrentAccess_ExtractToolCalls(t *testing.T) {
+	t.Parallel()
 	msg := &types.AssistantMessage{
 		Message: types.Message{
 			Content: []types.ContentBlock{
@@ -430,6 +453,7 @@ func TestHelpersEdge_ConcurrentAccess_ExtractToolCalls(t *testing.T) {
 
 // TestHelpersEdge_ExtractText_ConsecutiveEmptyBlocks tests consecutive empty text blocks.
 func TestHelpersEdge_ExtractText_ConsecutiveEmptyBlocks(t *testing.T) {
+	t.Parallel()
 	msg := &types.AssistantMessage{
 		Message: types.Message{
 			Content: []types.ContentBlock{
@@ -450,6 +474,7 @@ func TestHelpersEdge_ExtractText_ConsecutiveEmptyBlocks(t *testing.T) {
 
 // TestHelpersEdge_HasToolUse_CaseSensitive tests that tool_use type check is case-sensitive.
 func TestHelpersEdge_HasToolUse_CaseSensitive(t *testing.T) {
+	t.Parallel()
 	msg := &types.AssistantMessage{
 		Message: types.Message{
 			Content: []types.ContentBlock{

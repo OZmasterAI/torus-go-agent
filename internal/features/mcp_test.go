@@ -148,6 +148,7 @@ func startMockMCPServer(t *testing.T) string {
 // ============================================================================
 
 func TestJSONRPCErrorError(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		err      jsonRPCError
@@ -190,6 +191,7 @@ func TestJSONRPCErrorError(t *testing.T) {
 // ============================================================================
 
 func TestMCPServerCallWithValidResponse(t *testing.T) {
+	t.Parallel()
 	// Create a response string
 	responseData, _ := json.Marshal(jsonRPCResponse{
 		JSONRPC: "2.0",
@@ -226,6 +228,7 @@ func TestMCPServerCallWithValidResponse(t *testing.T) {
 }
 
 func TestMCPServerSendJSONMarshalError(t *testing.T) {
+	t.Parallel()
 	// Create a server with nil stdin
 	server := &MCPServer{
 		Name:   "test-server",
@@ -254,6 +257,7 @@ func (fw *failingWriter) Write(p []byte) (int, error) {
 // ============================================================================
 
 func TestNewMCPClient(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name        string
 		progressive bool
@@ -287,6 +291,7 @@ func TestNewMCPClient(t *testing.T) {
 // ============================================================================
 
 func TestMCPClientListToolsEmpty(t *testing.T) {
+	t.Parallel()
 	client := NewMCPClient(false)
 	tools := client.ListTools()
 
@@ -299,6 +304,7 @@ func TestMCPClientListToolsEmpty(t *testing.T) {
 }
 
 func TestMCPClientListToolsWithTools(t *testing.T) {
+	t.Parallel()
 	client := NewMCPClient(false)
 
 	// Manually add tools
@@ -344,6 +350,7 @@ func TestMCPClientListToolsWithTools(t *testing.T) {
 // ============================================================================
 
 func TestMCPClientGetToolSchemaNonExistent(t *testing.T) {
+	t.Parallel()
 	client := NewMCPClient(false)
 	tool, err := client.GetToolSchema("nonexistent")
 
@@ -359,6 +366,7 @@ func TestMCPClientGetToolSchemaNonExistent(t *testing.T) {
 }
 
 func TestMCPClientGetToolSchemaEagerMode(t *testing.T) {
+	t.Parallel()
 	client := NewMCPClient(false) // eager mode
 
 	schema := map[string]any{
@@ -397,6 +405,7 @@ func TestMCPClientGetToolSchemaEagerMode(t *testing.T) {
 // ============================================================================
 
 func TestMCPClientCallToolNotFound(t *testing.T) {
+	t.Parallel()
 	client := NewMCPClient(false)
 	result, err := client.CallTool("nonexistent", map[string]any{})
 
@@ -415,6 +424,7 @@ func TestMCPClientCallToolNotFound(t *testing.T) {
 }
 
 func TestMCPClientCallToolServerNotFound(t *testing.T) {
+	t.Parallel()
 	client := NewMCPClient(false)
 
 	client.mu.Lock()
@@ -446,6 +456,7 @@ func TestMCPClientCallToolServerNotFound(t *testing.T) {
 // ============================================================================
 
 func TestMCPClientDiscoverToolsEagerMode(t *testing.T) {
+	t.Parallel()
 	client := NewMCPClient(false) // eager mode
 
 	// Create a mock server
@@ -510,6 +521,7 @@ func TestMCPClientDiscoverToolsEagerMode(t *testing.T) {
 }
 
 func TestMCPClientDiscoverToolsProgressiveMode(t *testing.T) {
+	t.Parallel()
 	client := NewMCPClient(true) // progressive mode
 
 	result := mcpToolsListResult{
@@ -552,6 +564,7 @@ func TestMCPClientDiscoverToolsProgressiveMode(t *testing.T) {
 // ============================================================================
 
 func TestMCPClientAsToolsEmpty(t *testing.T) {
+	t.Parallel()
 	client := NewMCPClient(false)
 	tools := client.AsTools()
 
@@ -564,6 +577,7 @@ func TestMCPClientAsToolsEmpty(t *testing.T) {
 }
 
 func TestMCPClientAsToolsEagerMode(t *testing.T) {
+	t.Parallel()
 	client := NewMCPClient(false) // eager mode
 
 	schema := map[string]any{
@@ -606,6 +620,7 @@ func TestMCPClientAsToolsEagerMode(t *testing.T) {
 }
 
 func TestMCPClientAsToolsWithNilSchema(t *testing.T) {
+	t.Parallel()
 	client := NewMCPClient(false)
 
 	client.mu.Lock()
@@ -645,11 +660,13 @@ func TestMCPClientAsToolsWithNilSchema(t *testing.T) {
 // ============================================================================
 
 func TestMCPClientCloseEmpty(t *testing.T) {
+	t.Parallel()
 	client := NewMCPClient(false)
 	client.Close() // Should not panic
 }
 
 func TestMCPClientCloseWithServers(t *testing.T) {
+	t.Parallel()
 	client := NewMCPClient(false)
 
 	// Create mock servers
@@ -676,6 +693,7 @@ func TestMCPClientCloseWithServers(t *testing.T) {
 // ============================================================================
 
 func TestMCPToolExecuteFunction(t *testing.T) {
+	t.Parallel()
 	client := NewMCPClient(false)
 
 	// Setup a tool with a mock server
@@ -727,6 +745,7 @@ func TestMCPToolExecuteFunction(t *testing.T) {
 // ============================================================================
 
 func TestMCPToolFields(t *testing.T) {
+	t.Parallel()
 	schema := map[string]any{"type": "object"}
 	tool := MCPTool{
 		Name:        "my_tool",
@@ -754,6 +773,7 @@ func TestMCPToolFields(t *testing.T) {
 // ============================================================================
 
 func TestMCPClientConcurrentAccess(t *testing.T) {
+	t.Parallel()
 	client := NewMCPClient(false)
 
 	// Add some tools concurrently, wait for all writers to finish
@@ -795,6 +815,7 @@ func TestMCPClientConcurrentAccess(t *testing.T) {
 }
 
 func TestJSONRPCRequestMarshal(t *testing.T) {
+	t.Parallel()
 	req := jsonRPCRequest{
 		JSONRPC: "2.0",
 		ID:      42,
@@ -821,6 +842,7 @@ func TestJSONRPCRequestMarshal(t *testing.T) {
 }
 
 func TestJSONRPCResponseMarshal(t *testing.T) {
+	t.Parallel()
 	resp := jsonRPCResponse{
 		JSONRPC: "2.0",
 		ID:      42,
@@ -847,6 +869,7 @@ func TestJSONRPCResponseMarshal(t *testing.T) {
 }
 
 func TestJSONRPCErrorMarshal(t *testing.T) {
+	t.Parallel()
 	errData := &jsonRPCError{
 		Code:    -32600,
 		Message: "Invalid Request",
@@ -875,6 +898,7 @@ func TestJSONRPCErrorMarshal(t *testing.T) {
 // ============================================================================
 
 func TestAddServerWithNilCommand(t *testing.T) {
+	t.Parallel()
 	client := NewMCPClient(false)
 
 	// Trying to add a server with a non-existent command should fail
@@ -885,6 +909,7 @@ func TestAddServerWithNilCommand(t *testing.T) {
 }
 
 func TestGetToolSchemaWithMissingServer(t *testing.T) {
+	t.Parallel()
 	client := NewMCPClient(true) // progressive mode
 
 	client.mu.Lock()
@@ -908,6 +933,7 @@ func TestGetToolSchemaWithMissingServer(t *testing.T) {
 }
 
 func TestMCPToolCallResultMultipleContentBlocks(t *testing.T) {
+	t.Parallel()
 	// Test concatenation of multiple content blocks in CallTool
 	client := NewMCPClient(false)
 
@@ -943,6 +969,7 @@ func TestMCPToolCallResultMultipleContentBlocks(t *testing.T) {
 }
 
 func TestMCPServerIDGeneration(t *testing.T) {
+	t.Parallel()
 	// Test that ID generation increments correctly
 	server := &MCPServer{
 		Name: "test",
@@ -964,6 +991,7 @@ func TestMCPServerIDGeneration(t *testing.T) {
 }
 
 func TestMCPClientLockingBehavior(t *testing.T) {
+	t.Parallel()
 	// Test that operations properly acquire locks
 	client := NewMCPClient(false)
 
@@ -991,6 +1019,7 @@ func TestMCPClientLockingBehavior(t *testing.T) {
 // ============================================================================
 
 func TestToolResultWithError(t *testing.T) {
+	t.Parallel()
 	result := &types.ToolResult{
 		Content: "An error occurred",
 		IsError: true,
@@ -1005,6 +1034,7 @@ func TestToolResultWithError(t *testing.T) {
 }
 
 func TestToolResultWithSuccess(t *testing.T) {
+	t.Parallel()
 	result := &types.ToolResult{
 		Content: "Success result",
 		IsError: false,
@@ -1023,6 +1053,7 @@ func TestToolResultWithSuccess(t *testing.T) {
 // ============================================================================
 
 func TestMCPInitializeParamsMarshal(t *testing.T) {
+	t.Parallel()
 	params := mcpInitializeParams{
 		ProtocolVersion: "2024-11-05",
 		ClientInfo: mcpClientInfo{
@@ -1051,6 +1082,7 @@ func TestMCPInitializeParamsMarshal(t *testing.T) {
 }
 
 func TestMCPToolDefMarshal(t *testing.T) {
+	t.Parallel()
 	toolDef := mcpToolDef{
 		Name:        "my_tool",
 		Description: "A tool",
@@ -1081,6 +1113,7 @@ func TestMCPToolDefMarshal(t *testing.T) {
 }
 
 func TestMCPToolCallParamsMarshal(t *testing.T) {
+	t.Parallel()
 	params := mcpToolCallParams{
 		Name: "my_tool",
 		Arguments: map[string]any{
@@ -1108,6 +1141,7 @@ func TestMCPToolCallParamsMarshal(t *testing.T) {
 }
 
 func TestMCPContentMarshal(t *testing.T) {
+	t.Parallel()
 	content := mcpContent{
 		Type: "text",
 		Text: "Hello, world!",
@@ -1132,6 +1166,7 @@ func TestMCPContentMarshal(t *testing.T) {
 }
 
 func TestMCPToolCallResultMarshal(t *testing.T) {
+	t.Parallel()
 	callResult := mcpToolCallResult{
 		Content: []mcpContent{
 			{Type: "text", Text: "Result 1"},
@@ -1163,6 +1198,7 @@ func TestMCPToolCallResultMarshal(t *testing.T) {
 // ============================================================================
 
 func TestCallToolWithEmptyArgs(t *testing.T) {
+	t.Parallel()
 	client := NewMCPClient(false)
 
 	client.mu.Lock()
@@ -1185,6 +1221,7 @@ func TestCallToolWithEmptyArgs(t *testing.T) {
 }
 
 func TestMCPToolNameWithSpecialCharacters(t *testing.T) {
+	t.Parallel()
 	tool := MCPTool{
 		Name:        "tool-with.special_chars@123",
 		Description: "A tool with special characters",
@@ -1197,6 +1234,7 @@ func TestMCPToolNameWithSpecialCharacters(t *testing.T) {
 }
 
 func TestEmptyToolDescription(t *testing.T) {
+	t.Parallel()
 	tool := MCPTool{
 		Name:        "tool",
 		Description: "",

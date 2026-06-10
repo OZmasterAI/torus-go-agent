@@ -28,6 +28,7 @@ func newSkillTestModel(t *testing.T) Model {
 }
 
 func TestCommandParsing(t *testing.T) {
+	t.Parallel()
 	if !isCommand("/new") {
 		t.Fatal("/new should be a command")
 	}
@@ -43,6 +44,7 @@ func TestCommandParsing(t *testing.T) {
 }
 
 func TestAllSlashCommandsExist(t *testing.T) {
+	t.Parallel()
 	commands := []string{
 		"/new", "/clear", "/compact", "/fork", "/switch",
 		"/steering", "/branches", "/alias", "/messages", "/stats",
@@ -56,6 +58,7 @@ func TestAllSlashCommandsExist(t *testing.T) {
 }
 
 func TestSkillDispatchSubmitsToAgent(t *testing.T) {
+	t.Parallel()
 	m := newSkillTestModel(t)
 	m.input.SetValue("/brainstorm pick a topic") // typed path: input holds the command
 
@@ -98,6 +101,7 @@ func TestSkillDispatchSubmitsToAgent(t *testing.T) {
 }
 
 func TestPaletteSkillDispatchPrefills(t *testing.T) {
+	t.Parallel()
 	m := newSkillTestModel(t)
 	msgsBefore := len(m.chat.messages)
 
@@ -120,6 +124,7 @@ func TestPaletteSkillDispatchPrefills(t *testing.T) {
 }
 
 func TestUnknownSlashCommandSentToAgent(t *testing.T) {
+	t.Parallel()
 	m := newSkillTestModel(t)
 	m.input.SetValue("/notaskill do x")
 

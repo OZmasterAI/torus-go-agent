@@ -3,6 +3,7 @@ package shared
 import "testing"
 
 func TestAppendDelta(t *testing.T) {
+	t.Parallel()
 	var tm ThinkingModel
 	tm.AppendDelta("hello ")
 	tm.AppendDelta("world")
@@ -15,6 +16,7 @@ func TestAppendDelta(t *testing.T) {
 }
 
 func TestCollapse(t *testing.T) {
+	t.Parallel()
 	var tm ThinkingModel
 	tm.AppendDelta("thinking text")
 	tm.Collapse()
@@ -30,6 +32,7 @@ func TestCollapse(t *testing.T) {
 }
 
 func TestCollapseEmpty(t *testing.T) {
+	t.Parallel()
 	var tm ThinkingModel
 	tm.Collapse()
 	if len(tm.Cards) != 0 {
@@ -38,6 +41,7 @@ func TestCollapseEmpty(t *testing.T) {
 }
 
 func TestToggle(t *testing.T) {
+	t.Parallel()
 	var tm ThinkingModel
 	if tm.Verbosity != VerbosityCompact {
 		t.Errorf("Verbosity should default to compact (0), got %d", tm.Verbosity)
@@ -57,6 +61,7 @@ func TestToggle(t *testing.T) {
 }
 
 func TestVerbosityLabel(t *testing.T) {
+	t.Parallel()
 	var tm ThinkingModel
 	if tm.VerbosityLabel() != "compact" {
 		t.Errorf("label should be 'compact', got %q", tm.VerbosityLabel())
@@ -72,6 +77,7 @@ func TestVerbosityLabel(t *testing.T) {
 }
 
 func TestRenderCardCollapsed(t *testing.T) {
+	t.Parallel()
 	var tm ThinkingModel
 	card := ThinkingCard{Text: "some reasoning here"}
 	out := tm.RenderCard(card, 80)
@@ -87,6 +93,7 @@ func TestRenderCardCollapsed(t *testing.T) {
 }
 
 func TestRenderCardExpanded(t *testing.T) {
+	t.Parallel()
 	var tm ThinkingModel
 	tm.Verbosity = VerbosityVerbose
 	card := ThinkingCard{Text: "detailed reasoning"}
@@ -100,6 +107,7 @@ func TestRenderCardExpanded(t *testing.T) {
 }
 
 func TestRenderInlineCollapsed(t *testing.T) {
+	t.Parallel()
 	var tm ThinkingModel
 	card := ThinkingCard{Text: "some reasoning"}
 	out := tm.RenderInline(card)
@@ -112,6 +120,7 @@ func TestRenderInlineCollapsed(t *testing.T) {
 }
 
 func TestRenderInlineExpanded(t *testing.T) {
+	t.Parallel()
 	var tm ThinkingModel
 	tm.Verbosity = VerbosityVerbose
 	card := ThinkingCard{Text: "some reasoning"}
@@ -122,6 +131,7 @@ func TestRenderInlineExpanded(t *testing.T) {
 }
 
 func TestRenderPending(t *testing.T) {
+	t.Parallel()
 	var tm ThinkingModel
 	out := tm.RenderPending(80)
 	if out != "" {

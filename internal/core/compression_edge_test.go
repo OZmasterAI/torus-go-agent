@@ -24,6 +24,7 @@ func newNilContentMessage(role types.Role) types.Message {
 
 // TestCompressionEdge_ScoreMessage_NilContent tests nil content slice
 func TestCompressionEdge_ScoreMessage_NilContent(t *testing.T) {
+	t.Parallel()
 	msg := newNilContentMessage(types.RoleUser)
 	score := ScoreMessage(msg)
 	if score != ScoreZero {
@@ -33,6 +34,7 @@ func TestCompressionEdge_ScoreMessage_NilContent(t *testing.T) {
 
 // TestCompressionEdge_ScoreMessage_EmptyContentSlice tests empty content slice (vs nil)
 func TestCompressionEdge_ScoreMessage_EmptyContentSlice(t *testing.T) {
+	t.Parallel()
 	msg := types.Message{
 		Role:    types.RoleUser,
 		Content: []types.ContentBlock{},
@@ -45,6 +47,7 @@ func TestCompressionEdge_ScoreMessage_EmptyContentSlice(t *testing.T) {
 
 // TestCompressionEdge_ScoreMessage_WhitespaceOnly tests message with only whitespace
 func TestCompressionEdge_ScoreMessage_WhitespaceOnly(t *testing.T) {
+	t.Parallel()
 	msg := types.Message{
 		Role: types.RoleUser,
 		Content: []types.ContentBlock{
@@ -60,6 +63,7 @@ func TestCompressionEdge_ScoreMessage_WhitespaceOnly(t *testing.T) {
 
 // TestCompressionEdge_ScoreMessage_MultipleEmptyBlocks tests multiple empty content blocks
 func TestCompressionEdge_ScoreMessage_MultipleEmptyBlocks(t *testing.T) {
+	t.Parallel()
 	msg := types.Message{
 		Role: types.RoleUser,
 		Content: []types.ContentBlock{
@@ -76,6 +80,7 @@ func TestCompressionEdge_ScoreMessage_MultipleEmptyBlocks(t *testing.T) {
 
 // TestCompressionEdge_ScoreMessage_UnicodeCharacters tests unicode content
 func TestCompressionEdge_ScoreMessage_UnicodeCharacters(t *testing.T) {
+	t.Parallel()
 	msg := types.Message{
 		Role: types.RoleUser,
 		Content: []types.ContentBlock{
@@ -90,6 +95,7 @@ func TestCompressionEdge_ScoreMessage_UnicodeCharacters(t *testing.T) {
 
 // TestCompressionEdge_ScoreMessage_VeryLongText tests extremely long text
 func TestCompressionEdge_ScoreMessage_VeryLongText(t *testing.T) {
+	t.Parallel()
 	veryLong := strings.Repeat("a", 1000000) // 1 million characters
 	msg := types.Message{
 		Role: types.RoleUser,
@@ -105,6 +111,7 @@ func TestCompressionEdge_ScoreMessage_VeryLongText(t *testing.T) {
 
 // TestCompressionEdge_ScoreMessage_EdgeLengthValues tests exact boundary lengths
 func TestCompressionEdge_ScoreMessage_EdgeLengthValues(t *testing.T) {
+	t.Parallel()
 	// Text length exactly 30 (boundary for short acknowledgments)
 	msg30 := types.Message{
 		Role: types.RoleUser,
@@ -157,6 +164,7 @@ func TestCompressionEdge_ScoreMessage_EdgeLengthValues(t *testing.T) {
 
 // TestCompressionEdge_ScoreMessage_QuestionWithoutText tests question mark without text
 func TestCompressionEdge_ScoreMessage_QuestionWithoutText(t *testing.T) {
+	t.Parallel()
 	msg := types.Message{
 		Role: types.RoleUser,
 		Content: []types.ContentBlock{
@@ -171,6 +179,7 @@ func TestCompressionEdge_ScoreMessage_QuestionWithoutText(t *testing.T) {
 
 // TestCompressionEdge_ScoreMessage_MultipleQuestionMarks tests multiple question marks
 func TestCompressionEdge_ScoreMessage_MultipleQuestionMarks(t *testing.T) {
+	t.Parallel()
 	msg := types.Message{
 		Role: types.RoleUser,
 		Content: []types.ContentBlock{
@@ -185,6 +194,7 @@ func TestCompressionEdge_ScoreMessage_MultipleQuestionMarks(t *testing.T) {
 
 // TestCompressionEdge_ScoreMessage_ToolResultEmpty tests empty tool result content
 func TestCompressionEdge_ScoreMessage_ToolResultEmpty(t *testing.T) {
+	t.Parallel()
 	msg := types.Message{
 		Role: types.RoleAssistant,
 		Content: []types.ContentBlock{
@@ -199,6 +209,7 @@ func TestCompressionEdge_ScoreMessage_ToolResultEmpty(t *testing.T) {
 
 // TestCompressionEdge_ScoreMessage_ToolUseOnlyNoText tests tool_use without text
 func TestCompressionEdge_ScoreMessage_ToolUseOnlyNoText(t *testing.T) {
+	t.Parallel()
 	msg := types.Message{
 		Role: types.RoleAssistant,
 		Content: []types.ContentBlock{
@@ -213,6 +224,7 @@ func TestCompressionEdge_ScoreMessage_ToolUseOnlyNoText(t *testing.T) {
 
 // TestCompressionEdge_ScoreMessage_UnknownContentType tests unknown content type
 func TestCompressionEdge_ScoreMessage_UnknownContentType(t *testing.T) {
+	t.Parallel()
 	msg := types.Message{
 		Role: types.RoleAssistant,
 		Content: []types.ContentBlock{
@@ -230,6 +242,7 @@ func TestCompressionEdge_ScoreMessage_UnknownContentType(t *testing.T) {
 
 // TestCompressionEdge_CompressMessage_NegativeMaxChars tests negative maxChars
 func TestCompressionEdge_CompressMessage_NegativeMaxChars(t *testing.T) {
+	t.Parallel()
 	msg := types.Message{
 		Role: types.RoleUser,
 		Content: []types.ContentBlock{
@@ -246,6 +259,7 @@ func TestCompressionEdge_CompressMessage_NegativeMaxChars(t *testing.T) {
 
 // TestCompressionEdge_CompressMessage_NilContent tests nil content
 func TestCompressionEdge_CompressMessage_NilContent(t *testing.T) {
+	t.Parallel()
 	msg := types.Message{
 		Role:    types.RoleUser,
 		Content: nil,
@@ -261,6 +275,7 @@ func TestCompressionEdge_CompressMessage_NilContent(t *testing.T) {
 
 // TestCompressionEdge_CompressMessage_EmptyContent tests empty content slice
 func TestCompressionEdge_CompressMessage_EmptyContent(t *testing.T) {
+	t.Parallel()
 	msg := types.Message{
 		Role:    types.RoleUser,
 		Content: []types.ContentBlock{},
@@ -273,6 +288,7 @@ func TestCompressionEdge_CompressMessage_EmptyContent(t *testing.T) {
 
 // TestCompressionEdge_CompressMessage_UnicodeText tests unicode text compression
 func TestCompressionEdge_CompressMessage_UnicodeText(t *testing.T) {
+	t.Parallel()
 	unicodeText := "Hello 世界 🚀 Привет мир" + strings.Repeat("a", 200)
 	msg := types.Message{
 		Role: types.RoleUser,
@@ -292,6 +308,7 @@ func TestCompressionEdge_CompressMessage_UnicodeText(t *testing.T) {
 
 // TestCompressionEdge_CompressMessage_VeryLargeInput tests compression with huge input
 func TestCompressionEdge_CompressMessage_VeryLargeInput(t *testing.T) {
+	t.Parallel()
 	largeText := strings.Repeat("x", 10000000) // 10 million characters
 	msg := types.Message{
 		Role: types.RoleUser,
@@ -307,6 +324,7 @@ func TestCompressionEdge_CompressMessage_VeryLargeInput(t *testing.T) {
 
 // TestCompressionEdge_CompressMessage_ToolResultNoNewline tests tool result without newlines
 func TestCompressionEdge_CompressMessage_ToolResultNoNewline(t *testing.T) {
+	t.Parallel()
 	content := "This is a very long single line " + strings.Repeat("x", 200)
 	msg := types.Message{
 		Role: types.RoleAssistant,
@@ -326,6 +344,7 @@ func TestCompressionEdge_CompressMessage_ToolResultNoNewline(t *testing.T) {
 
 // TestCompressionEdge_CompressMessage_ToolResultMultipleNewlines tests multiple newlines
 func TestCompressionEdge_CompressMessage_ToolResultMultipleNewlines(t *testing.T) {
+	t.Parallel()
 	content := "Line1\nLine2\nLine3\n" + strings.Repeat("x", 200)
 	msg := types.Message{
 		Role: types.RoleAssistant,
@@ -342,6 +361,7 @@ func TestCompressionEdge_CompressMessage_ToolResultMultipleNewlines(t *testing.T
 
 // TestCompressionEdge_CompressMessage_MixedSpecialChars tests special characters
 func TestCompressionEdge_CompressMessage_MixedSpecialChars(t *testing.T) {
+	t.Parallel()
 	special := "!@#$%^&*()_+-=[]{}|;:',.<>?/~`" + strings.Repeat("x", 200)
 	msg := types.Message{
 		Role: types.RoleUser,
@@ -357,6 +377,7 @@ func TestCompressionEdge_CompressMessage_MixedSpecialChars(t *testing.T) {
 
 // TestCompressionEdge_CompressMessage_OnlyToolBlocks tests message with only tool blocks
 func TestCompressionEdge_CompressMessage_OnlyToolBlocks(t *testing.T) {
+	t.Parallel()
 	msg := types.Message{
 		Role: types.RoleAssistant,
 		Content: []types.ContentBlock{
@@ -378,6 +399,7 @@ func TestCompressionEdge_CompressMessage_OnlyToolBlocks(t *testing.T) {
 
 // TestCompressionEdge_CompressMessage_FirstLineExactlyMaxChars tests first line == maxChars
 func TestCompressionEdge_CompressMessage_FirstLineExactlyMaxChars(t *testing.T) {
+	t.Parallel()
 	content := strings.Repeat("x", 30) + "\n" + strings.Repeat("y", 100)
 	msg := types.Message{
 		Role: types.RoleAssistant,
@@ -395,6 +417,7 @@ func TestCompressionEdge_CompressMessage_FirstLineExactlyMaxChars(t *testing.T) 
 
 // TestCompressionEdge_ContinuousCompress_NilMessages tests nil slice input
 func TestCompressionEdge_ContinuousCompress_NilMessages(t *testing.T) {
+	t.Parallel()
 	result := continuousCompress(nil, 10, 0)
 	if result != nil {
 		t.Errorf("nil input should return nil, got %v", result)
@@ -403,6 +426,7 @@ func TestCompressionEdge_ContinuousCompress_NilMessages(t *testing.T) {
 
 // TestCompressionEdge_ContinuousCompress_SingleMessage tests single message
 func TestCompressionEdge_ContinuousCompress_SingleMessage(t *testing.T) {
+	t.Parallel()
 	messages := []types.Message{
 		types.Message{
 			Role: types.RoleUser,
@@ -422,6 +446,7 @@ func TestCompressionEdge_ContinuousCompress_SingleMessage(t *testing.T) {
 
 // TestCompressionEdge_ContinuousCompress_NegativeKeepLast tests negative keepLast
 func TestCompressionEdge_ContinuousCompress_NegativeKeepLast(t *testing.T) {
+	t.Parallel()
 	messages := make([]types.Message, 20)
 	for i := 0; i < 20; i++ {
 		messages[i] = types.Message{
@@ -440,6 +465,7 @@ func TestCompressionEdge_ContinuousCompress_NegativeKeepLast(t *testing.T) {
 
 // TestCompressionEdge_ContinuousCompress_NegativeMinMessages tests negative minMessages
 func TestCompressionEdge_ContinuousCompress_NegativeMinMessages(t *testing.T) {
+	t.Parallel()
 	messages := make([]types.Message, 5)
 	for i := 0; i < 5; i++ {
 		messages[i] = types.Message{
@@ -458,6 +484,7 @@ func TestCompressionEdge_ContinuousCompress_NegativeMinMessages(t *testing.T) {
 
 // TestCompressionEdge_ContinuousCompress_LargeKeepLast tests keepLast larger than messages
 func TestCompressionEdge_ContinuousCompress_LargeKeepLast(t *testing.T) {
+	t.Parallel()
 	messages := make([]types.Message, 5)
 	for i := 0; i < 5; i++ {
 		messages[i] = types.Message{
@@ -475,6 +502,7 @@ func TestCompressionEdge_ContinuousCompress_LargeKeepLast(t *testing.T) {
 
 // TestCompressionEdge_ContinuousCompress_ExactMinMessagesMatch tests exact minMessages match
 func TestCompressionEdge_ContinuousCompress_ExactMinMessagesMatch(t *testing.T) {
+	t.Parallel()
 	messages := make([]types.Message, 10)
 	for i := 0; i < 10; i++ {
 		messages[i] = types.Message{
@@ -492,6 +520,7 @@ func TestCompressionEdge_ContinuousCompress_ExactMinMessagesMatch(t *testing.T) 
 
 // TestCompressionEdge_ContinuousCompress_AllZeroScores tests all messages score zero
 func TestCompressionEdge_ContinuousCompress_AllZeroScores(t *testing.T) {
+	t.Parallel()
 	messages := make([]types.Message, 20)
 	for i := 0; i < 20; i++ {
 		messages[i] = types.Message{
@@ -513,6 +542,7 @@ func TestCompressionEdge_ContinuousCompress_AllZeroScores(t *testing.T) {
 
 // TestCompressionEdge_ContinuousCompress_MixedScores tests varying message scores
 func TestCompressionEdge_ContinuousCompress_MixedScores(t *testing.T) {
+	t.Parallel()
 	messages := []types.Message{
 		types.Message{Role: types.RoleUser, Content: []types.ContentBlock{}},                                                            // ScoreZero
 		types.Message{Role: types.RoleUser, Content: []types.ContentBlock{{Type: "text", Text: "short"}}},                               // ScoreLow/Medium
@@ -529,6 +559,7 @@ func TestCompressionEdge_ContinuousCompress_MixedScores(t *testing.T) {
 
 // TestCompressionEdge_ApplyZoneBudget_ZeroContextWindow tests zero context window
 func TestCompressionEdge_ApplyZoneBudget_ZeroContextWindow(t *testing.T) {
+	t.Parallel()
 	messages := []types.Message{
 		types.Message{Role: types.RoleUser, Content: []types.ContentBlock{{Type: "text", Text: "msg"}}},
 	}
@@ -540,6 +571,7 @@ func TestCompressionEdge_ApplyZoneBudget_ZeroContextWindow(t *testing.T) {
 
 // TestCompressionEdge_ApplyZoneBudget_NegativeContextWindow tests negative context window
 func TestCompressionEdge_ApplyZoneBudget_NegativeContextWindow(t *testing.T) {
+	t.Parallel()
 	messages := []types.Message{
 		types.Message{Role: types.RoleUser, Content: []types.ContentBlock{{Type: "text", Text: "msg"}}},
 	}
@@ -551,6 +583,7 @@ func TestCompressionEdge_ApplyZoneBudget_NegativeContextWindow(t *testing.T) {
 
 // TestCompressionEdge_ApplyZoneBudget_OutputReserveExceedsWindow tests reserve > window
 func TestCompressionEdge_ApplyZoneBudget_OutputReserveExceedsWindow(t *testing.T) {
+	t.Parallel()
 	messages := make([]types.Message, 10)
 	for i := 0; i < 10; i++ {
 		messages[i] = types.Message{
@@ -571,6 +604,7 @@ func TestCompressionEdge_ApplyZoneBudget_OutputReserveExceedsWindow(t *testing.T
 
 // TestCompressionEdge_ApplyZoneBudget_ZeroArchivePercent tests zero archive percent
 func TestCompressionEdge_ApplyZoneBudget_ZeroArchivePercent(t *testing.T) {
+	t.Parallel()
 	messages := []types.Message{
 		types.Message{Role: types.RoleUser, Content: []types.ContentBlock{{Type: "text", Text: "schema"}}},
 		types.Message{Role: types.RoleAssistant, Content: []types.ContentBlock{{Type: "text", Text: "msg1"}}},
@@ -588,6 +622,7 @@ func TestCompressionEdge_ApplyZoneBudget_ZeroArchivePercent(t *testing.T) {
 
 // TestCompressionEdge_ApplyZoneBudget_HighArchivePercent tests archive percent > 100
 func TestCompressionEdge_ApplyZoneBudget_HighArchivePercent(t *testing.T) {
+	t.Parallel()
 	messages := make([]types.Message, 10)
 	for i := 0; i < 10; i++ {
 		messages[i] = types.Message{
@@ -608,6 +643,7 @@ func TestCompressionEdge_ApplyZoneBudget_HighArchivePercent(t *testing.T) {
 
 // TestCompressionEdge_ApplyZoneBudget_SingleMessageWithLargeBudget tests single msg
 func TestCompressionEdge_ApplyZoneBudget_SingleMessageWithLargeBudget(t *testing.T) {
+	t.Parallel()
 	msg := types.Message{
 		Role:    types.RoleUser,
 		Content: []types.ContentBlock{{Type: "text", Text: "single"}},
@@ -624,6 +660,7 @@ func TestCompressionEdge_ApplyZoneBudget_SingleMessageWithLargeBudget(t *testing
 
 // TestCompressionEdge_ApplyZoneBudget_VeryTinyBudget tests very small budget
 func TestCompressionEdge_ApplyZoneBudget_VeryTinyBudget(t *testing.T) {
+	t.Parallel()
 	messages := make([]types.Message, 5)
 	for i := 0; i < 5; i++ {
 		messages[i] = types.Message{
@@ -646,6 +683,7 @@ func TestCompressionEdge_ApplyZoneBudget_VeryTinyBudget(t *testing.T) {
 
 // TestCompressionEdge_Unicode_MixedScripts tests mixed unicode scripts
 func TestCompressionEdge_Unicode_MixedScripts(t *testing.T) {
+	t.Parallel()
 	mixed := "English 中文 العربية Русский עברית"
 	msg := types.Message{
 		Role: types.RoleUser,
@@ -665,6 +703,7 @@ func TestCompressionEdge_Unicode_MixedScripts(t *testing.T) {
 
 // TestCompressionEdge_Unicode_Emoji tests emoji characters
 func TestCompressionEdge_Unicode_Emoji(t *testing.T) {
+	t.Parallel()
 	emoji := strings.Repeat("🚀🎉💻", 100) + strings.Repeat("x", 500)
 	msg := types.Message{
 		Role: types.RoleUser,
@@ -681,6 +720,7 @@ func TestCompressionEdge_Unicode_Emoji(t *testing.T) {
 
 // TestCompressionEdge_Unicode_RTLText tests right-to-left text
 func TestCompressionEdge_Unicode_RTLText(t *testing.T) {
+	t.Parallel()
 	rtl := "שלום עולם مرحبا بالعالم" + strings.Repeat("x", 500)
 	msg := types.Message{
 		Role: types.RoleUser,
@@ -698,6 +738,7 @@ func TestCompressionEdge_Unicode_RTLText(t *testing.T) {
 
 // TestCompressionEdge_Consistency_ScoreIsDeterministic tests scoring is deterministic
 func TestCompressionEdge_Consistency_ScoreIsDeterministic(t *testing.T) {
+	t.Parallel()
 	msg := types.Message{
 		Role: types.RoleUser,
 		Content: []types.ContentBlock{
@@ -714,6 +755,7 @@ func TestCompressionEdge_Consistency_ScoreIsDeterministic(t *testing.T) {
 
 // TestCompressionEdge_Consistency_CompressIsDeterministic tests compression is deterministic
 func TestCompressionEdge_Consistency_CompressIsDeterministic(t *testing.T) {
+	t.Parallel()
 	msg := types.Message{
 		Role: types.RoleUser,
 		Content: []types.ContentBlock{
@@ -729,6 +771,7 @@ func TestCompressionEdge_Consistency_CompressIsDeterministic(t *testing.T) {
 
 // TestCompressionEdge_Consistency_ContinuousCompressIsDeterministic tests continuous compress determinism
 func TestCompressionEdge_Consistency_ContinuousCompressIsDeterministic(t *testing.T) {
+	t.Parallel()
 	messages := make([]types.Message, 20)
 	for i := 0; i < 20; i++ {
 		messages[i] = types.Message{

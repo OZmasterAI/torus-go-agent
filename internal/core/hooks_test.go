@@ -11,6 +11,7 @@ import (
 
 // TestNewHookRegistry verifies registry initialization.
 func TestNewHookRegistry(t *testing.T) {
+	t.Parallel()
 	reg := NewHookRegistry()
 	if reg == nil {
 		t.Fatal("NewHookRegistry returned nil")
@@ -25,6 +26,7 @@ func TestNewHookRegistry(t *testing.T) {
 
 // TestRegisterSingle verifies registering a single handler.
 func TestRegisterSingle(t *testing.T) {
+	t.Parallel()
 	reg := NewHookRegistry()
 	called := false
 	fn := func(ctx context.Context, data *HookData) error {
@@ -50,6 +52,7 @@ func TestRegisterSingle(t *testing.T) {
 
 // TestRegisterMultiple verifies registering multiple handlers at the same point.
 func TestRegisterMultiple(t *testing.T) {
+	t.Parallel()
 	reg := NewHookRegistry()
 	point := HookAfterLLMCall
 
@@ -68,6 +71,7 @@ func TestRegisterMultiple(t *testing.T) {
 
 // TestRegisterMultiplePoints verifies registering handlers at different points.
 func TestRegisterMultiplePoints(t *testing.T) {
+	t.Parallel()
 	reg := NewHookRegistry()
 	fn := func(ctx context.Context, data *HookData) error { return nil }
 
@@ -88,6 +92,7 @@ func TestRegisterMultiplePoints(t *testing.T) {
 
 // TestFireCallsHandlersInOrder verifies handlers are called in registration order with default priority.
 func TestFireCallsHandlersInOrder(t *testing.T) {
+	t.Parallel()
 	reg := NewHookRegistry()
 	var callOrder []int
 
@@ -123,6 +128,7 @@ func TestFireCallsHandlersInOrder(t *testing.T) {
 
 // TestFirePassesHookData verifies HookData is correctly passed to handlers.
 func TestFirePassesHookData(t *testing.T) {
+	t.Parallel()
 	reg := NewHookRegistry()
 	var receivedData *HookData
 
@@ -169,6 +175,7 @@ func TestFirePassesHookData(t *testing.T) {
 
 // TestFireSetsHookPoint verifies Fire sets the Point field.
 func TestFireSetsHookPoint(t *testing.T) {
+	t.Parallel()
 	reg := NewHookRegistry()
 	var receivedPoint HookPoint
 
@@ -192,6 +199,7 @@ func TestFireSetsHookPoint(t *testing.T) {
 
 // TestFireHandlerError verifies Fire returns error from handler.
 func TestFireHandlerError(t *testing.T) {
+	t.Parallel()
 	reg := NewHookRegistry()
 	expectedErr := errors.New("handler error")
 
@@ -212,6 +220,7 @@ func TestFireHandlerError(t *testing.T) {
 
 // TestFireStopsOnBlockFlag verifies Fire stops when Block is set.
 func TestFireStopsOnBlockFlag(t *testing.T) {
+	t.Parallel()
 	reg := NewHookRegistry()
 	var callOrder []int
 
@@ -249,6 +258,7 @@ func TestFireStopsOnBlockFlag(t *testing.T) {
 
 // TestFirePreservesBlockData verifies BlockReason is preserved after Block is set.
 func TestFirePreservesBlockData(t *testing.T) {
+	t.Parallel()
 	reg := NewHookRegistry()
 	var receivedData *HookData
 
@@ -278,6 +288,7 @@ func TestFirePreservesBlockData(t *testing.T) {
 
 // TestRegisterPriority verifies handlers are called in priority order (lower first).
 func TestRegisterPriority(t *testing.T) {
+	t.Parallel()
 	reg := NewHookRegistry()
 	var callOrder []int
 
@@ -314,6 +325,7 @@ func TestRegisterPriority(t *testing.T) {
 
 // TestRegisterPriorityMixed verifies mixed registration order still respects priority.
 func TestRegisterPriorityMixed(t *testing.T) {
+	t.Parallel()
 	reg := NewHookRegistry()
 	var callOrder []int
 
@@ -347,6 +359,7 @@ func TestRegisterPriorityMixed(t *testing.T) {
 
 // TestCount verifies Count returns correct handler count.
 func TestCount(t *testing.T) {
+	t.Parallel()
 	reg := NewHookRegistry()
 
 	fn := func(ctx context.Context, data *HookData) error { return nil }
@@ -373,6 +386,7 @@ func TestCount(t *testing.T) {
 
 // TestCountDifferentPoints verifies Count is independent per point.
 func TestCountDifferentPoints(t *testing.T) {
+	t.Parallel()
 	reg := NewHookRegistry()
 	fn := func(ctx context.Context, data *HookData) error { return nil }
 
@@ -390,6 +404,7 @@ func TestCountDifferentPoints(t *testing.T) {
 
 // TestFireNoHandlers verifies Fire succeeds with no handlers registered.
 func TestFireNoHandlers(t *testing.T) {
+	t.Parallel()
 	reg := NewHookRegistry()
 	err := reg.Fire(context.Background(), HookBeforeLLMCall, &HookData{})
 	if err != nil {
@@ -399,6 +414,7 @@ func TestFireNoHandlers(t *testing.T) {
 
 // TestFireContextPassing verifies context is passed correctly to handlers.
 func TestFireContextPassing(t *testing.T) {
+	t.Parallel()
 	reg := NewHookRegistry()
 	var receivedCtx context.Context
 
@@ -422,6 +438,7 @@ func TestFireContextPassing(t *testing.T) {
 
 // TestFireWithToolResult verifies ToolResult is passed correctly.
 func TestFireWithToolResult(t *testing.T) {
+	t.Parallel()
 	reg := NewHookRegistry()
 	var receivedResult *types.ToolResult
 
@@ -457,6 +474,7 @@ func TestFireWithToolResult(t *testing.T) {
 
 // TestFireWithMessages verifies Messages slice is passed correctly.
 func TestFireWithMessages(t *testing.T) {
+	t.Parallel()
 	reg := NewHookRegistry()
 	var receivedMessages []types.Message
 
@@ -488,6 +506,7 @@ func TestFireWithMessages(t *testing.T) {
 
 // TestConcurrentRegister verifies concurrent Register calls are safe.
 func TestConcurrentRegister(t *testing.T) {
+	t.Parallel()
 	reg := NewHookRegistry()
 	fn := func(ctx context.Context, data *HookData) error { return nil }
 
@@ -512,6 +531,7 @@ func TestConcurrentRegister(t *testing.T) {
 
 // TestConcurrentFire verifies concurrent Fire calls are safe.
 func TestConcurrentFire(t *testing.T) {
+	t.Parallel()
 	reg := NewHookRegistry()
 	var callCount int64
 
@@ -544,6 +564,7 @@ func TestConcurrentFire(t *testing.T) {
 
 // TestMultipleHookPoints verifies all major hook points work.
 func TestMultipleHookPoints(t *testing.T) {
+	t.Parallel()
 	reg := NewHookRegistry()
 	fn := func(ctx context.Context, data *HookData) error { return nil }
 
@@ -577,6 +598,7 @@ func TestMultipleHookPoints(t *testing.T) {
 
 // TestFireBlockWithNoError verifies Block stops execution without error.
 func TestFireBlockWithNoError(t *testing.T) {
+	t.Parallel()
 	reg := NewHookRegistry()
 
 	fn1 := func(ctx context.Context, data *HookData) error {
@@ -603,6 +625,7 @@ func TestFireBlockWithNoError(t *testing.T) {
 
 // TestHandlerModifiesMetadata verifies handlers can modify HookData.Meta.
 func TestHandlerModifiesMetadata(t *testing.T) {
+	t.Parallel()
 	reg := NewHookRegistry()
 
 	fn1 := func(ctx context.Context, data *HookData) error {
@@ -636,6 +659,7 @@ func TestHandlerModifiesMetadata(t *testing.T) {
 
 // TestPriorityNegative verifies negative priorities work.
 func TestPriorityNegative(t *testing.T) {
+	t.Parallel()
 	reg := NewHookRegistry()
 	var callOrder []int
 
@@ -663,6 +687,7 @@ func TestPriorityNegative(t *testing.T) {
 
 // TestFireStopsOnFirstError verifies Fire returns immediately on handler error.
 func TestFireStopsOnFirstError(t *testing.T) {
+	t.Parallel()
 	reg := NewHookRegistry()
 	var callOrder []int
 

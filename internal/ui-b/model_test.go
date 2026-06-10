@@ -8,6 +8,7 @@ import (
 )
 
 func TestNewModel(t *testing.T) {
+	t.Parallel()
 	m := NewModel(nil, "test-model", config.AgentConfig{}, nil, nil)
 	if m.chat.ready {
 		t.Fatal("chat should not be ready before WindowSizeMsg")
@@ -18,6 +19,7 @@ func TestNewModel(t *testing.T) {
 }
 
 func TestNewModelWithExtras(t *testing.T) {
+	t.Parallel()
 	extras := &TUIExtras{}
 	m := NewModel(nil, "test-model", config.AgentConfig{}, nil, extras)
 	if m.modelName != "test-model" {
@@ -26,6 +28,7 @@ func TestNewModelWithExtras(t *testing.T) {
 }
 
 func TestNewModelHasWelcomeMessage(t *testing.T) {
+	t.Parallel()
 	m := NewModel(nil, "test-model", config.AgentConfig{}, nil, nil)
 	// Without an agent, NewModel creates a welcome message.
 	if len(m.chat.messages) == 0 {
@@ -38,6 +41,7 @@ func TestNewModelHasWelcomeMessage(t *testing.T) {
 }
 
 func TestDisplayMsgTimestampField(t *testing.T) {
+	t.Parallel()
 	// Verify DisplayMsg has a Ts field that can hold time.UnixMilli results.
 	// This is a compile-time check for the timestamp preservation feature.
 	ts := time.UnixMilli(1711209600000) // 2024-03-23T12:00:00Z

@@ -8,6 +8,7 @@ import (
 
 // TestEstimateTokensEmpty tests EstimateTokens with an empty message slice.
 func TestEstimateTokensEmpty(t *testing.T) {
+	t.Parallel()
 	messages := []typ.Message{}
 	tokens := EstimateTokens(messages)
 	if tokens != 0 {
@@ -17,6 +18,7 @@ func TestEstimateTokensEmpty(t *testing.T) {
 
 // TestEstimateTokensSingleMessage tests EstimateTokens with a single message.
 func TestEstimateTokensSingleMessage(t *testing.T) {
+	t.Parallel()
 	messages := []typ.Message{
 		{
 			Role: typ.RoleUser,
@@ -38,6 +40,7 @@ func TestEstimateTokensSingleMessage(t *testing.T) {
 
 // TestEstimateTokensMultipleMessages tests EstimateTokens with multiple messages.
 func TestEstimateTokensMultipleMessages(t *testing.T) {
+	t.Parallel()
 	messages := []typ.Message{
 		{
 			Role: typ.RoleUser,
@@ -81,6 +84,7 @@ func TestEstimateTokensMultipleMessages(t *testing.T) {
 
 // TestEstimateTokensMultipleContentBlocks tests EstimateTokens with multiple content blocks in a single message.
 func TestEstimateTokensMultipleContentBlocks(t *testing.T) {
+	t.Parallel()
 	messages := []typ.Message{
 		{
 			Role: typ.RoleAssistant,
@@ -108,6 +112,7 @@ func TestEstimateTokensMultipleContentBlocks(t *testing.T) {
 
 // TestEstimateTokensToolResult tests EstimateTokens with tool result blocks.
 func TestEstimateTokensToolResult(t *testing.T) {
+	t.Parallel()
 	messages := []typ.Message{
 		{
 			Role: typ.RoleTool,
@@ -129,6 +134,7 @@ func TestEstimateTokensToolResult(t *testing.T) {
 
 // TestEstimateTokensLongContent tests EstimateTokens with longer content.
 func TestEstimateTokensLongContent(t *testing.T) {
+	t.Parallel()
 	longText := string(make([]byte, 1000)) // 1000 bytes of null characters
 	for i := 0; i < 1000; i++ {
 		longText = longText[:i] + "a" + longText[i+1:]
@@ -155,6 +161,7 @@ func TestEstimateTokensLongContent(t *testing.T) {
 
 // TestEstimateTokensForTextEmpty tests EstimateTokensForText with an empty string.
 func TestEstimateTokensForTextEmpty(t *testing.T) {
+	t.Parallel()
 	tokens := EstimateTokensForText("")
 	if tokens != 0 {
 		t.Errorf("EstimateTokensForText(\"\") = %d, want 0", tokens)
@@ -163,6 +170,7 @@ func TestEstimateTokensForTextEmpty(t *testing.T) {
 
 // TestEstimateTokensForTextShort tests EstimateTokensForText with short text.
 func TestEstimateTokensForTextShort(t *testing.T) {
+	t.Parallel()
 	tokens := EstimateTokensForText("Hello")
 	// 5 chars / 3.5 ≈ 1 token
 	if tokens <= 0 {
@@ -172,6 +180,7 @@ func TestEstimateTokensForTextShort(t *testing.T) {
 
 // TestEstimateTokensForTextMedium tests EstimateTokensForText with medium text.
 func TestEstimateTokensForTextMedium(t *testing.T) {
+	t.Parallel()
 	text := "The quick brown fox jumps over the lazy dog. " +
 		"This is a medium length text for testing token estimation. " +
 		"It should be around 100-150 characters."
@@ -184,6 +193,7 @@ func TestEstimateTokensForTextMedium(t *testing.T) {
 
 // TestEstimateTokensForTextLong tests EstimateTokensForText with long text.
 func TestEstimateTokensForTextLong(t *testing.T) {
+	t.Parallel()
 	// Generate a 5000 character string
 	longText := ""
 	for i := 0; i < 500; i++ {
@@ -200,6 +210,7 @@ func TestEstimateTokensForTextLong(t *testing.T) {
 
 // TestEstimateTokensForTextProportional tests that EstimateTokensForText is proportional to text length.
 func TestEstimateTokensForTextProportional(t *testing.T) {
+	t.Parallel()
 	text1 := "Hello world"
 	text2 := "Hello world Hello world Hello world Hello world" // Same text repeated 4 times (approximately)
 
@@ -218,6 +229,7 @@ func TestEstimateTokensForTextProportional(t *testing.T) {
 
 // TestEstimatePromptCostEmpty tests EstimatePromptCost with empty inputs.
 func TestEstimatePromptCostEmpty(t *testing.T) {
+	t.Parallel()
 	cost := EstimatePromptCost("", []typ.Message{}, []typ.Tool{})
 	if cost != 0 {
 		t.Errorf("EstimatePromptCost(\"\", [], []) = %d, want 0", cost)
@@ -226,6 +238,7 @@ func TestEstimatePromptCostEmpty(t *testing.T) {
 
 // TestEstimatePromptCostSystemPromptOnly tests EstimatePromptCost with only a system prompt.
 func TestEstimatePromptCostSystemPromptOnly(t *testing.T) {
+	t.Parallel()
 	systemPrompt := "You are a helpful assistant."
 	cost := EstimatePromptCost(systemPrompt, []typ.Message{}, []typ.Tool{})
 	// len("You are a helpful assistant.") = 28 chars / 3.5 ≈ 8 tokens
@@ -240,6 +253,7 @@ func TestEstimatePromptCostSystemPromptOnly(t *testing.T) {
 
 // TestEstimatePromptCostWithMessages tests EstimatePromptCost with system prompt and messages.
 func TestEstimatePromptCostWithMessages(t *testing.T) {
+	t.Parallel()
 	systemPrompt := "You are a helpful assistant."
 	messages := []typ.Message{
 		{
@@ -265,6 +279,7 @@ func TestEstimatePromptCostWithMessages(t *testing.T) {
 
 // TestEstimatePromptCostWithTools tests EstimatePromptCost with system prompt, messages, and tools.
 func TestEstimatePromptCostWithTools(t *testing.T) {
+	t.Parallel()
 	systemPrompt := "You are a helpful assistant."
 	messages := []typ.Message{
 		{
@@ -304,6 +319,7 @@ func TestEstimatePromptCostWithTools(t *testing.T) {
 
 // TestEstimatePromptCostMultipleTools tests EstimatePromptCost with multiple tools.
 func TestEstimatePromptCostMultipleTools(t *testing.T) {
+	t.Parallel()
 	systemPrompt := "You are a helpful assistant with tool access."
 	messages := []typ.Message{
 		{
@@ -351,6 +367,7 @@ func TestEstimatePromptCostMultipleTools(t *testing.T) {
 
 // TestEstimatePromptCostComplexScenario tests EstimatePromptCost with a realistic complex scenario.
 func TestEstimatePromptCostComplexScenario(t *testing.T) {
+	t.Parallel()
 	systemPrompt := `You are a research assistant with access to multiple tools.
 Your goal is to help users find information and execute tasks.
 Always prioritize accuracy and cite sources.`
@@ -438,6 +455,7 @@ Always prioritize accuracy and cite sources.`
 // TestEstimateTokensFallback tests EstimateTokens fallback behavior.
 // This is a white-box test to ensure the fallback path is functional.
 func TestEstimateTokensFallback(t *testing.T) {
+	t.Parallel()
 	// Create a message with normal content to test the happy path
 	messages := []typ.Message{
 		{

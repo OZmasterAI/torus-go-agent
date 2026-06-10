@@ -7,6 +7,7 @@ import (
 )
 
 func TestDefaultTheme(t *testing.T) {
+	t.Parallel()
 	theme := DefaultTheme()
 
 	// Verify key styles have non-zero foreground colors.
@@ -33,6 +34,7 @@ func TestDefaultTheme(t *testing.T) {
 }
 
 func TestThemeGlowGradient(t *testing.T) {
+	t.Parallel()
 	theme := DefaultTheme()
 
 	// The glow gradient should have 6 distinct styles.

@@ -11,6 +11,7 @@ import (
 // TestHooksEdge_DuplicateHandlerNames verifies registering handlers with duplicate names at same point.
 // Edge case: the registry allows duplicate names (no deduplication), so both should be registered.
 func TestHooksEdge_DuplicateHandlerNames(t *testing.T) {
+	t.Parallel()
 	reg := NewHookRegistry()
 	var callOrder []int
 
@@ -45,6 +46,7 @@ func TestHooksEdge_DuplicateHandlerNames(t *testing.T) {
 // TestHooksEdge_EmptyHookPointName verifies registering with empty hook point string.
 // Edge case: empty string is a valid map key in Go, so this should work.
 func TestHooksEdge_EmptyHookPointName(t *testing.T) {
+	t.Parallel()
 	reg := NewHookRegistry()
 	called := false
 
@@ -73,6 +75,7 @@ func TestHooksEdge_EmptyHookPointName(t *testing.T) {
 // TestHooksEdge_EmptyHandlerName verifies registering with empty handler name.
 // Edge case: empty name is allowed, should be registered normally.
 func TestHooksEdge_EmptyHandlerName(t *testing.T) {
+	t.Parallel()
 	reg := NewHookRegistry()
 	called := false
 
@@ -100,6 +103,7 @@ func TestHooksEdge_EmptyHandlerName(t *testing.T) {
 // TestHooksEdge_PriorityTieExecution verifies handlers with equal priorities execute in registration order.
 // Edge case: multiple handlers with same priority should maintain insertion order after sort.
 func TestHooksEdge_PriorityTieExecution(t *testing.T) {
+	t.Parallel()
 	reg := NewHookRegistry()
 	var callOrder []int
 
@@ -138,6 +142,7 @@ func TestHooksEdge_PriorityTieExecution(t *testing.T) {
 // TestHooksEdge_FireNonExistentPoint verifies Fire on unregistered hook point succeeds with no calls.
 // Edge case: calling Fire on a point with no handlers registered should succeed silently.
 func TestHooksEdge_FireNonExistentPoint(t *testing.T) {
+	t.Parallel()
 	reg := NewHookRegistry()
 
 	// Fire without registering any handlers at this point
@@ -155,6 +160,7 @@ func TestHooksEdge_FireNonExistentPoint(t *testing.T) {
 // TestHooksEdge_BlockSetByMultipleHandlers verifies Block set by first handler prevents subsequent handlers.
 // Edge case: once Block is set, Fire exits immediately without calling remaining handlers.
 func TestHooksEdge_BlockSetByMultipleHandlers(t *testing.T) {
+	t.Parallel()
 	reg := NewHookRegistry()
 	var callOrder []int
 
@@ -197,6 +203,7 @@ func TestHooksEdge_BlockSetByMultipleHandlers(t *testing.T) {
 // TestHooksEdge_HandlerErrorStopsExecution verifies handler error stops Fire execution.
 // Edge case: when a handler returns an error, Fire stops immediately without calling remaining handlers.
 func TestHooksEdge_HandlerErrorStopsExecution(t *testing.T) {
+	t.Parallel()
 	reg := NewHookRegistry()
 	var callOrder []int
 	expectedErr := errors.New("handler error")
@@ -235,6 +242,7 @@ func TestHooksEdge_HandlerErrorStopsExecution(t *testing.T) {
 // TestHooksEdge_LargeNumberOfHandlers verifies registry handles many handlers efficiently.
 // Edge case: registering and firing with a large number of handlers.
 func TestHooksEdge_LargeNumberOfHandlers(t *testing.T) {
+	t.Parallel()
 	reg := NewHookRegistry()
 	callCount := int64(0)
 
@@ -265,6 +273,7 @@ func TestHooksEdge_LargeNumberOfHandlers(t *testing.T) {
 // TestHooksEdge_ConcurrentRegisterAndFire verifies safety under concurrent register and fire.
 // Edge case: register and fire can happen concurrently; the implementation uses separate locks.
 func TestHooksEdge_ConcurrentRegisterAndFire(t *testing.T) {
+	t.Parallel()
 	reg := NewHookRegistry()
 	var fireCount int64
 	var registerCount int64
@@ -313,6 +322,7 @@ func TestHooksEdge_ConcurrentRegisterAndFire(t *testing.T) {
 // TestHooksEdge_PriorityExtreme verifies extreme priority values work correctly.
 // Edge case: very large and very small priority values should sort correctly.
 func TestHooksEdge_PriorityExtreme(t *testing.T) {
+	t.Parallel()
 	reg := NewHookRegistry()
 	var callOrder []int
 
@@ -347,6 +357,7 @@ func TestHooksEdge_PriorityExtreme(t *testing.T) {
 // TestHooksEdge_HookDataNil verifies Fire with nil HookData.
 // Edge case: passing nil HookData to Fire should not panic.
 func TestHooksEdge_HookDataNil(t *testing.T) {
+	t.Parallel()
 	reg := NewHookRegistry()
 
 	fn := func(ctx context.Context, data *HookData) error {
@@ -371,6 +382,7 @@ func TestHooksEdge_HookDataNil(t *testing.T) {
 // TestHooksEdge_ContextCancelled verifies Fire behavior with cancelled context.
 // Edge case: handlers receive a cancelled context but registry doesn't enforce context checks.
 func TestHooksEdge_ContextCancelled(t *testing.T) {
+	t.Parallel()
 	reg := NewHookRegistry()
 	var receivedCtx context.Context
 
@@ -403,6 +415,7 @@ func TestHooksEdge_ContextCancelled(t *testing.T) {
 // TestHooksEdge_SameHandlerDifferentPoints verifies same handler registered at multiple points.
 // Edge case: the same function can be registered at different hook points.
 func TestHooksEdge_SameHandlerDifferentPoints(t *testing.T) {
+	t.Parallel()
 	reg := NewHookRegistry()
 	var callOrder []string
 
@@ -441,6 +454,7 @@ func TestHooksEdge_SameHandlerDifferentPoints(t *testing.T) {
 // TestHooksEdge_HandlerModifiesBlock verifies handler can change Block mid-execution (edge case).
 // Edge case: if a handler sets Block, Fire stops, so changing Block won't affect subsequent handlers.
 func TestHooksEdge_HandlerModifiesBlock(t *testing.T) {
+	t.Parallel()
 	reg := NewHookRegistry()
 	var callOrder []int
 
@@ -472,6 +486,7 @@ func TestHooksEdge_HandlerModifiesBlock(t *testing.T) {
 // TestHooksEdge_HandlerModifiesPriority verifies that priority is not re-evaluated after modification.
 // Edge case: handlers cannot modify the priority list; priority is read once before iteration.
 func TestHooksEdge_HandlerModifiesToolArgs(t *testing.T) {
+	t.Parallel()
 	reg := NewHookRegistry()
 	var finalToolArgs map[string]any
 
@@ -509,6 +524,7 @@ func TestHooksEdge_HandlerModifiesToolArgs(t *testing.T) {
 // TestHooksEdge_CountWhileRegistering verifies Count behavior during concurrent registration.
 // Edge case: Count can return different values at different times due to concurrent registration.
 func TestHooksEdge_CountWhileRegistering(t *testing.T) {
+	t.Parallel()
 	reg := NewHookRegistry()
 	fn := func(ctx context.Context, data *HookData) error { return nil }
 
@@ -548,6 +564,7 @@ func TestHooksEdge_CountWhileRegistering(t *testing.T) {
 // TestHooksEdge_MultipleFireOnSamePoint verifies multiple Fire calls on same point.
 // Edge case: firing multiple times should call handlers multiple times.
 func TestHooksEdge_MultipleFireOnSamePoint(t *testing.T) {
+	t.Parallel()
 	reg := NewHookRegistry()
 	var callCount int64
 
@@ -574,6 +591,7 @@ func TestHooksEdge_MultipleFireOnSamePoint(t *testing.T) {
 // TestHooksEdge_PriorityAfterRegistration verifies that re-sorting happens on each registration.
 // Edge case: registering with priority should re-sort the slice even if a lower priority is added later.
 func TestHooksEdge_PriorityReSortOnRegister(t *testing.T) {
+	t.Parallel()
 	reg := NewHookRegistry()
 	var callOrder []int
 

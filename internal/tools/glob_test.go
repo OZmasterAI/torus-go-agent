@@ -8,6 +8,7 @@ import (
 )
 
 func TestGlobTool_BasicMatches(t *testing.T) {
+	t.Parallel()
 	tempDir := t.TempDir()
 
 	// Create test files
@@ -48,6 +49,7 @@ func TestGlobTool_BasicMatches(t *testing.T) {
 }
 
 func TestGlobTool_NoMatches(t *testing.T) {
+	t.Parallel()
 	tempDir := t.TempDir()
 
 	tool := globTool()
@@ -69,6 +71,7 @@ func TestGlobTool_NoMatches(t *testing.T) {
 }
 
 func TestGlobTool_NestedDirectories(t *testing.T) {
+	t.Parallel()
 	tempDir := t.TempDir()
 
 	// Create nested directory structure
@@ -119,6 +122,7 @@ func TestGlobTool_NestedDirectories(t *testing.T) {
 }
 
 func TestGlobTool_WithCWD(t *testing.T) {
+	t.Parallel()
 	tempDir := t.TempDir()
 
 	// Create files in temp directory
@@ -159,6 +163,7 @@ func TestGlobTool_WithCWD(t *testing.T) {
 }
 
 func TestGlobTool_MultipleExtensions(t *testing.T) {
+	t.Parallel()
 	tempDir := t.TempDir()
 
 	// Create files with multiple extensions
@@ -200,6 +205,7 @@ func TestGlobTool_MultipleExtensions(t *testing.T) {
 }
 
 func TestGlobTool_EmptyDirectory(t *testing.T) {
+	t.Parallel()
 	tempDir := t.TempDir()
 
 	tool := globTool()
@@ -220,6 +226,7 @@ func TestGlobTool_EmptyDirectory(t *testing.T) {
 }
 
 func TestGlobTool_QuestionMarkPattern(t *testing.T) {
+	t.Parallel()
 	tempDir := t.TempDir()
 
 	// Create files for ? pattern matching
@@ -255,6 +262,7 @@ func TestGlobTool_QuestionMarkPattern(t *testing.T) {
 }
 
 func TestGlobTool_BracketPattern(t *testing.T) {
+	t.Parallel()
 	tempDir := t.TempDir()
 
 	// Create files for bracket pattern matching
@@ -288,6 +296,7 @@ func TestGlobTool_BracketPattern(t *testing.T) {
 }
 
 func TestGlobTool_ErrorHandling(t *testing.T) {
+	t.Parallel()
 	tool := globTool()
 
 	// Test with invalid pattern - filepath.Glob has limited error cases
@@ -306,6 +315,7 @@ func TestGlobTool_ErrorHandling(t *testing.T) {
 }
 
 func TestGlobTool_VerifyToolStructure(t *testing.T) {
+	t.Parallel()
 	tool := globTool()
 
 	if tool.Name != "glob" {
@@ -337,6 +347,7 @@ func TestGlobTool_VerifyToolStructure(t *testing.T) {
 }
 
 func TestGlobTool_ResultFormat(t *testing.T) {
+	t.Parallel()
 	tempDir := t.TempDir()
 
 	// Create test files

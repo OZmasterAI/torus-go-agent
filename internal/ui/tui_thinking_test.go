@@ -13,6 +13,7 @@ import (
 
 // TestThinkingDeltaMsgType verifies the thinkingDeltaMsg struct exists and carries delta text.
 func TestThinkingDeltaMsgType(t *testing.T) {
+	t.Parallel()
 	msg := thinkingDeltaMsg{delta: "reasoning step"}
 	if msg.delta != "reasoning step" {
 		t.Errorf("thinkingDeltaMsg.delta = %q, want %q", msg.delta, "reasoning step")
@@ -21,6 +22,7 @@ func TestThinkingDeltaMsgType(t *testing.T) {
 
 // TestWaitForThinking tests the thinking channel waiter function.
 func TestWaitForThinking(t *testing.T) {
+	t.Parallel()
 	t.Run("nil channel returns nil", func(t *testing.T) {
 		cmd := waitForThinking(nil)
 		if cmd != nil {
@@ -61,6 +63,7 @@ func TestWaitForThinking(t *testing.T) {
 
 // TestModelThinkingFieldExists verifies the Model struct has the thinking field.
 func TestModelThinkingFieldExists(t *testing.T) {
+	t.Parallel()
 	m := Model{}
 	// Verify thinking model is accessible (zero value)
 	if m.thinking.Verbosity != 0 {
@@ -73,6 +76,7 @@ func TestModelThinkingFieldExists(t *testing.T) {
 
 // TestDisplayMsgThinkingTextField verifies displayMsg has the thinkingText field.
 func TestDisplayMsgThinkingTextField(t *testing.T) {
+	t.Parallel()
 	dm := displayMsg{role: "assistant", text: "hello", thinkingText: "reasoning here"}
 	if dm.thinkingText != "reasoning here" {
 		t.Errorf("thinkingText = %q, want %q", dm.thinkingText, "reasoning here")
@@ -81,6 +85,7 @@ func TestDisplayMsgThinkingTextField(t *testing.T) {
 
 // TestThinkingDeltaUpdate tests that thinkingDeltaMsg appends to thinking buffer.
 func TestThinkingDeltaUpdate(t *testing.T) {
+	t.Parallel()
 	m := Model{
 		width:  80,
 		height: 24,
@@ -109,6 +114,7 @@ func TestThinkingDeltaUpdate(t *testing.T) {
 
 // TestThinkingCollapseOnResponse tests that thinking is stored on the last assistant message.
 func TestThinkingCollapseOnResponse(t *testing.T) {
+	t.Parallel()
 	m := Model{
 		width:  80,
 		height: 24,
@@ -144,6 +150,7 @@ func TestThinkingCollapseOnResponse(t *testing.T) {
 
 // TestCtrlOToggle tests that Ctrl+O toggles thinking visibility.
 func TestCtrlOToggle(t *testing.T) {
+	t.Parallel()
 	m := Model{
 		width:  80,
 		height: 24,
@@ -184,6 +191,7 @@ func TestCtrlOToggle(t *testing.T) {
 
 // TestThinkingRenderInContent tests that thinking cards appear inline with assistant messages.
 func TestThinkingRenderInContent(t *testing.T) {
+	t.Parallel()
 	m := Model{
 		width:  80,
 		height: 24,
@@ -211,6 +219,7 @@ func TestThinkingRenderInContent(t *testing.T) {
 
 // TestThinkingPendingRenderDuringStream tests pending thinking renders during streaming.
 func TestThinkingPendingRenderDuringStream(t *testing.T) {
+	t.Parallel()
 	m := Model{
 		width:     80,
 		height:    24,
@@ -236,6 +245,7 @@ func TestThinkingPendingRenderDuringStream(t *testing.T) {
 // TestThinkingChannelNilOnResponse verifies the agentResponseMsg handler
 // nils thinkingCh and stores thinking on the last assistant message.
 func TestThinkingChannelNilOnResponse(t *testing.T) {
+	t.Parallel()
 	m := Model{
 		width:      80,
 		height:     24,
@@ -281,6 +291,7 @@ func TestThinkingChannelNilOnResponse(t *testing.T) {
 // TestThinkingChannelNilOnError verifies the agentErrorMsg handler
 // nils thinkingCh and stores thinking on the last assistant message.
 func TestThinkingChannelNilOnError(t *testing.T) {
+	t.Parallel()
 	m := Model{
 		width:      80,
 		height:     24,
@@ -322,6 +333,7 @@ func TestThinkingChannelNilOnError(t *testing.T) {
 
 // TestRenderHelpIncludesThinking verifies the help overlay lists Ctrl+O.
 func TestRenderHelpIncludesThinking(t *testing.T) {
+	t.Parallel()
 	m := Model{width: 80, height: 24}
 	help := m.renderHelp()
 	if !strings.Contains(help, "Ctrl+O") {
@@ -334,6 +346,7 @@ func TestRenderHelpIncludesThinking(t *testing.T) {
 
 // TestToolCardCompactRead verifies compact multi-line rendering for read tool.
 func TestToolCardCompactRead(t *testing.T) {
+	t.Parallel()
 	m := Model{width: 80, height: 24}
 	ev := &toolEvent{
 		name:     "read",
@@ -375,6 +388,7 @@ func TestToolCardCompactRead(t *testing.T) {
 
 // TestToolCardCompactReadNoResult verifies compact read with no result.
 func TestToolCardCompactReadNoResult(t *testing.T) {
+	t.Parallel()
 	m := Model{width: 80, height: 24}
 	ev := &toolEvent{
 		name:     "read",
@@ -390,6 +404,7 @@ func TestToolCardCompactReadNoResult(t *testing.T) {
 
 // TestToolCardCompactEdit verifies compact rendering for edit tool with diff.
 func TestToolCardCompactEdit(t *testing.T) {
+	t.Parallel()
 	m := Model{width: 80, height: 24}
 	ev := &toolEvent{
 		name:     "edit",
@@ -422,6 +437,7 @@ func TestToolCardCompactEdit(t *testing.T) {
 
 // TestToolCardCompactEditNoDiff verifies compact edit with empty old/new.
 func TestToolCardCompactEditNoDiff(t *testing.T) {
+	t.Parallel()
 	m := Model{width: 80, height: 24}
 	ev := &toolEvent{
 		name:     "edit",
@@ -437,6 +453,7 @@ func TestToolCardCompactEditNoDiff(t *testing.T) {
 
 // TestToolCardCompactBash verifies compact rendering for bash tool with output preview.
 func TestToolCardCompactBash(t *testing.T) {
+	t.Parallel()
 	m := Model{width: 80, height: 24}
 	ev := &toolEvent{
 		name:   "bash",
@@ -468,6 +485,7 @@ func TestToolCardCompactBash(t *testing.T) {
 
 // TestToolCardCompactBashNoOutput verifies compact bash with no output.
 func TestToolCardCompactBashNoOutput(t *testing.T) {
+	t.Parallel()
 	m := Model{width: 80, height: 24}
 	ev := &toolEvent{
 		name: "bash",
@@ -482,6 +500,7 @@ func TestToolCardCompactBashNoOutput(t *testing.T) {
 
 // TestToolCardCompactWrite verifies compact rendering for write tool.
 func TestToolCardCompactWrite(t *testing.T) {
+	t.Parallel()
 	m := Model{width: 80, height: 24}
 	ev := &toolEvent{
 		name:     "write",
@@ -504,6 +523,7 @@ func TestToolCardCompactWrite(t *testing.T) {
 
 // TestToolCardCompactGlob verifies compact rendering for glob tool with match preview.
 func TestToolCardCompactGlob(t *testing.T) {
+	t.Parallel()
 	m := Model{width: 80, height: 24}
 	ev := &toolEvent{
 		name:   "glob",
@@ -535,6 +555,7 @@ func TestToolCardCompactGlob(t *testing.T) {
 
 // TestToolCardCompactDefault verifies compact rendering for unknown tools.
 func TestToolCardCompactDefault(t *testing.T) {
+	t.Parallel()
 	m := Model{width: 80, height: 24}
 	ev := &toolEvent{
 		name: "custom_tool",
@@ -552,6 +573,7 @@ func TestToolCardCompactDefault(t *testing.T) {
 
 // TestToolCardCompactDefaultWithResult verifies default tool shows brief result.
 func TestToolCardCompactDefaultWithResult(t *testing.T) {
+	t.Parallel()
 	m := Model{width: 80, height: 24}
 	ev := &toolEvent{
 		name:   "custom_tool",
@@ -573,6 +595,7 @@ func TestToolCardCompactDefaultWithResult(t *testing.T) {
 
 // TestRenderTreeLines verifies tree-style box-drawing prefix rendering.
 func TestRenderTreeLines(t *testing.T) {
+	t.Parallel()
 	style := lipgloss.NewStyle()
 
 	// Single line should get └─
@@ -609,6 +632,7 @@ func TestRenderTreeLines(t *testing.T) {
 
 // TestSplitNonEmpty verifies the helper strips blank lines.
 func TestSplitNonEmpty(t *testing.T) {
+	t.Parallel()
 	got := splitNonEmpty("a\n\nb\n\nc\n")
 	if len(got) != 3 {
 		t.Errorf("splitNonEmpty should return 3 items, got %d: %v", len(got), got)
@@ -625,6 +649,7 @@ func TestSplitNonEmpty(t *testing.T) {
 
 // TestVerboseToggleToolRendering verifies that Verbosity controls tool card verbosity.
 func TestVerboseToggleToolRendering(t *testing.T) {
+	t.Parallel()
 	m := Model{
 		width:  80,
 		height: 24,
@@ -679,6 +704,7 @@ func TestVerboseToggleToolRendering(t *testing.T) {
 
 // TestRenderToolCardFullBash verifies full mode shows all bash output without truncation.
 func TestRenderToolCardFullBash(t *testing.T) {
+	t.Parallel()
 	m := Model{width: 100, height: 24}
 	// Build output longer than the verbose limit of 5 lines
 	var lines []string
@@ -705,6 +731,7 @@ func TestRenderToolCardFullBash(t *testing.T) {
 
 // TestRenderToolCardFullEdit verifies full mode shows all diff lines without truncation.
 func TestRenderToolCardFullEdit(t *testing.T) {
+	t.Parallel()
 	m := Model{width: 100, height: 24}
 	// Build old/new strings with more than 10 lines each (verbose limit)
 	var oldLines, newLines []string
@@ -735,6 +762,7 @@ func TestRenderToolCardFullEdit(t *testing.T) {
 
 // TestRenderToolCardFullRead verifies full mode shows file content.
 func TestRenderToolCardFullRead(t *testing.T) {
+	t.Parallel()
 	m := Model{width: 100, height: 24}
 	ev := &toolEvent{
 		name:     "read",
@@ -753,6 +781,7 @@ func TestRenderToolCardFullRead(t *testing.T) {
 
 // TestRenderToolCardFullWrite verifies full mode shows written content.
 func TestRenderToolCardFullWrite(t *testing.T) {
+	t.Parallel()
 	m := Model{width: 100, height: 24}
 	ev := &toolEvent{
 		name:     "write",
@@ -770,6 +799,7 @@ func TestRenderToolCardFullWrite(t *testing.T) {
 
 // TestRenderToolCardFullGlob verifies full mode shows all matches.
 func TestRenderToolCardFullGlob(t *testing.T) {
+	t.Parallel()
 	m := Model{width: 100, height: 24}
 	var matches []string
 	for i := 1; i <= 8; i++ {

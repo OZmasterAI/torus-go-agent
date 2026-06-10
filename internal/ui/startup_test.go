@@ -6,6 +6,7 @@ import (
 )
 
 func TestClampScrollOffset(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name         string
 		cursor       int
@@ -54,6 +55,7 @@ func TestClampScrollOffset(t *testing.T) {
 }
 
 func TestFilteredIndices_NoFilter(t *testing.T) {
+	t.Parallel()
 	labels := []string{"Alpha", "Beta", "Gamma"}
 	got := filteredIndices(3, func(i int) string { return labels[i] }, "")
 	if len(got) != 3 {
@@ -67,6 +69,7 @@ func TestFilteredIndices_NoFilter(t *testing.T) {
 }
 
 func TestFilteredIndices_MatchSubstring(t *testing.T) {
+	t.Parallel()
 	labels := []string{"OpenRouter", "NVIDIA NIM", "Anthropic Claude", "OpenAI"}
 	got := filteredIndices(4, func(i int) string { return labels[i] }, "open")
 	if len(got) != 2 {
@@ -78,6 +81,7 @@ func TestFilteredIndices_MatchSubstring(t *testing.T) {
 }
 
 func TestFilteredIndices_CaseInsensitive(t *testing.T) {
+	t.Parallel()
 	labels := []string{"Claude Opus", "GPT-4o", "Gemini Pro"}
 	got := filteredIndices(3, func(i int) string { return labels[i] }, "CLAUDE")
 	if len(got) != 1 || got[0] != 0 {
@@ -86,6 +90,7 @@ func TestFilteredIndices_CaseInsensitive(t *testing.T) {
 }
 
 func TestFilteredIndices_NoMatch(t *testing.T) {
+	t.Parallel()
 	labels := []string{"Alpha", "Beta"}
 	got := filteredIndices(2, func(i int) string { return labels[i] }, "xyz")
 	if len(got) != 0 {
@@ -94,6 +99,7 @@ func TestFilteredIndices_NoMatch(t *testing.T) {
 }
 
 func TestResolveFilteredIndex_NoFilter(t *testing.T) {
+	t.Parallel()
 	m := setupModel{cursor: 2}
 	if got := m.resolveFilteredIndex(); got != 2 {
 		t.Errorf("no filter: got %d, want 2", got)
@@ -101,6 +107,7 @@ func TestResolveFilteredIndex_NoFilter(t *testing.T) {
 }
 
 func TestResolveFilteredIndex_WithFilter(t *testing.T) {
+	t.Parallel()
 	groups := []ProviderGroup{
 		{Name: "OpenRouter", ProviderKey: "openrouter"},
 		{Name: "NVIDIA NIM", ProviderKey: "nvidia"},
@@ -121,6 +128,7 @@ func TestResolveFilteredIndex_WithFilter(t *testing.T) {
 }
 
 func TestFilterablePhase(t *testing.T) {
+	t.Parallel()
 	for _, phase := range []int{1, 3, 4} {
 		m := setupModel{phase: phase}
 		if !m.filterablePhase() {
@@ -136,6 +144,7 @@ func TestFilterablePhase(t *testing.T) {
 }
 
 func TestBuildModelPickerItems(t *testing.T) {
+	t.Parallel()
 	groups := []ProviderGroup{
 		{
 			Name:        "Anthropic",
@@ -198,6 +207,7 @@ func TestBuildModelPickerItems(t *testing.T) {
 }
 
 func TestInitTorusParticles(t *testing.T) {
+	t.Parallel()
 	particles := initTorusParticles()
 	if len(particles) != numTorusParticles {
 		t.Fatalf("expected %d particles, got %d", numTorusParticles, len(particles))
@@ -211,6 +221,7 @@ func TestInitTorusParticles(t *testing.T) {
 }
 
 func TestRenderParticleTorus(t *testing.T) {
+	t.Parallel()
 	particles := initTorusParticles()
 	frame := renderParticleTorus(particles, 0, 0)
 	if frame == "" {
@@ -224,6 +235,7 @@ func TestRenderParticleTorus(t *testing.T) {
 }
 
 func TestUpdateTorusParticles(t *testing.T) {
+	t.Parallel()
 	particles := initTorusParticles()
 	// Run several update cycles -- should not panic
 	for i := 0; i < 100; i++ {
@@ -242,6 +254,7 @@ func TestUpdateTorusParticles(t *testing.T) {
 }
 
 func TestNvidiaFreeEnablesRewardScoring(t *testing.T) {
+	t.Parallel()
 	m := setupModel{
 		configOverrides: defaultOverrides(),
 	}
@@ -266,6 +279,7 @@ func TestNvidiaFreeEnablesRewardScoring(t *testing.T) {
 }
 
 func TestNonNvidiaFreeSkipsRewardScoring(t *testing.T) {
+	t.Parallel()
 	m := setupModel{
 		configOverrides: defaultOverrides(),
 	}
@@ -287,6 +301,7 @@ func TestNonNvidiaFreeSkipsRewardScoring(t *testing.T) {
 }
 
 func TestFormatProviderModel(t *testing.T) {
+	t.Parallel()
 	tests := []struct{ input, want string }{
 		{"anthropic:claude-haiku-4-5", "claude-haiku-4-5 (anthropic)"},
 		{"nvidia:z-ai/glm5", "z-ai/glm5 (nvidia)"},

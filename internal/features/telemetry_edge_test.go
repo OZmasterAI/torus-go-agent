@@ -14,6 +14,7 @@ import (
 // TestTelemetryEdge_DisabledTelemetry verifies behavior when no hooks are registered.
 // This tests the case where telemetry is completely disabled.
 func TestTelemetryEdge_DisabledTelemetry(t *testing.T) {
+	t.Parallel()
 	tc := NewTelemetryCollector()
 	hooks := core.NewHookRegistry()
 	// Do NOT register hooks
@@ -46,6 +47,7 @@ func TestTelemetryEdge_DisabledTelemetry(t *testing.T) {
 // TestTelemetryEdge_HighFrequencyEvents tests rapid-fire hook calls.
 // This stresses concurrent access with many events in short time.
 func TestTelemetryEdge_HighFrequencyEvents(t *testing.T) {
+	t.Parallel()
 	tc := NewTelemetryCollector()
 	hooks := core.NewHookRegistry()
 	tc.RegisterHooks(hooks)
@@ -92,6 +94,7 @@ func TestTelemetryEdge_HighFrequencyEvents(t *testing.T) {
 // TestTelemetryEdge_SpanNesting tests interleaved LLM and tool calls.
 // This simulates nested spans: LLM starts, tool starts/ends, LLM ends.
 func TestTelemetryEdge_SpanNesting(t *testing.T) {
+	t.Parallel()
 	tc := NewTelemetryCollector()
 	hooks := core.NewHookRegistry()
 	tc.RegisterHooks(hooks)
@@ -150,6 +153,7 @@ func TestTelemetryEdge_SpanNesting(t *testing.T) {
 // TestTelemetryEdge_MissingStartMetadata tests AfterLLMCall without corresponding Before.
 // This simulates a scenario where the start timestamp is lost or missing.
 func TestTelemetryEdge_MissingStartMetadata(t *testing.T) {
+	t.Parallel()
 	tc := NewTelemetryCollector()
 	hooks := core.NewHookRegistry()
 	tc.RegisterHooks(hooks)
@@ -187,6 +191,7 @@ func TestTelemetryEdge_MissingStartMetadata(t *testing.T) {
 
 // TestTelemetryEdge_MissingToolStartMetadata tests tool after hook without before.
 func TestTelemetryEdge_MissingToolStartMetadata(t *testing.T) {
+	t.Parallel()
 	tc := NewTelemetryCollector()
 	hooks := core.NewHookRegistry()
 	tc.RegisterHooks(hooks)
@@ -219,6 +224,7 @@ func TestTelemetryEdge_MissingToolStartMetadata(t *testing.T) {
 
 // TestTelemetryEdge_ZeroDurationSpan tests a span with effectively zero duration.
 func TestTelemetryEdge_ZeroDurationSpan(t *testing.T) {
+	t.Parallel()
 	tc := NewTelemetryCollector()
 	hooks := core.NewHookRegistry()
 	tc.RegisterHooks(hooks)
@@ -262,6 +268,7 @@ func TestTelemetryEdge_ZeroDurationSpan(t *testing.T) {
 
 // TestTelemetryEdge_LargeTokenCounts tests very large token counts.
 func TestTelemetryEdge_LargeTokenCounts(t *testing.T) {
+	t.Parallel()
 	tc := NewTelemetryCollector()
 	hooks := core.NewHookRegistry()
 	tc.RegisterHooks(hooks)
@@ -299,6 +306,7 @@ func TestTelemetryEdge_LargeTokenCounts(t *testing.T) {
 
 // TestTelemetryEdge_AllErrorMetrics tests all error-tracking hooks together.
 func TestTelemetryEdge_AllErrorMetrics(t *testing.T) {
+	t.Parallel()
 	tc := NewTelemetryCollector()
 	hooks := core.NewHookRegistry()
 	tc.RegisterHooks(hooks)
@@ -334,6 +342,7 @@ func TestTelemetryEdge_AllErrorMetrics(t *testing.T) {
 
 // TestTelemetryEdge_MultipleErrorsInSequence tests multiple error hooks in sequence.
 func TestTelemetryEdge_MultipleErrorsInSequence(t *testing.T) {
+	t.Parallel()
 	tc := NewTelemetryCollector()
 	hooks := core.NewHookRegistry()
 	tc.RegisterHooks(hooks)
@@ -352,6 +361,7 @@ func TestTelemetryEdge_MultipleErrorsInSequence(t *testing.T) {
 
 // TestTelemetryEdge_MixedErrorAndSuccessTools tests tool calls with mixed results.
 func TestTelemetryEdge_MixedErrorAndSuccessTools(t *testing.T) {
+	t.Parallel()
 	tc := NewTelemetryCollector()
 	hooks := core.NewHookRegistry()
 	tc.RegisterHooks(hooks)
@@ -391,6 +401,7 @@ func TestTelemetryEdge_MixedErrorAndSuccessTools(t *testing.T) {
 
 // TestTelemetryEdge_CompactionAndSubagentTogether tests simultaneous non-error hooks.
 func TestTelemetryEdge_CompactionAndSubagentTogether(t *testing.T) {
+	t.Parallel()
 	tc := NewTelemetryCollector()
 	hooks := core.NewHookRegistry()
 	tc.RegisterHooks(hooks)
@@ -417,6 +428,7 @@ func TestTelemetryEdge_CompactionAndSubagentTogether(t *testing.T) {
 
 // TestTelemetryEdge_SummaryFormatConsistency verifies Summary format remains consistent.
 func TestTelemetryEdge_SummaryFormatConsistency(t *testing.T) {
+	t.Parallel()
 	tc := NewTelemetryCollector()
 	hooks := core.NewHookRegistry()
 	tc.RegisterHooks(hooks)
@@ -476,6 +488,7 @@ func TestTelemetryEdge_SummaryFormatConsistency(t *testing.T) {
 
 // TestTelemetryEdge_ConcurrentMetricsAndSpans tests concurrent reads while writes occur.
 func TestTelemetryEdge_ConcurrentMetricsAndSpans(t *testing.T) {
+	t.Parallel()
 	tc := NewTelemetryCollector()
 	hooks := core.NewHookRegistry()
 	tc.RegisterHooks(hooks)
@@ -532,6 +545,7 @@ func TestTelemetryEdge_ConcurrentMetricsAndSpans(t *testing.T) {
 
 // TestTelemetryEdge_EmptyToolName tests tool span with empty tool name.
 func TestTelemetryEdge_EmptyToolName(t *testing.T) {
+	t.Parallel()
 	tc := NewTelemetryCollector()
 	hooks := core.NewHookRegistry()
 	tc.RegisterHooks(hooks)
@@ -566,6 +580,7 @@ func TestTelemetryEdge_EmptyToolName(t *testing.T) {
 
 // TestTelemetryEdge_ToolResultNil tests tool after hook with nil ToolResult.
 func TestTelemetryEdge_ToolResultNil(t *testing.T) {
+	t.Parallel()
 	tc := NewTelemetryCollector()
 	hooks := core.NewHookRegistry()
 	tc.RegisterHooks(hooks)
@@ -598,6 +613,7 @@ func TestTelemetryEdge_ToolResultNil(t *testing.T) {
 
 // TestTelemetryEdge_GetMetricsReturnsSnapshot verifies GetMetrics returns independent snapshot.
 func TestTelemetryEdge_GetMetricsReturnsSnapshot(t *testing.T) {
+	t.Parallel()
 	tc := NewTelemetryCollector()
 	hooks := core.NewHookRegistry()
 	tc.RegisterHooks(hooks)
@@ -629,6 +645,7 @@ func TestTelemetryEdge_GetMetricsReturnsSnapshot(t *testing.T) {
 
 // TestTelemetryEdge_SpanStartTimesAreMonotonic verifies span start times increase.
 func TestTelemetryEdge_SpanStartTimesAreMonotonic(t *testing.T) {
+	t.Parallel()
 	tc := NewTelemetryCollector()
 	hooks := core.NewHookRegistry()
 	tc.RegisterHooks(hooks)

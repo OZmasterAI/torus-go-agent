@@ -8,6 +8,7 @@ import (
 
 // TestHasToolUse tests the HasToolUse function with various message states.
 func TestHasToolUse(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		msg      *types.AssistantMessage
@@ -83,6 +84,7 @@ func TestHasToolUse(t *testing.T) {
 
 // TestExtractText tests the ExtractText function with various block combinations.
 func TestExtractText(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		msg      *types.AssistantMessage
@@ -184,6 +186,7 @@ func TestExtractText(t *testing.T) {
 
 // TestExtractToolCalls tests the ExtractToolCalls function with various scenarios.
 func TestExtractToolCalls(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		msg      *types.AssistantMessage
@@ -289,6 +292,7 @@ func TestExtractToolCalls(t *testing.T) {
 
 // TestEventAgentThinkingDelta verifies the constant exists and has the expected value.
 func TestEventAgentThinkingDelta(t *testing.T) {
+	t.Parallel()
 	if EventAgentThinkingDelta != "thinking_delta" {
 		t.Errorf("EventAgentThinkingDelta = %q, want %q", EventAgentThinkingDelta, "thinking_delta")
 	}
@@ -300,23 +304,24 @@ func TestEventAgentThinkingDelta(t *testing.T) {
 
 // TestFilterThinking tests that FilterThinking correctly separates thinking blocks.
 func TestFilterThinking(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
-		name          string
-		blocks        []types.ContentBlock
-		wantClean     int
-		wantThinking  int
+		name         string
+		blocks       []types.ContentBlock
+		wantClean    int
+		wantThinking int
 	}{
 		{
-			name:          "nil input",
-			blocks:        nil,
-			wantClean:     0,
-			wantThinking:  0,
+			name:         "nil input",
+			blocks:       nil,
+			wantClean:    0,
+			wantThinking: 0,
 		},
 		{
-			name:          "empty input",
-			blocks:        []types.ContentBlock{},
-			wantClean:     0,
-			wantThinking:  0,
+			name:         "empty input",
+			blocks:       []types.ContentBlock{},
+			wantClean:    0,
+			wantThinking: 0,
 		},
 		{
 			name: "no thinking blocks",

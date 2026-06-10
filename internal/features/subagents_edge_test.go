@@ -62,6 +62,7 @@ func TestSubagentsEdge_MaxConcurrentSubagents(t *testing.T) {
 // --- Edge Case: Nil/Empty Config ---
 
 func TestSubagentsEdge_EmptyTask(t *testing.T) {
+	t.Parallel()
 	m := NewSubAgentManager()
 	mp := &subagentMockProvider{
 		name:       "test",
@@ -85,6 +86,7 @@ func TestSubagentsEdge_EmptyTask(t *testing.T) {
 }
 
 func TestSubagentsEdge_EmptySystemPrompt(t *testing.T) {
+	t.Parallel()
 	m := NewSubAgentManager()
 	mp := &subagentMockProvider{
 		name:       "test",
@@ -108,6 +110,7 @@ func TestSubagentsEdge_EmptySystemPrompt(t *testing.T) {
 }
 
 func TestSubagentsEdge_EmptyAgentType(t *testing.T) {
+	t.Parallel()
 	m := NewSubAgentManager()
 	mp := &subagentMockProvider{
 		name:       "test",
@@ -133,6 +136,7 @@ func TestSubagentsEdge_EmptyAgentType(t *testing.T) {
 // --- Edge Case: Negative MaxTurns ---
 
 func TestSubagentsEdge_NegativeMaxTurns(t *testing.T) {
+	t.Parallel()
 	m := NewSubAgentManager()
 	mp := &subagentMockProvider{
 		name:       "test",
@@ -159,6 +163,7 @@ func TestSubagentsEdge_NegativeMaxTurns(t *testing.T) {
 // --- Edge Case: Correct ID Format ---
 
 func TestSubagentsEdge_IDFormatValidation(t *testing.T) {
+	t.Parallel()
 	m := NewSubAgentManager()
 	mp := &subagentMockProvider{
 		name:       "test",
@@ -188,6 +193,7 @@ func TestSubagentsEdge_IDFormatValidation(t *testing.T) {
 // --- Edge Case: GetResult Multiple Times ---
 
 func TestSubagentsEdge_GetResultMultipleTimes(t *testing.T) {
+	t.Parallel()
 	m := NewSubAgentManager()
 	mp := &subagentMockProvider{
 		name:       "test",
@@ -230,6 +236,7 @@ func TestSubagentsEdge_GetResultMultipleTimes(t *testing.T) {
 // --- Edge Case: ListRunning Race Conditions ---
 
 func TestSubagentsEdge_ListRunningDuringSpawn(t *testing.T) {
+	t.Parallel()
 	m := NewSubAgentManager()
 	mp := &subagentMockProvider{
 		name:       "test",
@@ -279,6 +286,7 @@ func TestSubagentsEdge_ListRunningDuringSpawn(t *testing.T) {
 // --- Edge Case: GetResult After Multiple Waits ---
 
 func TestSubagentsEdge_GetResultAfterMultipleWaits(t *testing.T) {
+	t.Parallel()
 	m := NewSubAgentManager()
 	id := "test_id"
 	expectedResult := &SubAgentResult{
@@ -311,6 +319,7 @@ func TestSubagentsEdge_GetResultAfterMultipleWaits(t *testing.T) {
 // --- Edge Case: SpawnWithProvider Hook Blocking ---
 
 func TestSubagentsEdge_BeforeSpawnHookBlocks(t *testing.T) {
+	t.Parallel()
 	m := NewSubAgentManager()
 	mp := &subagentMockProvider{
 		name:       "test",
@@ -321,8 +330,8 @@ func TestSubagentsEdge_BeforeSpawnHookBlocks(t *testing.T) {
 	// Create parent agent with blocking hook
 	dag := newSubagentTestDAG(t)
 	cfg := typ.AgentConfig{
-		Provider:  typ.ProviderConfig{Name: mp.name, Model: mp.modelID},
-		MaxTurns:  3,
+		Provider: typ.ProviderConfig{Name: mp.name, Model: mp.modelID},
+		MaxTurns: 3,
 	}
 	hooks := core.NewHookRegistry()
 	hooks.Register(core.HookBeforeSpawn, "blocker", func(_ context.Context, data *core.HookData) error {
@@ -358,6 +367,7 @@ func TestSubagentsEdge_BeforeSpawnHookBlocks(t *testing.T) {
 // --- Edge Case: Multiple Managers Same DAG ---
 
 func TestSubagentsEdge_MultipleManagersSameDAG(t *testing.T) {
+	t.Parallel()
 	m1 := NewSubAgentManager()
 	m2 := NewSubAgentManager()
 	mp := &subagentMockProvider{
@@ -402,6 +412,7 @@ func TestSubagentsEdge_MultipleManagersSameDAG(t *testing.T) {
 // --- Edge Case: FilterTools with Duplicates in Input ---
 
 func TestSubagentsEdge_FilterToolsWithDuplicateNames(t *testing.T) {
+	t.Parallel()
 	tools := []typ.Tool{
 		{Name: "read"},
 		{Name: "bash"},
@@ -433,6 +444,7 @@ func TestSubagentsEdge_FilterToolsWithDuplicateNames(t *testing.T) {
 // --- Edge Case: Empty Tools List ---
 
 func TestSubagentsEdge_EmptyToolsList(t *testing.T) {
+	t.Parallel()
 	m := NewSubAgentManager()
 	mp := &subagentMockProvider{
 		name:       "test",
@@ -460,6 +472,7 @@ func TestSubagentsEdge_EmptyToolsList(t *testing.T) {
 // --- Edge Case: Result Channel Behavior ---
 
 func TestSubagentsEdge_ResultChannelNonBlocking(t *testing.T) {
+	t.Parallel()
 	state := &subAgentState{result: make(chan *SubAgentResult, 1)}
 
 	result := &SubAgentResult{
@@ -483,6 +496,7 @@ func TestSubagentsEdge_ResultChannelNonBlocking(t *testing.T) {
 // --- Edge Case: DefaultToolsForType Variations ---
 
 func TestSubagentsEdge_DefaultToolsForTypeCaseInsensitive(t *testing.T) {
+	t.Parallel()
 	// Tool selection is case-sensitive, but let's verify exact behavior
 	tests := []struct {
 		name      string
@@ -490,7 +504,7 @@ func TestSubagentsEdge_DefaultToolsForTypeCaseInsensitive(t *testing.T) {
 		wantCount int
 	}{
 		{"Builder lowercase", "builder", 6},
-		{"Builder uppercase", "BUILDER", 6}, // Unknown, defaults to all
+		{"Builder uppercase", "BUILDER", 6},   // Unknown, defaults to all
 		{"Researcher mixed", "ReSeArChEr", 6}, // Unknown, defaults to all
 		{"Tester lowercase", "tester", 4},
 		{"Tester uppercase", "TESTER", 6}, // Unknown, defaults to all
@@ -509,6 +523,7 @@ func TestSubagentsEdge_DefaultToolsForTypeCaseInsensitive(t *testing.T) {
 // --- Edge Case: SubAgentID Generation ---
 
 func TestSubagentsEdge_UniqueSubAgentIDs(t *testing.T) {
+	t.Parallel()
 	m := NewSubAgentManager()
 	mp := &subagentMockProvider{
 		name:       "test",
@@ -543,13 +558,14 @@ func TestSubagentsEdge_UniqueSubAgentIDs(t *testing.T) {
 // --- Edge Case: Result Error Types ---
 
 func TestSubagentsEdge_ResultWithVarousErrorTypes(t *testing.T) {
+	t.Parallel()
 	m := NewSubAgentManager()
 
 	tests := []struct {
-		name     string
-		setupFn  func() (string, *SubAgentResult)
-		wantErr  bool
-		errMsg   string
+		name    string
+		setupFn func() (string, *SubAgentResult)
+		wantErr bool
+		errMsg  string
 	}{
 		{
 			name: "unknown_id",
@@ -601,6 +617,7 @@ func TestSubagentsEdge_ResultWithVarousErrorTypes(t *testing.T) {
 // --- Edge Case: Stress Test Rapid Spawn/Wait ---
 
 func TestSubagentsEdge_RapidSpawnWait(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("Skipping stress test in short mode")
 	}
@@ -645,6 +662,7 @@ func contains(s, substr string) bool {
 }
 
 func TestSubagentStart_ContextInjection(t *testing.T) {
+	t.Parallel()
 	m := NewSubAgentManager()
 
 	// Create a mock provider that captures the system prompt it receives.
@@ -700,6 +718,7 @@ func TestSubagentStart_ContextInjection(t *testing.T) {
 }
 
 func TestSubagentStart_NoContextInjection(t *testing.T) {
+	t.Parallel()
 	// Verify that when AdditionalContext is not set, the system prompt is unchanged.
 	m := NewSubAgentManager()
 
@@ -745,6 +764,7 @@ func TestSubagentStart_NoContextInjection(t *testing.T) {
 }
 
 func TestSubagent_TaskCreatedCompleted(t *testing.T) {
+	t.Parallel()
 	m := NewSubAgentManager()
 	mp := &subagentMockProvider{
 		name:       "test",

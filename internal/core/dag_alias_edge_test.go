@@ -14,6 +14,7 @@ import (
 // manually-set aliases when determining the next auto-alias number.
 // This prevents collisions between auto-aliases (a1, a2, ...) and manual aliases.
 func TestNextAutoAlias_SkipsManuallySetAliases(tt *testing.T) {
+	tt.Parallel()
 	d := newTestDAG(tt)
 	id1, _ := d.AddNode("", t.RoleUser, textContent("node1"), "", "", 0)
 	id2, _ := d.AddNode(id1, t.RoleAssistant, textContent("node2"), "", "", 0)
@@ -45,6 +46,7 @@ func TestNextAutoAlias_SkipsManuallySetAliases(tt *testing.T) {
 // TestAliasPersistsAcrossReopen verifies that aliases survive a database close
 // and reopen cycle, critical for long-running agents that may restart.
 func TestAliasPersistsAcrossReopen(tt *testing.T) {
+	tt.Parallel()
 	dir := tt.TempDir()
 	dbPath := filepath.Join(dir, "alias_persist.db")
 
@@ -58,7 +60,7 @@ func TestAliasPersistsAcrossReopen(tt *testing.T) {
 
 	// Set various alias types
 	d1.SetAlias(id1, "start")
-	d1.SetAlias(id1, "a1")       // auto-alias
+	d1.SetAlias(id1, "a1") // auto-alias
 	d1.SetAlias(id2, "end")
 	d1.SetAlias(id2, "a2")       // auto-alias
 	d1.SetAlias(id2, "a_backup") // prefixed with 'a' but not auto-format
@@ -108,6 +110,7 @@ func TestAliasPersistsAcrossReopen(tt *testing.T) {
 // and a node ID could potentially match (e.g., if someone names a node
 // with an alias-like ID), the alias takes precedence in resolution.
 func TestResolveNodeOrAlias_PrefersAlias(tt *testing.T) {
+	tt.Parallel()
 	d := newTestDAG(tt)
 	id1, _ := d.AddNode("", t.RoleUser, textContent("node1"), "", "", 0)
 	id2, _ := d.AddNode(id1, t.RoleAssistant, textContent("node2"), "", "", 0)
@@ -151,6 +154,7 @@ func TestResolveNodeOrAlias_PrefersAlias(tt *testing.T) {
 // ON CONFLICT clause to overwrite existing aliases correctly, maintaining
 // ACID properties even when overwriting.
 func TestSetAlias_OverwritesWithONCONFLICT(tt *testing.T) {
+	tt.Parallel()
 	d := newTestDAG(tt)
 	id1, _ := d.AddNode("", t.RoleUser, textContent("node1"), "", "", 0)
 	id2, _ := d.AddNode(id1, t.RoleAssistant, textContent("node2"), "", "", 0)
@@ -202,6 +206,7 @@ func TestSetAlias_OverwritesWithONCONFLICT(tt *testing.T) {
 // nonexistent alias does not error and leaves the database in a consistent state.
 // This is important for idempotent operations and cleanup scripts.
 func TestDeleteAlias_NonexistentIsNoop(tt *testing.T) {
+	tt.Parallel()
 	d := newTestDAG(tt)
 	id1, _ := d.AddNode("", t.RoleUser, textContent("node1"), "", "", 0)
 
@@ -239,6 +244,7 @@ func TestDeleteAlias_NonexistentIsNoop(tt *testing.T) {
 // TestSetAlias_MultipleAliasesPerNode verifies that a single node can have
 // multiple aliases and all are maintained correctly through overwrites.
 func TestSetAlias_MultipleAliasesPerNode(tt *testing.T) {
+	tt.Parallel()
 	d := newTestDAG(tt)
 	id1, _ := d.AddNode("", t.RoleUser, textContent("node1"), "", "", 0)
 	id2, _ := d.AddNode(id1, t.RoleAssistant, textContent("node2"), "", "", 0)
@@ -288,6 +294,7 @@ func TestSetAlias_MultipleAliasesPerNode(tt *testing.T) {
 // gaps in the auto-alias sequence (e.g., if a1 and a3 exist but a2 doesn't,
 // it should still return a4).
 func TestNextAutoAlias_SkipsGaps(tt *testing.T) {
+	tt.Parallel()
 	d := newTestDAG(tt)
 	id1, _ := d.AddNode("", t.RoleUser, textContent("node1"), "", "", 0)
 	id2, _ := d.AddNode(id1, t.RoleAssistant, textContent("node2"), "", "", 0)
@@ -313,6 +320,7 @@ func TestNextAutoAlias_SkipsGaps(tt *testing.T) {
 // TestDeleteAlias_DoesNotAffectOtherAliases verifies that deleting one alias
 // for a node does not affect its other aliases or the node itself.
 func TestDeleteAlias_DoesNotAffectOtherAliases(tt *testing.T) {
+	tt.Parallel()
 	d := newTestDAG(tt)
 	id1, _ := d.AddNode("", t.RoleUser, textContent("node1"), "", "", 0)
 
