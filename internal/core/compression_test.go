@@ -343,7 +343,7 @@ func TestContinuousCompress_DefaultKeepLast(t *testing.T) {
 func TestContinuousCompress_ScoreBasedCompression(t *testing.T) {
 	messages := []types.Message{
 		newTextMessage(types.RoleUser, "schema"),
-		newTextMessage(types.RoleAssistant, "How to X?"), // ScoreLow (short, no question)
+		newTextMessage(types.RoleAssistant, "How to X?"),                                                    // ScoreLow (short, no question)
 		newTextMessage(types.RoleUser, "What is the best way to structure this? "+strings.Repeat("x", 150)), // ScoreHigh
 		newTextMessage(types.RoleUser, "recent"),
 	}
@@ -1011,7 +1011,7 @@ func TestUnifiedCompress_BudgetFillsByScore(t *testing.T) {
 	cfg := UnifiedCompressConfig{
 		KeepLast:      4,
 		MinMessages:   0,
-		ContextWindow: 8000,  // tight: ~8682 raw tokens, usable only ~5500
+		ContextWindow: 8000, // tight: ~8682 raw tokens, usable only ~5500
 		MaxTokens:     2500,
 		ArchivePct:    25,
 	}
@@ -1256,5 +1256,45 @@ func TestContinuousCompressV2_WorkingMemoryAppended(t *testing.T) {
 	// Either way, result should be shorter than original
 	if len(result) >= len(messages) {
 		t.Errorf("should compress: got %d, original %d", len(result), len(messages))
+	}
+}
+
+func TestUnifiedCompress_CounterSemantics(t *testing.T) {
+	// CompressionRuns is process-global, so use delta assertions only —
+	// never Store/reset it (resets would race with other tests).
+
+	// (a) Early return (n <= KeepLast) must NOT increment the counter.
+	short := []types.Message{
+		newTextMessage(types.RoleAssistant, "system prompt"),
+		newTextMessage(types.RoleUser, "task 0"),
+		newTextMessage(types.RoleAssistant, "done 0"),
+	}
+	before := CompressionRuns.Load()
+	UnifiedCompress(short, UnifiedCompressConfig{KeepLast: 10})
+	if got := CompressionRuns.Load(); got != before {
+		t.Errorf("early return should not increment counter: got %d, want %d", got, before)
+	}
+
+	// (b) A full compression pass must increment the counter by exactly 1.
+	messages := []types.Message{
+		newTextMessage(types.RoleAssistant, "system prompt"),
+	}
+	for i := 0; i < 8; i++ {
+		messages = append(messages,
+			newTextMessage(types.RoleUser, fmt.Sprintf("task %d", i)),
+			newTextMessage(types.RoleAssistant, fmt.Sprintf("done %d", i)),
+		)
+	}
+	cfg := UnifiedCompressConfig{
+		KeepLast:      4,
+		MinMessages:   0,
+		ContextWindow: 128000,
+		MaxTokens:     8192,
+		ArchivePct:    25,
+	}
+	before2 := CompressionRuns.Load()
+	UnifiedCompress(messages, cfg)
+	if got := CompressionRuns.Load(); got != before2+1 {
+		t.Errorf("compression pass should increment counter by 1: got %d, want %d", got, before2+1)
 	}
 }

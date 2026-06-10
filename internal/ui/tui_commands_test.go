@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"fmt"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -257,46 +258,46 @@ func TestFormatMessageList_MultipleMessages(t *testing.T) {
 
 func TestHandleAliasArgParsing(t *testing.T) {
 	tests := []struct {
-		name      string
-		args      string
-		wantName  string
+		name       string
+		args       string
+		wantName   string
 		wantNodeID string
-		wantError bool
+		wantError  bool
 	}{
 		{
-			name:      "single arg (name only)",
-			args:      "my-alias",
-			wantName:  "my-alias",
+			name:       "single arg (name only)",
+			args:       "my-alias",
+			wantName:   "my-alias",
 			wantNodeID: "",
-			wantError: false,
+			wantError:  false,
 		},
 		{
-			name:      "two args (name and node ID)",
-			args:      "my-alias nd_abc123",
-			wantName:  "my-alias",
+			name:       "two args (name and node ID)",
+			args:       "my-alias nd_abc123",
+			wantName:   "my-alias",
 			wantNodeID: "nd_abc123",
-			wantError: false,
+			wantError:  false,
 		},
 		{
-			name:      "empty args",
-			args:      "",
-			wantName:  "",
+			name:       "empty args",
+			args:       "",
+			wantName:   "",
 			wantNodeID: "",
-			wantError: true,
+			wantError:  true,
 		},
 		{
-			name:      "whitespace only",
-			args:      "   ",
-			wantName:  "",
+			name:       "whitespace only",
+			args:       "   ",
+			wantName:   "",
 			wantNodeID: "",
-			wantError: true,
+			wantError:  true,
 		},
 		{
-			name:      "multiple spaces between args",
-			args:      "my-alias    nd_abc123",
-			wantName:  "my-alias",
+			name:       "multiple spaces between args",
+			args:       "my-alias    nd_abc123",
+			wantName:   "my-alias",
 			wantNodeID: "nd_abc123",
-			wantError: false,
+			wantError:  false,
 		},
 	}
 
@@ -348,8 +349,8 @@ func TestParseForkArgs_BackVariants(t *testing.T) {
 		{"-back 3", "back", "3"},
 		{"-b 2", "back", "2"},
 		{"-b 1", "back", "1"},
-		{"-back", "node", "-back"},   // no space, treated as node ID
-		{"-b", "node", "-b"},         // no space, treated as node ID
+		{"-back", "node", "-back"}, // no space, treated as node ID
+		{"-b", "node", "-b"},       // no space, treated as node ID
 	}
 
 	for _, tt := range tests {
@@ -529,6 +530,28 @@ func TestMessageListIntegration_WithDAG(t *testing.T) {
 	}
 	if !strings.Contains(result, "answer is 4") {
 		t.Errorf("formatted output should contain 'answer is 4', got %q", result)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// handleStats tests
+// ---------------------------------------------------------------------------
+
+func TestHandleStats_ShowsCompressionRuns(t *testing.T) {
+	dag := newTestDAG(t)
+	agent := core.NewAgent(types.AgentConfig{}, nil, nil, dag)
+	m := &Model{agent: agent} // ready=false so rebuildContent no-ops
+
+	v := core.CompressionRuns.Load()
+	m.handleStats()
+
+	if len(m.messages) == 0 {
+		t.Fatal("handleStats should append a stats message")
+	}
+	last := m.messages[len(m.messages)-1]
+	want := fmt.Sprintf("Compression runs: %d", v)
+	if !strings.Contains(last.text, want) {
+		t.Errorf("stats output should contain %q, got %q", want, last.text)
 	}
 }
 

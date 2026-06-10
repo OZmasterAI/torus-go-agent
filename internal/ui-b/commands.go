@@ -9,6 +9,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"torus_go_agent/internal/commands"
+	"torus_go_agent/internal/core"
 	"torus_go_agent/internal/features"
 	"torus_go_agent/internal/types"
 )
@@ -301,6 +302,7 @@ func (m Model) cmdStats() (tea.Model, tea.Cmd) {
 	if m.agent != nil {
 		sb.WriteString(fmt.Sprintf("- Branch: %s\n", m.agent.DAG().CurrentBranchID()))
 	}
+	sb.WriteString(fmt.Sprintf("- Compression runs: %d\n", core.CompressionRuns.Load()))
 	if m.telemetry != nil {
 		sb.WriteString(fmt.Sprintf("- Telemetry: %s\n", m.telemetry.Summary()))
 	}
