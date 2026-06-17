@@ -114,6 +114,28 @@ func TestNewGrokProvider(t *testing.T) {
 	}
 }
 
+// TestNewDeepSeekProvider verifies DeepSeek provider is configured correctly.
+func TestNewDeepSeekProvider(t *testing.T) {
+	t.Parallel()
+	apiKey := "deepseek-key"
+	model := "deepseek-chat"
+
+	p := NewDeepSeekProvider(apiKey, model)
+
+	if p == nil {
+		t.Fatal("NewDeepSeekProvider returned nil")
+	}
+	if p.Name() != "deepseek" {
+		t.Fatalf("Name() = %q, want %q", p.Name(), "deepseek")
+	}
+	if p.ModelID() != model {
+		t.Fatalf("ModelID() = %q, want %q", p.ModelID(), model)
+	}
+	if p.BaseURL != "https://api.deepseek.com/v1" {
+		t.Fatalf("BaseURL = %q, want DeepSeek endpoint", p.BaseURL)
+	}
+}
+
 // TestNewAzureOpenAIProvider verifies Azure provider configuration.
 func TestNewAzureOpenAIProvider(t *testing.T) {
 	t.Parallel()

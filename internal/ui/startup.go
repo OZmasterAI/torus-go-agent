@@ -161,50 +161,50 @@ type nvidiaNIMModel struct {
 
 // nvidiaNIMFreeModels lists model IDs confirmed free on build.nvidia.com.
 var nvidiaNIMFreeModels = map[string]bool{
-	"qwen/qwen3.5-122b-a10b":                       true,
-	"z-ai/glm4.7":                                   true,
-	"z-ai/glm5":                                     true,
-	"stepfun-ai/step-3.5-flash":                     true,
-	"minimaxai/minimax-m2.1":                        true,
-	"minimaxai/minimax-m2.5":                        true,
-	"deepseek-ai/deepseek-v3.2":                     true,
-	"deepseek-ai/deepseek-v3.1":                     true,
-	"deepseek-ai/deepseek-v3.1-terminus":            true,
-	"mistralai/devstral-2-123b-instruct-2512":       true,
-	"moonshotai/kimi-k2-thinking":                   true,
-	"moonshotai/kimi-k2-instruct":                   true,
-	"mistralai/mistral-large-3-675b-instruct-2512":  true,
-	"mistralai/magistral-small-2506":                true,
-	"mistralai/mamba-codestral-7b-v01":              true,
+	"qwen/qwen3.5-122b-a10b":                         true,
+	"z-ai/glm4.7":                                    true,
+	"z-ai/glm5":                                      true,
+	"stepfun-ai/step-3.5-flash":                      true,
+	"minimaxai/minimax-m2.1":                         true,
+	"minimaxai/minimax-m2.5":                         true,
+	"deepseek-ai/deepseek-v3.2":                      true,
+	"deepseek-ai/deepseek-v3.1":                      true,
+	"deepseek-ai/deepseek-v3.1-terminus":             true,
+	"mistralai/devstral-2-123b-instruct-2512":        true,
+	"moonshotai/kimi-k2-thinking":                    true,
+	"moonshotai/kimi-k2-instruct":                    true,
+	"mistralai/mistral-large-3-675b-instruct-2512":   true,
+	"mistralai/magistral-small-2506":                 true,
+	"mistralai/mamba-codestral-7b-v01":               true,
 	"mistralai/mistral-nemo-minitron-8b-8k-instruct": true,
-	"bytedance/seed-oss-36b-instruct":               true,
-	"qwen/qwen3-coder-480b-a35b-instruct":           true,
-	"openai/gpt-oss-20b":                            true,
-	"openai/gpt-oss-120b":                           true,
-	"google/gemma-3-27b-it":                         true,
-	"google/gemma-2-2b-it":                          true,
-	"google/gemma-3n-e4b-it":                        true,
-	"google/shieldgemma-9b":                         true,
+	"bytedance/seed-oss-36b-instruct":                true,
+	"qwen/qwen3-coder-480b-a35b-instruct":            true,
+	"openai/gpt-oss-20b":                             true,
+	"openai/gpt-oss-120b":                            true,
+	"google/gemma-3-27b-it":                          true,
+	"google/gemma-2-2b-it":                           true,
+	"google/gemma-3n-e4b-it":                         true,
+	"google/shieldgemma-9b":                          true,
 	"igenius/colosseum_355b_instruct_16k":            true,
-	"tiiuae/falcon3-7b-instruct":                    true,
+	"tiiuae/falcon3-7b-instruct":                     true,
 	"igenius/italia_10b_instruct_16k":                true,
-	"nvidia/cosmos-nemotron-34b":                    true,
-	"nvidia/cosmos-reason2-8b":                      true,
-	"qwen/qwen2.5-coder-7b-instruct":               true,
-	"qwen/qwen2-7b-instruct":                       true,
-	"abacusai/dracarys-llama-3.1-70b-instruct":     true,
-	"thudm/chatglm3-6b":                            true,
-	"baichuan-inc/baichuan2-13b-chat":               true,
-	"nvidia/nemotron-3-super-120b-a12b":             true,
-	"nvidia/nemotron-3-nano-30b-a3b":                true,
-	"nvidia/nvidia-nemotron-nano-9b-v2":             true,
-	"nvidia/llama-3.3-nemotron-super-49b-v1":        true,
-	"nvidia/llama-3.3-nemotron-super-49b-v1.5":      true,
-	"nvidia/nemotron-content-safety-reasoning-4b":   true,
-	"nvidia/llama-3.1-nemotron-safety-guard-8b-v3":  true,
-	"nvidia/llama-3.1-nemotron-70b-reward":          true,
-	"marin/marin-8b-instruct":                      true,
-	"nv-mistralai/mistral-nemo-12b-instruct":        true,
+	"nvidia/cosmos-nemotron-34b":                     true,
+	"nvidia/cosmos-reason2-8b":                       true,
+	"qwen/qwen2.5-coder-7b-instruct":                 true,
+	"qwen/qwen2-7b-instruct":                         true,
+	"abacusai/dracarys-llama-3.1-70b-instruct":       true,
+	"thudm/chatglm3-6b":                              true,
+	"baichuan-inc/baichuan2-13b-chat":                true,
+	"nvidia/nemotron-3-super-120b-a12b":              true,
+	"nvidia/nemotron-3-nano-30b-a3b":                 true,
+	"nvidia/nvidia-nemotron-nano-9b-v2":              true,
+	"nvidia/llama-3.3-nemotron-super-49b-v1":         true,
+	"nvidia/llama-3.3-nemotron-super-49b-v1.5":       true,
+	"nvidia/nemotron-content-safety-reasoning-4b":    true,
+	"nvidia/llama-3.1-nemotron-safety-guard-8b-v3":   true,
+	"nvidia/llama-3.1-nemotron-70b-reward":           true,
+	"marin/marin-8b-instruct":                        true,
+	"nv-mistralai/mistral-nemo-12b-instruct":         true,
 }
 
 // nvidiaNIMExcludeSubstrings lists substrings that identify non-chat models.
@@ -408,28 +408,28 @@ type configField struct {
 }
 
 var configFields = []configField{
-	{"Compaction", "cycle", []string{"llm", "sliding", "off"}},            // 0
-	{"CompactionTrigger", "cycle", []string{"both", "tokens", "messages"}},// 1
-	{"CompactionThreshold", "int", nil},    // 2
-	{"CompactionMaxMessages", "int", nil},  // 3
-	{"CompactionKeepLastN", "int", nil},    // 4
-	{"CompactionModel", "string", nil},     // 5
-	{"ContinuousCompression", "bool", nil}, // 6
-	{"CompressionKeepFirst", "int", nil},   // 7
-	{"CompressionKeepLast", "int", nil},    // 8
-	{"CompressionMinMessages", "int", nil}, // 9
-	{"ZoneBudgeting", "bool", nil},         // 10
-	{"ZoneArchivePercent", "int", nil},     // 11
-	{"SmartRouting", "bool", nil},          // 12
-	{"SmartRoutingModel", "string", nil},   // 13
-	{"SteeringMode", "cycle", []string{"mild", "aggressive"}}, // 14
-	{"PersistThinking", "bool", nil},       // 15
+	{"Compaction", "cycle", []string{"llm", "sliding", "off"}},                // 0
+	{"CompactionTrigger", "cycle", []string{"both", "tokens", "messages"}},    // 1
+	{"CompactionThreshold", "int", nil},                                       // 2
+	{"CompactionMaxMessages", "int", nil},                                     // 3
+	{"CompactionKeepLastN", "int", nil},                                       // 4
+	{"CompactionModel", "string", nil},                                        // 5
+	{"ContinuousCompression", "bool", nil},                                    // 6
+	{"CompressionKeepFirst", "int", nil},                                      // 7
+	{"CompressionKeepLast", "int", nil},                                       // 8
+	{"CompressionMinMessages", "int", nil},                                    // 9
+	{"ZoneBudgeting", "bool", nil},                                            // 10
+	{"ZoneArchivePercent", "int", nil},                                        // 11
+	{"SmartRouting", "bool", nil},                                             // 12
+	{"SmartRoutingModel", "string", nil},                                      // 13
+	{"SteeringMode", "cycle", []string{"mild", "aggressive"}},                 // 14
+	{"PersistThinking", "bool", nil},                                          // 15
 	{"Thinking", "cycle", []string{"", "low", "mid", "high", "max", "ultra"}}, // 16
-	{"ThinkingBudget", "int", nil},         // 17
-	{"MaxTokens", "int", nil},              // 18
-	{"ContextWindow", "int", nil},          // 19
-	{"ForceStream", "bool", nil},           // 20
-	{"RewardScoring", "bool", nil},         // 21
+	{"ThinkingBudget", "int", nil},                                            // 17
+	{"MaxTokens", "int", nil},                                                 // 18
+	{"ContextWindow", "int", nil},                                             // 19
+	{"ForceStream", "bool", nil},                                              // 20
+	{"RewardScoring", "bool", nil},                                            // 21
 }
 
 func (o *AgentConfigOverrides) getValue(idx int) string {
@@ -622,11 +622,11 @@ type ModelCategory struct {
 
 // ProviderGroup groups models and auth methods under a single provider.
 type ProviderGroup struct {
-	Name        string           // display name, e.g. "Anthropic Claude"
-	ProviderKey string           // "anthropic", "openrouter", etc. ("" = custom)
-	AuthMethods []AuthMethod     // if len > 1, user picks auth before model
-	Models      []ModelChoice    // direct models (used when Categories is empty)
-	Categories  []ModelCategory  // if set, user picks category before model
+	Name        string          // display name, e.g. "Anthropic Claude"
+	ProviderKey string          // "anthropic", "openrouter", etc. ("" = custom)
+	AuthMethods []AuthMethod    // if len > 1, user picks auth before model
+	Models      []ModelChoice   // direct models (used when Categories is empty)
+	Categories  []ModelCategory // if set, user picks category before model
 }
 
 // ModelChoice is a single model within a provider group.
@@ -773,6 +773,15 @@ func DefaultProviderGroups() []ProviderGroup {
 				{Name: "Grok 4.1 Fast (reasoning)", ID: "grok-4-1-fast-reasoning", ContextWindow: 2000000, MaxTokens: 131072},
 				{Name: "Grok 4.1 Fast (non-reasoning)", ID: "grok-4-1-fast-non-reasoning", ContextWindow: 2000000, MaxTokens: 131072},
 				{Name: "grok-3-mini", ID: "grok-3-mini", ContextWindow: 131072, MaxTokens: 131072},
+				{Name: "Custom model ID", ID: ""},
+			},
+		},
+		{
+			Name: "DeepSeek", ProviderKey: "deepseek",
+			AuthMethods: []AuthMethod{{Name: "API key", NeedsKey: "DEEPSEEK_API_KEY"}},
+			Models: []ModelChoice{
+				{Name: "DeepSeek V3 (deepseek-chat)", ID: "deepseek-chat", ContextWindow: 131072, MaxTokens: 8192},
+				{Name: "DeepSeek R1 (deepseek-reasoner)", ID: "deepseek-reasoner", ContextWindow: 131072, MaxTokens: 65536},
 				{Name: "Custom model ID", ID: ""},
 			},
 		},
@@ -1007,9 +1016,9 @@ type setupModel struct {
 	groups []ProviderGroup
 
 	// Current selection state
-	selectedGroup    *ProviderGroup  // set after phase 1
-	selectedAuth     *AuthMethod     // set after phase 2 (or auto-set if single auth)
-	selectedCategory *ModelCategory  // set after phase 3 (or nil if no categories)
+	selectedGroup    *ProviderGroup // set after phase 1
+	selectedAuth     *AuthMethod    // set after phase 2 (or auto-set if single auth)
+	selectedCategory *ModelCategory // set after phase 3 (or nil if no categories)
 
 	// Text input for custom provider/model
 	textInput string
@@ -1020,7 +1029,7 @@ type setupModel struct {
 	filterText string
 
 	// Config customization (phase 5 = choose config mode, phase 6 = edit settings)
-	savedConfig     *config.AgentConfig   // loaded from config.json, used to pre-fill settings
+	savedConfig     *config.AgentConfig // loaded from config.json, used to pre-fill settings
 	configOverrides *AgentConfigOverrides
 	editingConfig   bool   // true when editing a numeric/string value
 	editBuffer      string // text buffer for numeric/string input
@@ -1823,13 +1832,13 @@ func (m setupModel) View() string {
 		hint = "enter: confirm  |  esc: cancel  |  ctrl+c: quit"
 	} else {
 		phaseHints := []string{
-			"j/k or arrows: navigate  |  enter: select  |  q: quit",                // 0: main
-			"j/k or arrows: navigate  |  enter: select  |  esc: back  |  q: quit",  // 1: provider
-			"j/k or arrows: navigate  |  enter: select  |  esc: back  |  q: quit",  // 2: auth
-			"j/k or arrows: navigate  |  enter: select  |  esc: back  |  q: quit",  // 3: category
-			"j/k or arrows: navigate  |  enter: select  |  esc: back  |  q: quit",  // 4: model
-			"j/k or arrows: navigate  |  enter: select  |  esc: back  |  q: quit",  // 5: config
-			"j/k: navigate  |  enter: toggle/edit  |  esc: back  |  q: quit",       // 6: settings
+			"j/k or arrows: navigate  |  enter: select  |  q: quit",               // 0: main
+			"j/k or arrows: navigate  |  enter: select  |  esc: back  |  q: quit", // 1: provider
+			"j/k or arrows: navigate  |  enter: select  |  esc: back  |  q: quit", // 2: auth
+			"j/k or arrows: navigate  |  enter: select  |  esc: back  |  q: quit", // 3: category
+			"j/k or arrows: navigate  |  enter: select  |  esc: back  |  q: quit", // 4: model
+			"j/k or arrows: navigate  |  enter: select  |  esc: back  |  q: quit", // 5: config
+			"j/k: navigate  |  enter: toggle/edit  |  esc: back  |  q: quit",      // 6: settings
 		}
 		if m.phase < len(phaseHints) {
 			hint = phaseHints[m.phase]
@@ -2240,14 +2249,15 @@ func renderParticleTorus(particles []torusParticle, _ float64, t float64) string
 		}
 	}
 
-
 	// Stamp pulsing "press enter" subtitle below the torus
 	pressEnter := "▸ press enter to continue ◂"
 	peX := (torusWidth - len([]rune(pressEnter))) / 2
 	peY := torusHeight - 4
 	gradLen = len(titleGradient)
 	pulseIdx := int(t*8) % gradLen
-	if pulseIdx < 0 { pulseIdx += gradLen }
+	if pulseIdx < 0 {
+		pulseIdx += gradLen
+	}
 	for ci, ch := range pressEnter {
 		gx := peX + ci
 		if gx >= 0 && gx < torusWidth && peY >= 0 && peY < torusHeight {

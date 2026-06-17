@@ -30,7 +30,7 @@ type OpenRouterProvider struct {
 	APIKey       string
 	Model        string
 	BaseURL      string
-	endpointPath string    // override for chat completions path (default: "/chat/completions")
+	endpointPath string // override for chat completions path (default: "/chat/completions")
 	auth         authStyle
 	client       *http.Client
 }
@@ -148,6 +148,18 @@ func NewGrokProvider(apiKey, model string) *OpenRouterProvider {
 		APIKey:       apiKey,
 		Model:        model,
 		BaseURL:      "https://api.x.ai/v1",
+		client:       &http.Client{},
+	}
+}
+
+// NewDeepSeekProvider creates a native provider for DeepSeek models
+// (deepseek-chat = V3, deepseek-reasoner = R1). DeepSeek's API is OpenAI-compatible.
+func NewDeepSeekProvider(apiKey, model string) *OpenRouterProvider {
+	return &OpenRouterProvider{
+		providerName: "deepseek",
+		APIKey:       apiKey,
+		Model:        model,
+		BaseURL:      "https://api.deepseek.com/v1",
 		client:       &http.Client{},
 	}
 }
@@ -463,7 +475,7 @@ func (p *OpenRouterProvider) Complete(ctx context.Context, systemPrompt string, 
 	}, nil
 }
 
-func (p *OpenRouterProvider) Name() string   { return p.providerName }
+func (p *OpenRouterProvider) Name() string    { return p.providerName }
 func (p *OpenRouterProvider) ModelID() string { return p.Model }
 
 // StreamComplete sends a streaming request to the OpenRouter (OpenAI-compatible) API.
@@ -695,4 +707,3 @@ func (p *OpenRouterProvider) parseOpenAISSE(ctx context.Context, resp *http.Resp
 		Response:   assembled,
 	})
 }
-

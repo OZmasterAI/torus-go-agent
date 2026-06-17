@@ -159,7 +159,7 @@ type nvidiaNIMModel struct {
 
 // nvidiaNIMFreeModels lists model IDs confirmed free on build.nvidia.com.
 var nvidiaNIMFreeModels = map[string]bool{
-	"qwen/qwen3.5-122b-a10b":                        true,
+	"qwen/qwen3.5-122b-a10b":                         true,
 	"z-ai/glm4.7":                                    true,
 	"z-ai/glm5":                                      true,
 	"stepfun-ai/step-3.5-flash":                      true,
@@ -183,15 +183,15 @@ var nvidiaNIMFreeModels = map[string]bool{
 	"google/gemma-2-2b-it":                           true,
 	"google/gemma-3n-e4b-it":                         true,
 	"google/shieldgemma-9b":                          true,
-	"igenius/colosseum_355b_instruct_16k":             true,
+	"igenius/colosseum_355b_instruct_16k":            true,
 	"tiiuae/falcon3-7b-instruct":                     true,
-	"igenius/italia_10b_instruct_16k":                 true,
+	"igenius/italia_10b_instruct_16k":                true,
 	"nvidia/cosmos-nemotron-34b":                     true,
 	"nvidia/cosmos-reason2-8b":                       true,
-	"qwen/qwen2.5-coder-7b-instruct":                true,
-	"qwen/qwen2-7b-instruct":                        true,
-	"abacusai/dracarys-llama-3.1-70b-instruct":      true,
-	"thudm/chatglm3-6b":                             true,
+	"qwen/qwen2.5-coder-7b-instruct":                 true,
+	"qwen/qwen2-7b-instruct":                         true,
+	"abacusai/dracarys-llama-3.1-70b-instruct":       true,
+	"thudm/chatglm3-6b":                              true,
 	"baichuan-inc/baichuan2-13b-chat":                true,
 	"nvidia/nemotron-3-super-120b-a12b":              true,
 	"nvidia/nemotron-3-nano-30b-a3b":                 true,
@@ -201,7 +201,7 @@ var nvidiaNIMFreeModels = map[string]bool{
 	"nvidia/nemotron-content-safety-reasoning-4b":    true,
 	"nvidia/llama-3.1-nemotron-safety-guard-8b-v3":   true,
 	"nvidia/llama-3.1-nemotron-70b-reward":           true,
-	"marin/marin-8b-instruct":                       true,
+	"marin/marin-8b-instruct":                        true,
 	"nv-mistralai/mistral-nemo-12b-instruct":         true,
 }
 
@@ -401,28 +401,28 @@ type startupConfigField struct {
 }
 
 var startupConfigFields = []startupConfigField{
-	{"Compaction", "cycle", []string{"llm", "sliding", "off"}},             // 0
-	{"CompactionTrigger", "cycle", []string{"both", "tokens", "messages"}}, // 1
-	{"CompactionThreshold", "int", nil},                                    // 2
-	{"CompactionMaxMessages", "int", nil},                                  // 3
-	{"CompactionKeepLastN", "int", nil},                                    // 4
-	{"CompactionModel", "string", nil},                                     // 5
-	{"ContinuousCompression", "bool", nil},                                 // 6
-	{"CompressionKeepFirst", "int", nil},                                   // 7
-	{"CompressionKeepLast", "int", nil},                                    // 8
-	{"CompressionMinMessages", "int", nil},                                 // 9
-	{"ZoneBudgeting", "bool", nil},                                         // 10
-	{"ZoneArchivePercent", "int", nil},                                     // 11
-	{"SmartRouting", "bool", nil},                                          // 12
-	{"SmartRoutingModel", "string", nil},                                   // 13
-	{"SteeringMode", "cycle", []string{"mild", "aggressive"}},              // 14
-	{"PersistThinking", "bool", nil},                                       // 15
+	{"Compaction", "cycle", []string{"llm", "sliding", "off"}},                // 0
+	{"CompactionTrigger", "cycle", []string{"both", "tokens", "messages"}},    // 1
+	{"CompactionThreshold", "int", nil},                                       // 2
+	{"CompactionMaxMessages", "int", nil},                                     // 3
+	{"CompactionKeepLastN", "int", nil},                                       // 4
+	{"CompactionModel", "string", nil},                                        // 5
+	{"ContinuousCompression", "bool", nil},                                    // 6
+	{"CompressionKeepFirst", "int", nil},                                      // 7
+	{"CompressionKeepLast", "int", nil},                                       // 8
+	{"CompressionMinMessages", "int", nil},                                    // 9
+	{"ZoneBudgeting", "bool", nil},                                            // 10
+	{"ZoneArchivePercent", "int", nil},                                        // 11
+	{"SmartRouting", "bool", nil},                                             // 12
+	{"SmartRoutingModel", "string", nil},                                      // 13
+	{"SteeringMode", "cycle", []string{"mild", "aggressive"}},                 // 14
+	{"PersistThinking", "bool", nil},                                          // 15
 	{"Thinking", "cycle", []string{"", "low", "mid", "high", "max", "ultra"}}, // 16
-	{"ThinkingBudget", "int", nil},                                         // 17
-	{"MaxTokens", "int", nil},                                              // 18
-	{"ContextWindow", "int", nil},                                          // 19
-	{"ForceStream", "bool", nil},                                           // 20
-	{"RewardScoring", "bool", nil},                                         // 21
+	{"ThinkingBudget", "int", nil},                                            // 17
+	{"MaxTokens", "int", nil},                                                 // 18
+	{"ContextWindow", "int", nil},                                             // 19
+	{"ForceStream", "bool", nil},                                              // 20
+	{"RewardScoring", "bool", nil},                                            // 21
 }
 
 // formatStartupProviderModel formats "provider:model" as "model (provider)" for display.
@@ -761,6 +761,15 @@ func defaultStartupProviderGroups() []startupProviderGroup {
 				{Name: "Grok 4.1 Fast (reasoning)", ID: "grok-4-1-fast-reasoning", ContextWindow: 2000000, MaxTokens: 131072},
 				{Name: "Grok 4.1 Fast (non-reasoning)", ID: "grok-4-1-fast-non-reasoning", ContextWindow: 2000000, MaxTokens: 131072},
 				{Name: "grok-3-mini", ID: "grok-3-mini", ContextWindow: 131072, MaxTokens: 131072},
+				{Name: "Custom model ID", ID: ""},
+			},
+		},
+		{
+			Name: "DeepSeek", ProviderKey: "deepseek",
+			AuthMethods: []startupAuthMethod{{Name: "API key", NeedsKey: "DEEPSEEK_API_KEY"}},
+			Models: []startupModelChoice{
+				{Name: "DeepSeek V3 (deepseek-chat)", ID: "deepseek-chat", ContextWindow: 131072, MaxTokens: 8192},
+				{Name: "DeepSeek R1 (deepseek-reasoner)", ID: "deepseek-reasoner", ContextWindow: 131072, MaxTokens: 65536},
 				{Name: "Custom model ID", ID: ""},
 			},
 		},

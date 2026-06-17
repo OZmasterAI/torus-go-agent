@@ -331,6 +331,7 @@ func TestConfigEdge_APIKeyForAllProviders(t *testing.T) {
 		{"openai", "OPENAI_API_KEY"},
 		{"nvidia", "NVIDIA_API_KEY"},
 		{"grok", "XAI_API_KEY"},
+		{"deepseek", "DEEPSEEK_API_KEY"},
 		{"azure", "AZURE_OPENAI_API_KEY"},
 		{"gemini", "GEMINI_API_KEY"},
 		{"vertex", "VERTEX_ACCESS_TOKEN"},

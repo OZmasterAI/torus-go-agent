@@ -13,12 +13,11 @@ import (
 	"github.com/joho/godotenv"
 
 	"torus_go_agent/internal/channels"
+	batchchan "torus_go_agent/internal/channels/batch"
 	_ "torus_go_agent/internal/channels/http"     // register http channel
 	_ "torus_go_agent/internal/channels/telegram" // register telegram channel
-	batchchan "torus_go_agent/internal/channels/batch"
 	tuichan "torus_go_agent/internal/channels/tui"
 	tuibchan "torus_go_agent/internal/channels/tui-b"
-	uib "torus_go_agent/internal/ui-b"
 	"torus_go_agent/internal/config"
 	"torus_go_agent/internal/constants"
 	"torus_go_agent/internal/core"
@@ -28,6 +27,7 @@ import (
 	"torus_go_agent/internal/tools"
 	"torus_go_agent/internal/types"
 	"torus_go_agent/internal/ui"
+	uib "torus_go_agent/internal/ui-b"
 )
 
 // resolveConfigDir returns the config directory, checking in order:
@@ -785,6 +785,12 @@ func makeProvider(providerName, apiKey, model string, agentCfg *config.AgentConf
 		return p
 	case "grok":
 		p := providers.NewGrokProvider(apiKey, model)
+		if agentCfg != nil && agentCfg.BaseURL != "" {
+			p.BaseURL = agentCfg.BaseURL
+		}
+		return p
+	case "deepseek":
+		p := providers.NewDeepSeekProvider(apiKey, model)
 		if agentCfg != nil && agentCfg.BaseURL != "" {
 			p.BaseURL = agentCfg.BaseURL
 		}
