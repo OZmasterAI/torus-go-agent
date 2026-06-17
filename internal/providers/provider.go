@@ -128,13 +128,22 @@ func (r *Router) fallback(exclude string) []t.Provider {
 
 // Complete delegates to the active or weighted-selected provider, with fallback on error.
 func (r *Router) Complete(ctx context.Context, systemPrompt string, messages []t.Message, tools []t.Tool, maxTokens int) (*t.AssistantMessage, error) {
+	resp, _, err := r.CompleteWithProvider(ctx, systemPrompt, messages, tools, maxTokens)
+	return resp, err
+}
+
+// CompleteWithProvider is like Complete but also returns the registration key
+// ("name:model") of the provider that actually served the successful response,
+// so callers (e.g. RewardRouter) can attribute scores to the exact registered
+// provider instead of guessing from the API-echoed model name.
+func (r *Router) CompleteWithProvider(ctx context.Context, systemPrompt string, messages []t.Message, tools []t.Tool, maxTokens int) (*t.AssistantMessage, string, error) {
 	r.mu.RLock()
 	primary := r.pick()
 	r.mu.RUnlock()
 
 	resp, err := primary.Complete(ctx, systemPrompt, messages, tools, maxTokens)
 	if err == nil {
-		return resp, nil
+		return resp, primary.Name() + ":" + primary.ModelID(), nil
 	}
 
 	// Try fallback chain
@@ -145,21 +154,29 @@ func (r *Router) Complete(ctx context.Context, systemPrompt string, messages []t
 	for _, fb := range fallbacks {
 		resp, fbErr := fb.Complete(ctx, systemPrompt, messages, tools, maxTokens)
 		if fbErr == nil {
-			return resp, nil
+			return resp, fb.Name() + ":" + fb.ModelID(), nil
 		}
 	}
-	return nil, err // return original error if all fallbacks fail
+	return nil, "", err // return original error if all fallbacks fail
 }
 
 // StreamComplete delegates streaming to the active or weighted-selected provider, with fallback on error.
 func (r *Router) StreamComplete(ctx context.Context, systemPrompt string, messages []t.Message, tools []t.Tool, maxTokens int) (<-chan t.StreamEvent, error) {
+	ch, _, err := r.StreamCompleteWithProvider(ctx, systemPrompt, messages, tools, maxTokens)
+	return ch, err
+}
+
+// StreamCompleteWithProvider is like StreamComplete but also returns the
+// registration key ("name:model") of the provider that served the stream, for
+// score attribution (see RewardRouter).
+func (r *Router) StreamCompleteWithProvider(ctx context.Context, systemPrompt string, messages []t.Message, tools []t.Tool, maxTokens int) (<-chan t.StreamEvent, string, error) {
 	r.mu.RLock()
 	primary := r.pick()
 	r.mu.RUnlock()
 
 	ch, err := primary.StreamComplete(ctx, systemPrompt, messages, tools, maxTokens)
 	if err == nil {
-		return ch, nil
+		return ch, primary.Name() + ":" + primary.ModelID(), nil
 	}
 
 	// Try fallback chain
@@ -170,8 +187,26 @@ func (r *Router) StreamComplete(ctx context.Context, systemPrompt string, messag
 	for _, fb := range fallbacks {
 		ch, fbErr := fb.StreamComplete(ctx, systemPrompt, messages, tools, maxTokens)
 		if fbErr == nil {
-			return ch, nil
+			return ch, fb.Name() + ":" + fb.ModelID(), nil
 		}
 	}
-	return nil, err
+	return nil, "", err
+}
+
+// ResolveRouter returns the agent's primary provider and the *Router that
+// weighted-routing / fallback configuration should target. It avoids double-
+// wrapping: nvidia/free already returns a *Router, and reward scoring wraps that
+// in a *RewardRouter -- wrapping either again in a fresh NewRouter would leave
+// cfg routing on an inert outer shell. Plain providers are wrapped once so
+// manual switching, weighted routing, and fallback work.
+func ResolveRouter(prov t.Provider) (t.Provider, *Router) {
+	switch p := prov.(type) {
+	case *Router:
+		return p, p
+	case *RewardRouter:
+		return p, p.Router()
+	default:
+		r := NewRouter(prov)
+		return r, r
+	}
 }

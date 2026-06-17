@@ -48,10 +48,10 @@ var (
 				Bold(true)
 	styleTimestamp = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("242"))
-	styleError = lipgloss.NewStyle().Foreground(lipgloss.Color("9")).Bold(true)
-	styleCursor  = lipgloss.NewStyle().Reverse(true)
-	stylePrompt  = lipgloss.NewStyle().Foreground(lipgloss.Color("166")).Bold(true)
-	styleDim     = lipgloss.NewStyle().Foreground(lipgloss.Color("242"))
+	styleError  = lipgloss.NewStyle().Foreground(lipgloss.Color("9")).Bold(true)
+	styleCursor = lipgloss.NewStyle().Reverse(true)
+	stylePrompt = lipgloss.NewStyle().Foreground(lipgloss.Color("166")).Bold(true)
+	styleDim    = lipgloss.NewStyle().Foreground(lipgloss.Color("242"))
 
 	// Header
 	styleHeaderBar = lipgloss.NewStyle().
@@ -62,21 +62,21 @@ var (
 	styleHeaderDim = lipgloss.NewStyle().
 			Background(lipgloss.Color("52")).
 			Foreground(lipgloss.Color("130"))
-	styleSeparator    = lipgloss.NewStyle().Foreground(lipgloss.Color("236"))
-	styleInputBorder  = lipgloss.NewStyle().Foreground(lipgloss.Color("#ff4d01"))
+	styleSeparator   = lipgloss.NewStyle().Foreground(lipgloss.Color("236"))
+	styleInputBorder = lipgloss.NewStyle().Foreground(lipgloss.Color("#ff4d01"))
 
 	// Status bar — neon orange on dark background
 	styleStatus = lipgloss.NewStyle().
 			Background(lipgloss.Color("#1a0a00")).
 			Foreground(lipgloss.Color("#ff4d01"))
 	styleScrollHint = lipgloss.NewStyle().
-				Foreground(lipgloss.Color("243")).
-				Italic(true)
+			Foreground(lipgloss.Color("243")).
+			Italic(true)
 
 	// Tool cards
 	styleToolHeader = lipgloss.NewStyle().
-				Foreground(lipgloss.Color("166")).
-				Bold(true)
+			Foreground(lipgloss.Color("166")).
+			Bold(true)
 	styleToolDim = lipgloss.NewStyle().Foreground(lipgloss.Color("245"))
 	styleToolSep = lipgloss.NewStyle().Foreground(lipgloss.Color("238"))
 	styleDiffAdd = lipgloss.NewStyle().Foreground(lipgloss.Color("10"))
@@ -89,14 +89,14 @@ var (
 	styleSidebarTitle = lipgloss.NewStyle().
 				Foreground(lipgloss.Color("166")).
 				Bold(true)
-	styleSidebarFile = lipgloss.NewStyle().Foreground(lipgloss.Color("252"))
+	styleSidebarFile  = lipgloss.NewStyle().Foreground(lipgloss.Color("252"))
 	styleSidebarCount = lipgloss.NewStyle().Foreground(lipgloss.Color("245"))
 
 	// Autocomplete / Palette / Dialog
 	styleACNormal   = lipgloss.NewStyle().Foreground(lipgloss.Color("252"))
 	styleACSelected = lipgloss.NewStyle().
-				Foreground(lipgloss.Color("0")).
-				Background(lipgloss.Color("214"))
+			Foreground(lipgloss.Color("0")).
+			Background(lipgloss.Color("214"))
 
 	// Overlay dialog
 	styleOverlayBorder = lipgloss.NewStyle().
@@ -110,14 +110,14 @@ var (
 				Foreground(lipgloss.Color("243")).
 				Italic(true)
 	styleKeybind = lipgloss.NewStyle().
-				Foreground(lipgloss.Color("166"))
+			Foreground(lipgloss.Color("166"))
 )
 
 // Layout constants
 const (
 	headerLines  = 2
 	statusLines  = 1
-	inputLines   = 4 // border + input + border + status
+	inputLines   = 4   // border + input + border + status
 	sidebarMinW  = 120 // show sidebar when terminal wider than this
 	sidebarWidth = 26
 	acMaxResults = 8
@@ -230,7 +230,7 @@ func defaultPaletteCommands(skills *features.SkillRegistry) []paletteCommand {
 // ── displayMsg ────────────────────────────────────────────────────────────────
 
 type displayMsg struct {
-	role         string     // "user", "assistant", "error", "tool"
+	role         string // "user", "assistant", "error", "tool"
 	text         string
 	isError      bool
 	rendered     string     // cached glamour output
@@ -285,9 +285,9 @@ type Model struct {
 
 	// Usage
 	lastInputTokens int // from most recent API call (for CTX%)
-	totalTokensIn  int
-	totalTokensOut int
-	totalCost      float64
+	totalTokensIn   int
+	totalTokensOut  int
+	totalCost       float64
 
 	// Tool tracking
 	toolEvents    []toolEvent
@@ -297,12 +297,12 @@ type Model struct {
 	showSidebar bool
 
 	// Autocomplete
-	acMode    bool
-	acQuery   string
-	acList    []string
-	acIdx     int
-	acFiles   []string // cached file list
-	acLoaded  bool
+	acMode   bool
+	acQuery  string
+	acList   []string
+	acIdx    int
+	acFiles  []string // cached file list
+	acLoaded bool
 
 	// Overlay (command palette / session switcher / help / workflow)
 	overlay      overlayMode
@@ -329,7 +329,6 @@ type TUIExtras struct {
 	SubMgr    *features.SubAgentManager
 	MCPClient *features.MCPClient
 }
-
 
 // refreshCtxCache recomputes token estimates from the DAG. Call this only
 // when the conversation changes (after agent response, tool call, etc.),
@@ -358,18 +357,18 @@ func newModel(agent *core.Agent, modelName string, cfg config.AgentConfig, skill
 		mcp = extras.MCPClient
 	}
 	m := Model{
-		agent:         agent,
-		modelName:     modelName,
-		agentCfg:      cfg,
-		skills:        skills,
-		telemetry:     tel,
-		subMgr:        sub,
-		mcpClient:     mcp,
-		barDir:        1,
-		startTime:     time.Now(),
-		statusLine:    "starting...",
+		agent:          agent,
+		modelName:      modelName,
+		agentCfg:       cfg,
+		skills:         skills,
+		telemetry:      tel,
+		subMgr:         sub,
+		mcpClient:      mcp,
+		barDir:         1,
+		startTime:      time.Now(),
+		statusLine:     "starting...",
 		cachedCtxDirty: true,
-		modifiedFiles: make(map[string]int),
+		modifiedFiles:  make(map[string]int),
 		ctxProgress: progress.New(
 			progress.WithGradient("#ff4d01", "#ff8c00"),
 			progress.WithoutPercentage(),
@@ -1363,6 +1362,10 @@ func (m *Model) executePaletteCommand(cmd string) (tea.Model, tea.Cmd) {
 		// Skill commands — inject as input and fire
 		if strings.HasPrefix(cmd, "/") {
 			m.input = cmd
+			m.cursorPos = len([]rune(cmd))
+			// Auto-submit by replaying Enter — the overlay is already closed, so
+			// the normal input path formats and dispatches the skill. (audit #5)
+			return m, func() tea.Msg { return tea.KeyMsg{Type: tea.KeyEnter} }
 		}
 		return m, nil
 	}
@@ -1554,7 +1557,7 @@ func (m *Model) rebuildContent() {
 
 		case "error":
 			ts := fmtTimestamp(dm.ts)
-			sb.WriteString(styleTimestamp.Render(ts) + " " + styleError.Render("✗ error ❯ " + dm.text))
+			sb.WriteString(styleTimestamp.Render(ts) + " " + styleError.Render("✗ error ❯ "+dm.text))
 			sb.WriteString("\n\n")
 		}
 	}
@@ -2045,7 +2048,6 @@ func flagStr(name string, on bool) string {
 	return styleDim.Render(" ○") + " " + styleDim.Render(name)
 }
 
-
 // ── Autocomplete ──────────────────────────────────────────────────────────────
 
 func (m *Model) ensureFileList() {
@@ -2124,7 +2126,7 @@ func (m Model) renderWorkflow() string {
 	// Show added agents
 	for i, a := range m.workflow.agents {
 		sb.WriteString(fmt.Sprintf("  %d. %s ", i+1, a.Task))
-		sb.WriteString(styleDim.Render("["+a.AgentType+"]"))
+		sb.WriteString(styleDim.Render("[" + a.AgentType + "]"))
 		sb.WriteByte('\n')
 	}
 	if len(m.workflow.agents) > 0 {
@@ -2731,12 +2733,12 @@ func amberCycle(elapsed time.Duration) lipgloss.Style {
 	// Amber gradient keypoints: bright amber → deep orange → dark amber → back
 	type rgb struct{ r, g, b int }
 	keys := []rgb{
-		{255, 191, 0},   // bright amber
-		{249, 115, 22},  // orange (#f97316)
-		{194, 65, 12},   // deep orange
-		{130, 50, 10},   // dark amber
-		{194, 65, 12},   // deep orange (return)
-		{249, 115, 22},  // orange (return)
+		{255, 191, 0},  // bright amber
+		{249, 115, 22}, // orange (#f97316)
+		{194, 65, 12},  // deep orange
+		{130, 50, 10},  // dark amber
+		{194, 65, 12},  // deep orange (return)
+		{249, 115, 22}, // orange (return)
 	}
 	// Smooth interpolation: 3 second full cycle
 	t := math.Mod(elapsed.Seconds()*2, float64(len(keys)))
@@ -2782,11 +2784,11 @@ func torusPhrase(toolName string, isError bool) string {
 var hookPhrases = map[string]string{
 	"on_user_input":        "parsing the meridian...",
 	"before_context_build": "Toroidal mapping...",
-	"before_llm_call":     "Toroidal meditation running...",
-	"after_llm_call":      "completing the circuit...",
-	"pre_compact":         "compressing the manifold...",
-	"post_compact":        "Toroidal folding...",
-	"on_error":            "\u26a0 \u2620 Error \u2620 \u26a0",
+	"before_llm_call":      "Toroidal meditation running...",
+	"after_llm_call":       "completing the circuit...",
+	"pre_compact":          "compressing the manifold...",
+	"post_compact":         "Toroidal folding...",
+	"on_error":             "\u26a0 \u2620 Error \u2620 \u26a0",
 }
 
 // ── Commands ──────────────────────────────────────────────────────────────────

@@ -58,10 +58,15 @@ func (rr *RewardRouter) ModelID() string { return rr.router.ModelID() }
 // scoring goroutines. Safe to call multiple times.
 func (rr *RewardRouter) Close() { rr.cancel() }
 
+// Router returns the underlying *Router so callers can target weighted-routing
+// and fallback configuration at the real provider set (used by ResolveRouter to
+// avoid double-wrapping the reward router).
+func (rr *RewardRouter) Router() *Router { return rr.router }
+
 // Complete delegates to the underlying router, then asynchronously scores the
 // response using the reward model. The response is returned immediately.
 func (rr *RewardRouter) Complete(ctx context.Context, systemPrompt string, messages []t.Message, tools []t.Tool, maxTokens int) (*t.AssistantMessage, error) {
-	resp, err := rr.router.Complete(ctx, systemPrompt, messages, tools, maxTokens)
+	resp, modelKey, err := rr.router.CompleteWithProvider(ctx, systemPrompt, messages, tools, maxTokens)
 	if err != nil {
 		return nil, err
 	}
@@ -70,8 +75,9 @@ func (rr *RewardRouter) Complete(ctx context.Context, systemPrompt string, messa
 	userPrompt := lastUserMessage(messages)
 	// Extract the assistant response text
 	assistantText := extractText(resp)
-	// Get which model actually served this
-	modelKey := resp.Model
+	// modelKey is the router's registration key ("name:model") for the provider
+	// that actually served this response -- it matches the keys recalculateWeights
+	// emits, so learned weights are never silently dropped on a model-name mismatch.
 
 	// Async score -- fire and forget
 	if userPrompt != "" && assistantText != "" {
@@ -84,7 +90,7 @@ func (rr *RewardRouter) Complete(ctx context.Context, systemPrompt string, messa
 // StreamComplete delegates streaming to the underlying router, wrapping the
 // channel to intercept the final message for async reward scoring.
 func (rr *RewardRouter) StreamComplete(ctx context.Context, systemPrompt string, messages []t.Message, tools []t.Tool, maxTokens int) (<-chan t.StreamEvent, error) {
-	ch, err := rr.router.StreamComplete(ctx, systemPrompt, messages, tools, maxTokens)
+	ch, modelKey, err := rr.router.StreamCompleteWithProvider(ctx, systemPrompt, messages, tools, maxTokens)
 	if err != nil {
 		return nil, err
 	}
@@ -96,10 +102,11 @@ func (rr *RewardRouter) StreamComplete(ctx context.Context, systemPrompt string,
 		defer close(wrapped)
 		for ev := range ch {
 			wrapped <- ev
-			// When we see the final assembled message, score it async
+			// When we see the final assembled message, score it async. modelKey is
+			// the registration key of the provider that served the stream, so the
+			// score maps to a real router entry (see recalculateWeights).
 			if ev.Type == t.EventMessageStop && ev.Response != nil && userPrompt != "" {
 				assistantText := extractText(ev.Response)
-				modelKey := ev.Response.Model
 				if assistantText != "" {
 					go rr.scoreAndUpdate(userPrompt, assistantText, modelKey)
 				}
@@ -194,7 +201,8 @@ func (rr *RewardRouter) recalculateWeights() {
 
 	// Shift scores to be positive (subtract min, add 1 to avoid zero weights)
 	// Then convert to integer weights (multiply by 100 for granularity).
-	// Router keys use "nvidia:<modelID>" format (see NewNvidiaFreeRouter).
+	// ma.key is already the router's registration key ("name:model") for the
+	// provider that served the scored responses, so weights map 1:1 to entries.
 	var entries []RoutingEntry
 	for _, ma := range avgs {
 		shifted := ma.avg - minAvg + 1.0 // guarantee positive
@@ -202,7 +210,7 @@ func (rr *RewardRouter) recalculateWeights() {
 		if weight < 1 {
 			weight = 1
 		}
-		entries = append(entries, RoutingEntry{Key: "nvidia:" + ma.key, Weight: weight})
+		entries = append(entries, RoutingEntry{Key: ma.key, Weight: weight})
 	}
 
 	rr.router.SetWeights(entries)

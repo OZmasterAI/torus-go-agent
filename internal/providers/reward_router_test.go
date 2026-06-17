@@ -366,8 +366,11 @@ func TestRecalculateWeightsHigherScoreGetsMoreWeight(t *testing.T) {
 	// After shifting: A = 9-3+1 = 7, B = 3-3+1 = 1
 	// Weights: A = 700, B = 100
 	rr.mu.Lock()
-	rr.scores["model-a"] = &modelStats{totalScore: 9.0, count: 1}
-	rr.scores["model-b"] = &modelStats{totalScore: 3.0, count: 1}
+	// Scores are now keyed by the router's registration key ("name:model"), which
+	// is what the fixed Complete/StreamComplete paths record (the provider that
+	// actually served the response), and what recalculateWeights emits verbatim.
+	rr.scores["nvidia:model-a"] = &modelStats{totalScore: 9.0, count: 1}
+	rr.scores["nvidia:model-b"] = &modelStats{totalScore: 3.0, count: 1}
 	rr.mu.Unlock()
 
 	rr.recalculateWeights()

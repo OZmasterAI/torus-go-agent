@@ -176,8 +176,11 @@ func main() {
 	// Create provider
 	prov := makeProvider(cfg.Agent.Provider, key, cfg.Agent.Model, &cfg.Agent)
 
-	// Wire weighted routing + fallback if configured
-	router := providers.NewRouter(prov)
+	// Resolve the agent's primary provider and the router that weighted routing /
+	// fallback should target. ResolveRouter avoids double-wrapping when prov is
+	// already a *Router (nvidia/free) or *RewardRouter — otherwise cfg.Routing /
+	// FallbackOrder would attach to an inert outer shell. (audit #4)
+	agentProv, router := providers.ResolveRouter(prov)
 	if len(cfg.Agent.Routing) > 0 {
 		var entries []providers.RoutingEntry
 		for _, r := range cfg.Agent.Routing {
@@ -237,7 +240,10 @@ func main() {
 	})
 
 	// Inject live DAG state per turn (static schema now in TORUS.md).
-	hooks.Register(core.HookBeforeContextBuild, "dag-context", func(ctx context.Context, d *core.HookData) error {
+	// Priority 100 (> compression's 50) so this runs AFTER unified-compression /
+	// zone-budget: the live [DAG state] line is appended post-compression and is
+	// never itself compressed away. (audit #5)
+	hooks.RegisterPriority(core.HookBeforeContextBuild, "dag-context", func(ctx context.Context, d *core.HookData) error {
 		brID, brName, headNode, msgCount, err := dag.CurrentBranchInfo()
 		if err != nil {
 			return nil // skip context injection on error
@@ -249,7 +255,7 @@ func main() {
 		}
 		d.Messages = append([]types.Message{state}, d.Messages...)
 		return nil
-	})
+	}, 100)
 
 	// Inject SCHEMA.md as first DAG node on branch start (survives compaction).
 	injectSchema := func() {
@@ -296,6 +302,23 @@ func main() {
 			return nil
 		}, 50)
 		log.Printf("[main] unified compression enabled (keepFirst: %d, keepLast: %d, archive: %d%%)", compressCfg.KeepFirst, compressCfg.KeepLast, archivePct)
+	} else if cfg.Agent.ZoneBudgeting {
+		// Legacy zone-budgeting strategy, used only when the unified pipeline is
+		// off — so the config comment "applied only when continuousCompression is
+		// false" is now accurate instead of the flag being a no-op. (audit #2)
+		archivePct := cfg.Agent.ZoneArchivePercent
+		if archivePct <= 0 {
+			archivePct = 25
+		}
+		zb := core.ZoneBudgetV2{
+			ContextWindow:    cfg.Agent.ContextWindow,
+			SystemArchivePct: archivePct,
+		}
+		hooks.RegisterPriority(core.HookBeforeContextBuild, "zone-budget", func(ctx context.Context, d *core.HookData) error {
+			d.Messages = core.ApplyZoneBudgetV2(d.Messages, zb, nil)
+			return nil
+		}, 50)
+		log.Printf("[main] zone budgeting enabled (archive: %d%%)", archivePct)
 	}
 
 	// Build tools: default 6 + MCP tools
@@ -343,7 +366,7 @@ func main() {
 		PersistThinking:   cfg.Agent.PersistThinking,
 		ParallelTools:     cfg.Agent.ParallelTools,
 		ForceStream:       cfg.Agent.ForceStream,
-	}, router, hooks, dag)
+	}, agentProv, hooks, dag)
 
 	// Hot-reload: watch all discovered instruction files.
 	var watchPaths []string
@@ -370,7 +393,9 @@ func main() {
 			if features.IsSimpleMessage(userMessage) {
 				return smartProv
 			}
-			return prov
+			// Complex messages use the agent's full provider (weighted routing +
+			// fallback + reward scoring), not the bare base provider. (audit #1)
+			return agentProv
 		}
 		log.Printf("[main] smart routing enabled: simple → %s", cfg.Agent.SmartRoutingModel)
 	}
