@@ -146,6 +146,61 @@ func fetchOpenRouterModels() []ModelCategory {
 	return categories
 }
 
+// nativeProviderPrefix maps native provider keys to their author prefix in the
+// OpenRouter universal registry, so each native provider's model list (and the
+// real context/maxTokens) can be derived live from the same /api/v1/models fetch.
+// Azure is intentionally excluded — its models are user-defined deployment names
+// that no public registry can enumerate.
+var nativeProviderPrefix = map[string]string{
+	"anthropic": "anthropic",
+	"openai":    "openai",
+	"grok":      "x-ai",
+	"deepseek":  "deepseek",
+	"gemini":    "google",
+	"vertex":    "google",
+}
+
+// modelsForAuthor derives a native provider's model list from OpenRouter registry
+// categories: it keeps models whose ID is "<authorPrefix>/<id>", strips the prefix
+// to the native ID the provider's own API expects, and carries the registry's
+// context/maxTokens (what each model actually supports). It skips the FREE MODELS
+// bucket and OpenRouter-only routing variants (":free"/":nitro"/…), dedupes, and
+// appends a "Custom model ID" entry. Returns nil if none match, so the caller
+// keeps its static fallback list.
+func modelsForAuthor(cats []ModelCategory, authorPrefix string) []ModelChoice {
+	var out []ModelChoice
+	seen := map[string]bool{}
+	for _, cat := range cats {
+		if cat.Name == "FREE MODELS" {
+			continue // OpenRouter-specific free variants, not the native catalog
+		}
+		for _, mc := range cat.Models {
+			if !strings.HasPrefix(mc.ID, authorPrefix+"/") {
+				continue
+			}
+			nativeID := mc.ID[len(authorPrefix)+1:]
+			if strings.Contains(nativeID, ":") {
+				continue // routing suffix (:free/:nitro/:floor) — not a native model ID
+			}
+			if seen[nativeID] {
+				continue
+			}
+			seen[nativeID] = true
+			out = append(out, ModelChoice{
+				Name:          mc.Name,
+				ID:            nativeID,
+				ContextWindow: mc.ContextWindow,
+				MaxTokens:     mc.MaxTokens,
+			})
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	out = append(out, ModelChoice{Name: "Custom model ID", ID: ""})
+	return out
+}
+
 // ── NVIDIA NIM model fetching ────────────────────────────────────────────────
 
 type nvidiaNIMModelResp struct {
@@ -1047,12 +1102,20 @@ type setupModel struct {
 func newSetupModel() setupModel {
 	groups := DefaultProviderGroups()
 
-	// Fetch live OpenRouter models; replace all categories on success
+	// Fetch live OpenRouter models once; reuse for the OpenRouter group AND to
+	// auto-refresh every native provider's list (with accurate context/maxTokens)
+	// from the same universal registry. Static lists remain the offline fallback.
 	if cats := fetchOpenRouterModels(); len(cats) > 0 {
 		for i := range groups {
 			if groups[i].ProviderKey == "openrouter" {
 				groups[i].Categories = cats
-				break
+				continue
+			}
+			if prefix, ok := nativeProviderPrefix[groups[i].ProviderKey]; ok {
+				if models := modelsForAuthor(cats, prefix); len(models) > 0 {
+					groups[i].Models = models
+					groups[i].Categories = nil
+				}
 			}
 		}
 	}
