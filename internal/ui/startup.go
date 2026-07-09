@@ -800,7 +800,10 @@ func DefaultProviderGroups() []ProviderGroup {
 		},
 		{
 			Name: "OpenAI", ProviderKey: "openai",
-			AuthMethods: []AuthMethod{{Name: "API key", NeedsKey: "OPENAI_API_KEY"}},
+			AuthMethods: []AuthMethod{
+				{Name: "Sign in with ChatGPT (no key needed)", NeedsKey: ""},
+				{Name: "API key", NeedsKey: "OPENAI_API_KEY"},
+			},
 			Models: []ModelChoice{
 				{Name: "GPT-5.4", ID: "gpt-5.4"},
 				{Name: "GPT-5.4 Mini", ID: "gpt-5.4-mini"},
