@@ -23,11 +23,6 @@ type ContentBlock struct {
 	ToolUseID string         `json:"tool_use_id,omitempty"` // for tool_result
 	Content   string         `json:"content,omitempty"`     // tool result text
 	IsError   bool           `json:"is_error,omitempty"`
-	// Reasoning round-trip (OpenAI Responses API, store:false). Optional and
-	// only set by OpenAIChatGPTProvider on "thinking" blocks; omitempty keeps
-	// them absent for every other provider and block type.
-	ReasoningID      string `json:"reasoning_id,omitempty"`
-	EncryptedContent string `json:"encrypted_content,omitempty"`
 }
 
 // Message is a conversation message.

@@ -103,16 +103,6 @@ type responsesItem struct {
 	CallID    string `json:"call_id,omitempty"`
 	// function_call_output
 	Output string `json:"output,omitempty"`
-	// reasoning (echoed back so multi-turn reasoning state survives with store:false)
-	ID               string                      `json:"id,omitempty"`
-	EncryptedContent string                      `json:"encrypted_content,omitempty"`
-	Summary          []responsesReasoningSummary `json:"summary,omitempty"`
-}
-
-// responsesReasoningSummary is one entry of a reasoning item's summary array.
-type responsesReasoningSummary struct {
-	Type string `json:"type"` // "summary_text"
-	Text string `json:"text"`
 }
 
 type responsesContent struct {
@@ -167,23 +157,10 @@ func buildResponsesInput(messages []t.Message) []responsesItem {
 				switch b.Type {
 				case "text":
 					text.WriteString(b.Text)
-				case "thinking":
-					// Round-trip encrypted reasoning state (store:false means the
-					// server keeps nothing, so the client must echo it back). Only
-					// emit when we actually captured encrypted content — a reasoning
-					// item without it is invalid and would 400 the whole request.
-					if b.EncryptedContent != "" {
-						flush() // reasoning must precede the message/call it reasoned about
-						item := responsesItem{
-							Type:             "reasoning",
-							ID:               b.ReasoningID,
-							EncryptedContent: b.EncryptedContent,
-						}
-						if b.Text != "" {
-							item.Summary = []responsesReasoningSummary{{Type: "summary_text", Text: b.Text}}
-						}
-						items = append(items, item)
-					}
+				// Reasoning ("thinking") blocks are intentionally NOT echoed back as
+				// `reasoning` input items: the agent loop strips thinking before
+				// replay, so the encrypted carrier never reaches here. Wiring the
+				// store:false reasoning round-trip end-to-end is deferred.
 				case "tool_use":
 					flush()
 					args, err := json.Marshal(b.Input)
@@ -340,6 +317,26 @@ func isTransientReadErr(err error) bool {
 	return true
 }
 
+// isTransientOpenAIError reports whether an OpenAI Responses error (identified by
+// its code and/or message) is worth a whole-turn retry. Rate limits, server
+// errors and overload are transient; content-policy, invalid-request and quota
+// failures are permanent (retrying only re-spends tokens and re-fails). Unlike
+// the Anthropic wire vocabulary, OpenAI uses codes like rate_limit_exceeded and
+// server_error, so this must not reuse anthropic.go's isTransientSSEError.
+func isTransientOpenAIError(code, message string) bool {
+	s := strings.ToLower(code + " " + message)
+	switch {
+	case strings.Contains(s, "rate_limit"),
+		strings.Contains(s, "server_error"),
+		strings.Contains(s, "overloaded"),
+		strings.Contains(s, "service_unavailable"),
+		strings.Contains(s, "temporarily"),
+		strings.Contains(s, "try again"):
+		return true
+	}
+	return false
+}
+
 // parseResponsesSSE converts the response.* SSE event stream into StreamEvents.
 func (p *OpenAIChatGPTProvider) parseResponsesSSE(r io.Reader, ch chan<- t.StreamEvent) {
 	scanner := bufio.NewScanner(r)
@@ -352,9 +349,6 @@ func (p *OpenAIChatGPTProvider) parseResponsesSSE(r io.Reader, ch chan<- t.Strea
 	stopReason := "end_turn"
 	var usage *t.Usage
 	sawTerminal := false
-	// Encrypted reasoning state captured from reasoning output items and echoed
-	// back on later turns (store:false keeps nothing server-side).
-	var reasoningID, reasoningEncrypted string
 
 	// dispatch handles one fully-assembled SSE event frame (possibly built from
 	// several concatenated `data:` lines). It returns true when a terminal error
@@ -374,12 +368,11 @@ func (p *OpenAIChatGPTProvider) parseResponsesSSE(r io.Reader, ch chan<- t.Strea
 			Code    string `json:"code"`
 			Message string `json:"message"`
 			Item    struct {
-				Type             string `json:"type"`
-				ID               string `json:"id"`
-				Name             string `json:"name"`
-				CallID           string `json:"call_id"`
-				Arguments        string `json:"arguments"`
-				EncryptedContent string `json:"encrypted_content"`
+				Type      string `json:"type"`
+				ID        string `json:"id"`
+				Name      string `json:"name"`
+				CallID    string `json:"call_id"`
+				Arguments string `json:"arguments"`
 			} `json:"item"`
 			Response struct {
 				Status string `json:"status"`
@@ -426,13 +419,6 @@ func (p *OpenAIChatGPTProvider) parseResponsesSSE(r io.Reader, ch chan<- t.Strea
 				toolByID[id] = ta
 				toolOrder = append(toolOrder, id)
 				ch <- t.StreamEvent{Type: t.EventToolUseStart, ID: id, Name: ev.Item.Name, ContentIndex: blockIndex}
-			case "reasoning":
-				if ev.Item.ID != "" {
-					reasoningID = ev.Item.ID
-				}
-				if ev.Item.EncryptedContent != "" {
-					reasoningEncrypted = ev.Item.EncryptedContent
-				}
 			}
 		case "response.function_call_arguments.delta":
 			if ta := lastChatgptTool(toolByID, toolOrder); ta != nil && ev.Delta != "" {
@@ -472,13 +458,6 @@ func (p *OpenAIChatGPTProvider) parseResponsesSSE(r io.Reader, ch chan<- t.Strea
 						ch <- t.StreamEvent{Type: t.EventContentBlockStop, ContentIndex: ta.index}
 					}
 				}
-			case "reasoning":
-				if ev.Item.ID != "" {
-					reasoningID = ev.Item.ID
-				}
-				if ev.Item.EncryptedContent != "" {
-					reasoningEncrypted = ev.Item.EncryptedContent
-				}
 			}
 		case "response.completed", "response.incomplete":
 			sawTerminal = true
@@ -506,7 +485,7 @@ func (p *OpenAIChatGPTProvider) parseResponsesSSE(r io.Reader, ch chan<- t.Strea
 				msg = "openai chatgpt response failed: " + reason
 			}
 			err := errors.New(msg)
-			if isTransientSSEError(data) {
+			if isTransientOpenAIError(ev.Response.Error.Code, reason) {
 				ch <- t.StreamEvent{Type: t.EventError, Error: &t.TransientError{Err: err}}
 			} else {
 				ch <- t.StreamEvent{Type: t.EventError, Error: err}
@@ -531,7 +510,7 @@ func (p *OpenAIChatGPTProvider) parseResponsesSSE(r io.Reader, ch chan<- t.Strea
 				errText = "openai chatgpt stream error"
 			}
 			err := errors.New(errText)
-			if isTransientSSEError(data) {
+			if isTransientOpenAIError(ev.Code, emsg) {
 				ch <- t.StreamEvent{Type: t.EventError, Error: &t.TransientError{Err: err}}
 			} else {
 				ch <- t.StreamEvent{Type: t.EventError, Error: err}
@@ -596,17 +575,14 @@ func (p *OpenAIChatGPTProvider) parseResponsesSSE(r io.Reader, ch chan<- t.Strea
 		return
 	}
 
-	// Assemble the accumulated assistant message. Emit a thinking block when
-	// there is summary text OR captured encrypted reasoning state, so the
-	// encrypted content survives to buildResponsesInput on the next turn.
+	// Assemble the accumulated assistant message. The reasoning summary is kept
+	// as a human-readable thinking block for display; the encrypted-reasoning
+	// round-trip (store:false) is deferred — the agent loop strips thinking
+	// blocks (FilterThinking) before history is replayed, so echoing encrypted
+	// reasoning back is not yet wired end-to-end.
 	var blocks []t.ContentBlock
-	if reasoningBuf.Len() > 0 || reasoningEncrypted != "" {
-		blocks = append(blocks, t.ContentBlock{
-			Type:             "thinking",
-			Text:             reasoningBuf.String(),
-			ReasoningID:      reasoningID,
-			EncryptedContent: reasoningEncrypted,
-		})
+	if reasoningBuf.Len() > 0 {
+		blocks = append(blocks, t.ContentBlock{Type: "thinking", Text: reasoningBuf.String()})
 	}
 	if textBuf.Len() > 0 {
 		blocks = append(blocks, t.ContentBlock{Type: "text", Text: textBuf.String()})
