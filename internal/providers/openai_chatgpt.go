@@ -20,6 +20,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -88,10 +89,11 @@ type responsesRequest struct {
 	Store             bool            `json:"store"`
 	Stream            bool            `json:"stream"`
 	Include           []string        `json:"include,omitempty"`
+	MaxOutputTokens   int             `json:"max_output_tokens,omitempty"`
 }
 
 type responsesItem struct {
-	Type string `json:"type"` // "message" | "function_call" | "function_call_output"
+	Type string `json:"type"` // "message" | "function_call" | "function_call_output" | "reasoning"
 	// message
 	Role    string             `json:"role,omitempty"`
 	Content []responsesContent `json:"content,omitempty"`
@@ -101,6 +103,16 @@ type responsesItem struct {
 	CallID    string `json:"call_id,omitempty"`
 	// function_call_output
 	Output string `json:"output,omitempty"`
+	// reasoning (echoed back so multi-turn reasoning state survives with store:false)
+	ID               string                      `json:"id,omitempty"`
+	EncryptedContent string                      `json:"encrypted_content,omitempty"`
+	Summary          []responsesReasoningSummary `json:"summary,omitempty"`
+}
+
+// responsesReasoningSummary is one entry of a reasoning item's summary array.
+type responsesReasoningSummary struct {
+	Type string `json:"type"` // "summary_text"
+	Text string `json:"text"`
 }
 
 type responsesContent struct {
@@ -155,6 +167,23 @@ func buildResponsesInput(messages []t.Message) []responsesItem {
 				switch b.Type {
 				case "text":
 					text.WriteString(b.Text)
+				case "thinking":
+					// Round-trip encrypted reasoning state (store:false means the
+					// server keeps nothing, so the client must echo it back). Only
+					// emit when we actually captured encrypted content — a reasoning
+					// item without it is invalid and would 400 the whole request.
+					if b.EncryptedContent != "" {
+						flush() // reasoning must precede the message/call it reasoned about
+						item := responsesItem{
+							Type:             "reasoning",
+							ID:               b.ReasoningID,
+							EncryptedContent: b.EncryptedContent,
+						}
+						if b.Text != "" {
+							item.Summary = []responsesReasoningSummary{{Type: "summary_text", Text: b.Text}}
+						}
+						items = append(items, item)
+					}
 				case "tool_use":
 					flush()
 					args, err := json.Marshal(b.Input)
@@ -222,6 +251,11 @@ func (p *OpenAIChatGPTProvider) Complete(ctx context.Context, systemPrompt strin
 
 // StreamComplete streams a Responses-API request through the ChatGPT backend.
 func (p *OpenAIChatGPTProvider) StreamComplete(ctx context.Context, systemPrompt string, messages []t.Message, tools []t.Tool, maxTokens int) (<-chan t.StreamEvent, error) {
+	// Mirror gemini.go / anthropic.go: a non-positive maxTokens means "unset",
+	// so fall back to a sane default rather than sending 0 (or omitting the cap).
+	if maxTokens <= 0 {
+		maxTokens = 8192
+	}
 	instructions := systemPrompt
 	if strings.TrimSpace(instructions) == "" {
 		instructions = "You are a helpful coding assistant."
@@ -236,6 +270,7 @@ func (p *OpenAIChatGPTProvider) StreamComplete(ctx context.Context, systemPrompt
 		Store:             false,
 		Stream:            true,
 		Include:           []string{"reasoning.encrypted_content"},
+		MaxOutputTokens:   maxTokens,
 	}
 	body, err := json.Marshal(reqBody)
 	if err != nil {
@@ -292,6 +327,19 @@ func lastChatgptTool(m map[string]*chatgptToolAcc, order []string) *chatgptToolA
 	return m[order[len(order)-1]]
 }
 
+// isTransientReadErr reports whether an SSE read error is worth a whole-turn
+// retry. Most mid-stream read failures are network interruptions and are
+// transient; bufio.ErrTooLong (one frame exceeded the buffer) and context
+// cancellation/deadline are permanent — retrying would only hit the same wall.
+func isTransientReadErr(err error) bool {
+	if errors.Is(err, bufio.ErrTooLong) ||
+		errors.Is(err, context.Canceled) ||
+		errors.Is(err, context.DeadlineExceeded) {
+		return false
+	}
+	return true
+}
+
 // parseResponsesSSE converts the response.* SSE event stream into StreamEvents.
 func (p *OpenAIChatGPTProvider) parseResponsesSSE(r io.Reader, ch chan<- t.StreamEvent) {
 	scanner := bufio.NewScanner(r)
@@ -304,30 +352,34 @@ func (p *OpenAIChatGPTProvider) parseResponsesSSE(r io.Reader, ch chan<- t.Strea
 	stopReason := "end_turn"
 	var usage *t.Usage
 	sawTerminal := false
+	// Encrypted reasoning state captured from reasoning output items and echoed
+	// back on later turns (store:false keeps nothing server-side).
+	var reasoningID, reasoningEncrypted string
 
-	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-		if line == "" || strings.HasPrefix(line, "event:") || strings.HasPrefix(line, ":") {
-			continue
-		}
-		if !strings.HasPrefix(line, "data:") {
-			continue
-		}
-		data := strings.TrimSpace(strings.TrimPrefix(line, "data:"))
+	// dispatch handles one fully-assembled SSE event frame (possibly built from
+	// several concatenated `data:` lines). It returns true when a terminal error
+	// was surfaced and parsing must stop.
+	dispatch := func(data string) (stop bool) {
 		if data == "" || data == "[DONE]" {
-			continue
+			return false
 		}
 
 		var ev struct {
 			Type      string `json:"type"`
 			Delta     string `json:"delta"`
 			Arguments string `json:"arguments"`
-			Item      struct {
-				Type      string `json:"type"`
-				ID        string `json:"id"`
-				Name      string `json:"name"`
-				CallID    string `json:"call_id"`
-				Arguments string `json:"arguments"`
+			// Top-level fields of an "error" frame:
+			// {"type":"error","code":...,"message":...}. The Responses API puts
+			// these at the frame root, not nested under "error".
+			Code    string `json:"code"`
+			Message string `json:"message"`
+			Item    struct {
+				Type             string `json:"type"`
+				ID               string `json:"id"`
+				Name             string `json:"name"`
+				CallID           string `json:"call_id"`
+				Arguments        string `json:"arguments"`
+				EncryptedContent string `json:"encrypted_content"`
 			} `json:"item"`
 			Response struct {
 				Status string `json:"status"`
@@ -339,11 +391,15 @@ func (p *OpenAIChatGPTProvider) parseResponsesSSE(r io.Reader, ch chan<- t.Strea
 				IncompleteDetails struct {
 					Reason string `json:"reason"`
 				} `json:"incomplete_details"`
+				Error struct {
+					Code    string `json:"code"`
+					Message string `json:"message"`
+				} `json:"error"`
 			} `json:"response"`
 			Error json.RawMessage `json:"error"`
 		}
 		if err := json.Unmarshal([]byte(data), &ev); err != nil {
-			continue // skip keep-alives / unparseable fragments
+			return false // skip keep-alives / unparseable fragments
 		}
 
 		switch ev.Type {
@@ -359,7 +415,8 @@ func (p *OpenAIChatGPTProvider) parseResponsesSSE(r io.Reader, ch chan<- t.Strea
 				ch <- t.StreamEvent{Type: t.EventThinkingDelta, Text: ev.Delta, ContentIndex: blockIndex}
 			}
 		case "response.output_item.added":
-			if ev.Item.Type == "function_call" {
+			switch ev.Item.Type {
+			case "function_call":
 				id := ev.Item.CallID
 				if id == "" {
 					id = ev.Item.ID
@@ -369,6 +426,13 @@ func (p *OpenAIChatGPTProvider) parseResponsesSSE(r io.Reader, ch chan<- t.Strea
 				toolByID[id] = ta
 				toolOrder = append(toolOrder, id)
 				ch <- t.StreamEvent{Type: t.EventToolUseStart, ID: id, Name: ev.Item.Name, ContentIndex: blockIndex}
+			case "reasoning":
+				if ev.Item.ID != "" {
+					reasoningID = ev.Item.ID
+				}
+				if ev.Item.EncryptedContent != "" {
+					reasoningEncrypted = ev.Item.EncryptedContent
+				}
 			}
 		case "response.function_call_arguments.delta":
 			if ta := lastChatgptTool(toolByID, toolOrder); ta != nil && ev.Delta != "" {
@@ -387,7 +451,8 @@ func (p *OpenAIChatGPTProvider) parseResponsesSSE(r io.Reader, ch chan<- t.Strea
 				}
 			}
 		case "response.output_item.done":
-			if ev.Item.Type == "function_call" {
+			switch ev.Item.Type {
+			case "function_call":
 				id := ev.Item.CallID
 				if id == "" {
 					id = ev.Item.ID
@@ -407,6 +472,13 @@ func (p *OpenAIChatGPTProvider) parseResponsesSSE(r io.Reader, ch chan<- t.Strea
 						ch <- t.StreamEvent{Type: t.EventContentBlockStop, ContentIndex: ta.index}
 					}
 				}
+			case "reasoning":
+				if ev.Item.ID != "" {
+					reasoningID = ev.Item.ID
+				}
+				if ev.Item.EncryptedContent != "" {
+					reasoningEncrypted = ev.Item.EncryptedContent
+				}
 			}
 		case "response.completed", "response.incomplete":
 			sawTerminal = true
@@ -421,22 +493,120 @@ func (p *OpenAIChatGPTProvider) parseResponsesSSE(r io.Reader, ch chan<- t.Strea
 				}
 			}
 		case "response.failed":
-			ch <- t.StreamEvent{Type: t.EventError, Error: &t.TransientError{Err: fmt.Errorf("openai chatgpt response failed")}}
-			return
+			// Surface the server-provided failure reason and only mark it
+			// transient when actually retryable. A permanent failure (content
+			// policy / invalid request) must NOT be a TransientError, or the
+			// whole turn is retried futilely.
+			reason := ev.Response.Error.Message
+			if reason == "" {
+				reason = ev.Response.IncompleteDetails.Reason
+			}
+			msg := "openai chatgpt response failed"
+			if reason != "" {
+				msg = "openai chatgpt response failed: " + reason
+			}
+			err := errors.New(msg)
+			if isTransientSSEError(data) {
+				ch <- t.StreamEvent{Type: t.EventError, Error: &t.TransientError{Err: err}}
+			} else {
+				ch <- t.StreamEvent{Type: t.EventError, Error: err}
+			}
+			return true
 		case "error":
-			ch <- t.StreamEvent{Type: t.EventError, Error: &t.TransientError{Err: fmt.Errorf("openai chatgpt stream error: %s", string(ev.Error))}}
-			return
+			// The error frame's code+message live at the top level, not under
+			// "error"; surface them and only retry when the reason is transient.
+			emsg := ev.Message
+			if emsg == "" && len(ev.Error) > 0 {
+				emsg = string(ev.Error)
+			}
+			var errText string
+			switch {
+			case ev.Code != "" && emsg != "":
+				errText = fmt.Sprintf("openai chatgpt stream error [%s]: %s", ev.Code, emsg)
+			case emsg != "":
+				errText = "openai chatgpt stream error: " + emsg
+			case ev.Code != "":
+				errText = "openai chatgpt stream error [" + ev.Code + "]"
+			default:
+				errText = "openai chatgpt stream error"
+			}
+			err := errors.New(errText)
+			if isTransientSSEError(data) {
+				ch <- t.StreamEvent{Type: t.EventError, Error: &t.TransientError{Err: err}}
+			} else {
+				ch <- t.StreamEvent{Type: t.EventError, Error: err}
+			}
+			return true
 		}
+		return false
+	}
+
+	// SSE framing: a single event's data may span multiple `data:` lines joined
+	// by "\n", and is dispatched on the blank-line boundary. Accumulate here and
+	// flush per event so multi-line frames parse as one JSON object.
+	var dataBuf strings.Builder
+	flush := func() (stop bool) {
+		if dataBuf.Len() == 0 {
+			return false
+		}
+		data := dataBuf.String()
+		dataBuf.Reset()
+		return dispatch(data)
+	}
+
+	terminated := false
+	for scanner.Scan() {
+		trimmed := strings.TrimSpace(scanner.Text())
+		if trimmed == "" { // event boundary
+			if flush() {
+				terminated = true
+				break
+			}
+			continue
+		}
+		// Comment (":") and "event:" lines carry no data. The event kind is read
+		// from the JSON `type` field, so the SSE `event:` field is ignored.
+		if strings.HasPrefix(trimmed, ":") || strings.HasPrefix(trimmed, "event:") {
+			continue
+		}
+		if strings.HasPrefix(trimmed, "data:") {
+			seg := strings.TrimPrefix(strings.TrimPrefix(trimmed, "data:"), " ")
+			if dataBuf.Len() > 0 {
+				dataBuf.WriteByte('\n')
+			}
+			dataBuf.WriteString(seg)
+			continue
+		}
+		// Unknown field line — ignore.
+	}
+	// A stream may end (EOF) without a trailing blank line; flush any pending frame.
+	if !terminated && flush() {
+		terminated = true
+	}
+	if terminated {
+		return
 	}
 	if err := scanner.Err(); err != nil {
-		ch <- t.StreamEvent{Type: t.EventError, Error: &t.TransientError{Err: fmt.Errorf("stream read: %w", err)}}
+		streamErr := fmt.Errorf("stream read: %w", err)
+		if isTransientReadErr(err) {
+			ch <- t.StreamEvent{Type: t.EventError, Error: &t.TransientError{Err: streamErr}}
+		} else {
+			ch <- t.StreamEvent{Type: t.EventError, Error: streamErr}
+		}
 		return
 	}
 
-	// Assemble the accumulated assistant message.
+	// Assemble the accumulated assistant message. Emit a thinking block when
+	// there is summary text OR captured encrypted reasoning state, so the
+	// encrypted content survives to buildResponsesInput on the next turn.
 	var blocks []t.ContentBlock
-	if reasoningBuf.Len() > 0 {
-		blocks = append(blocks, t.ContentBlock{Type: "thinking", Text: reasoningBuf.String()})
+	if reasoningBuf.Len() > 0 || reasoningEncrypted != "" {
+		blocks = append(blocks, t.ContentBlock{
+			Type:             "thinking",
+			Text:             reasoningBuf.String(),
+			ReasoningID:      reasoningID,
+			EncryptedContent: reasoningEncrypted,
+		})
 	}
 	if textBuf.Len() > 0 {
 		blocks = append(blocks, t.ContentBlock{Type: "text", Text: textBuf.String()})
