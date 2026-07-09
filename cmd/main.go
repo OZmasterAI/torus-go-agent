@@ -175,8 +175,29 @@ func main() {
 		// (e.g. compactionModel or smartRoutingModel using an Anthropic model)
 		os.Setenv("ANTHROPIC_API_KEY", key)
 	}
+	if key == "" && cfg.Agent.Provider == "openai" {
+		oauthKey, err := providers.GetOpenAIAccessToken()
+		if err != nil {
+			fmt.Println("No API key. Starting Sign in with ChatGPT...")
+			creds, loginErr := providers.LoginOpenAI(
+				func(u string) {
+					fmt.Println("\nOpen this URL to sign in with ChatGPT:\n  " + u + "\n")
+				},
+			)
+			if loginErr != nil {
+				log.Fatalf("ChatGPT OAuth failed: %v", loginErr)
+			}
+			if err := providers.SaveOpenAICredentials(creds); err != nil {
+				log.Printf("[openai-oauth] warning: could not persist credentials: %v", err)
+			}
+			key = creds.Access
+			fmt.Println("Login successful (using ChatGPT subscription).")
+		} else {
+			key = oauthKey
+		}
+	}
 	if key == "" {
-		fmt.Fprintln(os.Stderr, "No API key. Set OPENROUTER_API_KEY or ANTHROPIC_API_KEY.")
+		fmt.Fprintln(os.Stderr, "No API key. Set OPENROUTER_API_KEY or ANTHROPIC_API_KEY, or select the openai provider to Sign in with ChatGPT.")
 		os.Exit(1)
 	}
 
@@ -785,6 +806,11 @@ func makeProvider(providerName, apiKey, model string, agentCfg *config.AgentConf
 		}
 		return p
 	case "openai":
+		// A ChatGPT OAuth token (JWT) routes through the subscription backend
+		// (Responses API); a standard sk- key uses the API-billed path.
+		if providers.IsOpenAIOAuthToken(apiKey) {
+			return providers.NewOpenAIChatGPTProvider(apiKey, providers.OpenAIAccountID(), model)
+		}
 		p := providers.NewOpenAIProvider(apiKey, model)
 		if agentCfg != nil && agentCfg.BaseURL != "" {
 			p.BaseURL = agentCfg.BaseURL
