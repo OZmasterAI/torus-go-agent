@@ -26,6 +26,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -93,13 +94,36 @@ func OpenAIAccountID() string {
 	return creds.AccountID
 }
 
+// openaiAuthMu single-flights token refresh so concurrent per-request callers
+// (parallel sub-agents share one provider) don't each POST the rotating refresh
+// token in parallel — which would invalidate it — or race on the credential file.
+var openaiAuthMu sync.Mutex
+
 func ensureFreshOpenAI(creds *OpenAICredentials) *OpenAICredentials {
+	// Fast path: token still comfortably valid, no lock needed.
 	if creds.ExpiresAt != 0 && time.Now().UnixMilli() < creds.ExpiresAt-tokenRefreshBuffer {
 		return creds
 	}
 	if creds.Refresh == "" {
 		return creds // cannot refresh; use as-is
 	}
+
+	openaiAuthMu.Lock()
+	defer openaiAuthMu.Unlock()
+
+	// Re-check under the lock: another goroutine may have refreshed and persisted
+	// a fresh token while we were blocked. Reload so we reuse it instead of
+	// spending our (now-rotated-out) refresh token a second time.
+	if fresh, err := LoadOpenAICredentials(); err == nil {
+		creds = fresh
+		if creds.ExpiresAt != 0 && time.Now().UnixMilli() < creds.ExpiresAt-tokenRefreshBuffer {
+			return creds
+		}
+		if creds.Refresh == "" {
+			return creds
+		}
+	}
+
 	refreshed, err := RefreshOpenAIToken(creds.Refresh)
 	if err != nil {
 		log.Printf("[openai-oauth] warning: token refresh failed, using existing token: %v", err)
@@ -236,8 +260,12 @@ func RefreshOpenAIToken(refreshToken string) (*OpenAICredentials, error) {
 	})
 }
 
+// openaiTokenClient bounds the token exchange/refresh so a stalled or hung
+// token endpoint can't block the (per-request) refresh path indefinitely.
+var openaiTokenClient = &http.Client{Timeout: 30 * time.Second}
+
 func postOpenAIToken(form url.Values) (*OpenAICredentials, error) {
-	resp, err := http.PostForm(openaiTokenURL, form)
+	resp, err := openaiTokenClient.PostForm(openaiTokenURL, form)
 	if err != nil {
 		return nil, fmt.Errorf("token endpoint unreachable: %w", err)
 	}
@@ -327,7 +355,31 @@ func SaveOpenAICredentials(creds *OpenAICredentials) error {
 	if err != nil {
 		return fmt.Errorf("failed to marshal openai credentials: %w", err)
 	}
-	return os.WriteFile(openaiAuthPath(), data, 0600)
+	// Persist atomically (temp file + rename) so a concurrent reader never sees a
+	// torn file, and so 0600 is enforced even when the target already existed with
+	// looser permissions — the temp file is created 0600 and replaces it in place.
+	path := openaiAuthPath()
+	tmp, err := os.CreateTemp(dir, ".openai_auth-*.tmp")
+	if err != nil {
+		return fmt.Errorf("failed to create temp credentials file: %w", err)
+	}
+	tmpName := tmp.Name()
+	defer os.Remove(tmpName) // no-op once the rename succeeds
+	if err := tmp.Chmod(0600); err != nil {
+		tmp.Close()
+		return fmt.Errorf("failed to chmod temp credentials file: %w", err)
+	}
+	if _, err := tmp.Write(data); err != nil {
+		tmp.Close()
+		return fmt.Errorf("failed to write temp credentials file: %w", err)
+	}
+	if err := tmp.Close(); err != nil {
+		return fmt.Errorf("failed to close temp credentials file: %w", err)
+	}
+	if err := os.Rename(tmpName, path); err != nil {
+		return fmt.Errorf("failed to persist credentials: %w", err)
+	}
+	return nil
 }
 
 const openaiLoginSuccessHTML = `<!doctype html><html><body style="font-family:sans-serif;text-align:center;padding-top:80px">` +

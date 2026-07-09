@@ -195,6 +195,12 @@ func main() {
 		} else {
 			key = oauthKey
 		}
+		// Export so secondary providers (routing / fallback / compaction /
+		// smart-routing) with provider=openai inherit the ChatGPT token,
+		// mirroring the Anthropic path above.
+		if key != "" {
+			os.Setenv("OPENAI_API_KEY", key)
+		}
 	}
 	if key == "" {
 		fmt.Fprintln(os.Stderr, "No API key. Set OPENROUTER_API_KEY or ANTHROPIC_API_KEY, or select the openai provider to Sign in with ChatGPT.")
