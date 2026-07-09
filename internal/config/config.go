@@ -2,10 +2,12 @@ package config
 
 import (
 	"encoding/json"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"torus_go_agent/internal/constants"
 )
@@ -178,7 +180,7 @@ func ResolveModelInfo(modelID, provider string, models map[string]ModelInfo, con
 	// 1. Local cache
 	if models != nil {
 		if info, ok := models[modelID]; ok {
-			return info
+			return clampModelInfo(info)
 		}
 	}
 
@@ -191,10 +193,24 @@ func ResolveModelInfo(modelID, provider string, models map[string]ModelInfo, con
 			models[modelID] = info
 			saveModelsCache(configDir, models)
 		}
-		return info
+		return clampModelInfo(info)
 	}
 
+	// 3. Not found anywhere — caller falls back to generic code defaults
+	// (ContextWindow=128000, MaxTokens=8192). Warn so the operator knows the
+	// model specs are guessed, not authoritative.
+	log.Printf("config: model %q not found in cache or OpenRouter; using generic default specs (ContextWindow=128000, MaxTokens=8192)", modelID)
 	return ModelInfo{}
+}
+
+// clampModelInfo guards against a nonsensical MaxTokens that meets or exceeds
+// the context window. When that happens the max output tokens are pinned to a
+// quarter of the context window, leaving room for input.
+func clampModelInfo(info ModelInfo) ModelInfo {
+	if info.ContextWindow > 0 && info.MaxTokens >= info.ContextWindow {
+		info.MaxTokens = info.ContextWindow / 4
+	}
+	return info
 }
 
 // openRouterPrefix maps our provider keys to OpenRouter ID prefixes.
@@ -226,7 +242,8 @@ func normalizeID(id string) string {
 // fetchOpenRouterModelInfo queries OpenRouter's /api/v1/models.
 // Tries exact match, then provider-prefixed, then normalized (hyphens/dots stripped).
 func fetchOpenRouterModelInfo(modelID, provider string) (ModelInfo, bool) {
-	resp, err := http.Get("https://openrouter.ai/api/v1/models")
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Get("https://openrouter.ai/api/v1/models")
 	if err != nil {
 		return ModelInfo{}, false
 	}

@@ -114,7 +114,8 @@ func CompactSliding(messages []t.Message, keepLastN int) []t.Message {
 	}
 	result := make([]t.Message, 0, keepLastN+1)
 	result = append(result, messages[0]) // always keep the first
-	tail := messages[len(messages)-keepLastN:]
+	// Snap the tail boundary so it never begins partway through a RoleTool run.
+	tail := messages[snapTailStart(messages, len(messages)-keepLastN):]
 	result = append(result, tail...)
 	return result
 }
@@ -137,8 +138,12 @@ func CompactLLM(messages []t.Message, keepLastN int, summarize func(string) (str
 		return messages, nil
 	}
 
-	// The "middle" is everything after the first message and before the last N.
-	middle := messages[1 : len(messages)-keepLastN]
+	// The "middle" is everything after the first message and before the tail.
+	// Snap the tail boundary so it never begins partway through a RoleTool run;
+	// any tool messages between the raw boundary and the snapped start fall into
+	// the middle (and thus get summarized) rather than becoming orphaned.
+	tailStart := snapTailStart(messages, len(messages)-keepLastN)
+	middle := messages[1:tailStart]
 	keyContent := extractKeyContent(middle)
 
 	var summary string
@@ -161,7 +166,7 @@ func CompactLLM(messages []t.Message, keepLastN int, summarize func(string) (str
 		}},
 	}
 
-	tail := messages[len(messages)-keepLastN:]
+	tail := messages[tailStart:]
 	result := make([]t.Message, 0, 2+len(tail))
 	result = append(result, messages[0])
 	result = append(result, summaryMsg)
@@ -270,7 +275,10 @@ func CompactDAG(dag *DAG, cfg CompactionConfig, summarize func(string) (string, 
 	}
 
 	// --- 3. Extract key content from the middle ---
-	middle := messages[1 : len(messages)-keepN]
+	// Snap the tail boundary so the re-added tail never begins partway through a
+	// RoleTool run (which would orphan tool_result nodes from a dropped tool_use).
+	tailStart := snapTailStart(messages, len(messages)-keepN)
+	middle := messages[1:tailStart]
 	keyContent := extractKeyContent(middle)
 
 	// --- 3b. Group dropped operations and generate working memory one-liners ---
@@ -332,7 +340,7 @@ func CompactDAG(dag *DAG, cfg CompactionConfig, summarize func(string) (string, 
 	}
 
 	// --- 7. Re-add last N messages onto the new branch ---
-	tail := messages[len(messages)-keepN:]
+	tail := messages[tailStart:]
 	parentID := summaryNodeID
 	for _, msg := range tail {
 		nodeID, err := dag.AddNode(parentID, msg.Role, msg.Content, "", "", EstimateTokens([]t.Message{msg}))
@@ -354,6 +362,76 @@ func nodesToMessages(nodes []Node) []t.Message {
 		msgs[i] = t.Message{Role: t.Role(n.Role), Content: n.Content}
 	}
 	return msgs
+}
+
+// repairToolPairing enforces Anthropic's tool_use/tool_result adjacency rules:
+//   - a tool_result block is kept only if a matching tool_use (same id) appeared
+//     at or before its message
+//   - a tool_use block is kept only if a matching tool_result (same id) appears
+//     at or after its message
+//
+// Orphaned tool_result blocks and dangling tool_use blocks are dropped. Any
+// message left with no content blocks is removed entirely (consistent with the
+// len==0 handling in sanitizeMessages' merge pass).
+func repairToolPairing(messages []t.Message) []t.Message {
+	// Record the first message index at which each tool_use id and each
+	// tool_result id appears, so ordering (preceding/following) can be enforced.
+	useAt := map[string]int{}
+	resultAt := map[string]int{}
+	for i := range messages {
+		for _, b := range messages[i].Content {
+			switch b.Type {
+			case "tool_use":
+				if _, ok := useAt[b.ID]; !ok {
+					useAt[b.ID] = i
+				}
+			case "tool_result":
+				if _, ok := resultAt[b.ToolUseID]; !ok {
+					resultAt[b.ToolUseID] = i
+				}
+			}
+		}
+	}
+
+	var out []t.Message
+	for i := range messages {
+		var cleaned []t.ContentBlock
+		for _, b := range messages[i].Content {
+			switch b.Type {
+			case "tool_use":
+				// Keep only if a matching tool_result appears at or after this message.
+				if ri, ok := resultAt[b.ID]; ok && ri >= i {
+					cleaned = append(cleaned, b)
+				}
+			case "tool_result":
+				// Keep only if a matching tool_use appeared at or before this message.
+				if ui, ok := useAt[b.ToolUseID]; ok && ui <= i {
+					cleaned = append(cleaned, b)
+				}
+			default:
+				cleaned = append(cleaned, b)
+			}
+		}
+		if len(cleaned) > 0 {
+			messages[i].Content = cleaned
+			out = append(out, messages[i])
+		}
+	}
+	return out
+}
+
+// snapTailStart advances a compaction tail start index forward past any
+// consecutive run of RoleTool messages, so a tail slice never begins partway
+// through (or at the head of) a tool-result run whose originating tool_use
+// lives in the dropped middle. Returns an index in [start, len(messages)].
+func snapTailStart(messages []t.Message, start int) int {
+	if start < 0 {
+		start = 0
+	}
+	for start < len(messages) && messages[start].Role == t.RoleTool {
+		start++
+	}
+	return start
 }
 
 // sanitizeMessages cleans up a message slice before sending to a provider:
@@ -392,6 +470,11 @@ func sanitizeMessages(messages []t.Message) []t.Message {
 		allowed = append(allowed, m)
 	}
 	messages = allowed
+
+	// Pass 2b: repair tool_use/tool_result adjacency. Drop orphaned tool_result
+	// blocks (no matching preceding tool_use) and dangling tool_use blocks (no
+	// matching following tool_result). Anthropic rejects either as malformed.
+	messages = repairToolPairing(messages)
 
 	// Pass 3: merge consecutive same-role messages (skip tool messages — they must stay separate)
 	var merged []t.Message

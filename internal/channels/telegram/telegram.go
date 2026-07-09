@@ -241,20 +241,25 @@ func editOrSend(bot *tgbotapi.BotAPI, chatID int64, msgID int, text string) erro
 // splitChunks divides text into segments no longer than maxLen. It tries to
 // break on the last whitespace before the limit to avoid splitting words.
 func splitChunks(text string, maxLen int) []string {
-	if len(text) <= maxLen {
+	// Operate on runes, not bytes, so multibyte UTF-8 characters are never
+	// split across chunks (a byte-level cut would corrupt a rune and cause
+	// Telegram to reject the message). maxLen is treated as a rune count,
+	// which also matches Telegram's character-based message limit.
+	runes := []rune(text)
+	if len(runes) <= maxLen {
 		return []string{text}
 	}
 
 	var chunks []string
-	for len(text) > 0 {
-		if len(text) <= maxLen {
-			chunks = append(chunks, text)
+	for len(runes) > 0 {
+		if len(runes) <= maxLen {
+			chunks = append(chunks, string(runes))
 			break
 		}
 
 		cut := maxLen
 		// Walk back to find a whitespace boundary
-		for cut > maxLen/2 && cut < len(text) && text[cut] != ' ' && text[cut] != '\n' {
+		for cut > maxLen/2 && cut < len(runes) && runes[cut] != ' ' && runes[cut] != '\n' {
 			cut--
 		}
 		// If no whitespace found in the back half, hard-cut at maxLen
@@ -262,8 +267,8 @@ func splitChunks(text string, maxLen int) []string {
 			cut = maxLen
 		}
 
-		chunks = append(chunks, text[:cut])
-		text = strings.TrimLeft(text[cut:], " \n")
+		chunks = append(chunks, string(runes[:cut]))
+		runes = []rune(strings.TrimLeft(string(runes[cut:]), " \n"))
 	}
 	return chunks
 }

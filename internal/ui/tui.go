@@ -985,10 +985,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Clean up empty trailing placeholder
 		if len(m.messages) > 0 {
 			last := &m.messages[len(m.messages)-1]
-			if last.role == "assistant" && last.text == "" {
+			if last.role == "assistant" {
 				if msg.text != "" {
+					// Final text takes precedence over any streamed deltas to
+					// avoid truncated display; force a re-render.
 					last.text = msg.text
-				} else {
+					last.rendered = ""
+				} else if last.text == "" {
 					m.messages = m.messages[:len(m.messages)-1]
 				}
 			}

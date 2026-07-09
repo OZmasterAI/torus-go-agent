@@ -1,7 +1,6 @@
 package http
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -146,7 +145,7 @@ func handleStreamChat(w http.ResponseWriter, r *http.Request, agent *core.Agent,
 }
 
 func handleBlockingChat(w http.ResponseWriter, r *http.Request, agent *core.Agent, message string) {
-	text, err := agent.Run(context.Background(), message)
+	text, err := agent.Run(r.Context(), message)
 	w.Header().Set("Content-Type", "application/json")
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)

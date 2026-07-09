@@ -144,8 +144,16 @@ type geminiThinking struct {
 }
 
 type geminiResponse struct {
-	Candidates    []geminiCandidate `json:"candidates"`
-	UsageMetadata *geminiUsage      `json:"usageMetadata,omitempty"`
+	Candidates     []geminiCandidate `json:"candidates"`
+	UsageMetadata  *geminiUsage      `json:"usageMetadata,omitempty"`
+	PromptFeedback *struct {
+		BlockReason string `json:"blockReason"`
+	} `json:"promptFeedback,omitempty"`
+	Error *struct {
+		Code    int    `json:"code"`
+		Message string `json:"message"`
+		Status  string `json:"status"`
+	} `json:"error,omitempty"`
 }
 
 type geminiCandidate struct {
@@ -304,6 +312,16 @@ func geminiStopReason(reason string) string {
 	}
 }
 
+// geminiRetryableStatus reports whether an HTTP status code should be treated
+// as transient and retried.
+func geminiRetryableStatus(status int) bool {
+	switch status {
+	case 408, 409, 425, 429, 500, 502, 503, 504:
+		return true
+	}
+	return false
+}
+
 // --- Complete (non-streaming) ---
 
 func (p *GeminiProvider) Complete(ctx context.Context, systemPrompt string, messages []t.Message, tools []t.Tool, maxTokens int) (*t.AssistantMessage, error) {
@@ -349,7 +367,11 @@ func (p *GeminiProvider) Complete(ctx context.Context, systemPrompt string, mess
 	}
 
 	if resp.StatusCode != 200 {
-		return nil, fmt.Errorf("gemini API error %d: %s", resp.StatusCode, string(respBody))
+		err := fmt.Errorf("gemini API error %d: %s", resp.StatusCode, string(respBody))
+		if geminiRetryableStatus(resp.StatusCode) {
+			return nil, &t.TransientError{Err: err}
+		}
+		return nil, err
 	}
 
 	var apiResp geminiResponse
@@ -401,7 +423,11 @@ func (p *GeminiProvider) StreamComplete(ctx context.Context, systemPrompt string
 	if resp.StatusCode != 200 {
 		defer resp.Body.Close()
 		respBody, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("gemini API error %d: %s", resp.StatusCode, string(respBody))
+		err := fmt.Errorf("gemini API error %d: %s", resp.StatusCode, string(respBody))
+		if geminiRetryableStatus(resp.StatusCode) {
+			return nil, &t.TransientError{Err: err}
+		}
+		return nil, err
 	}
 
 	ch := make(chan t.StreamEvent, 32)
@@ -435,7 +461,7 @@ func (p *GeminiProvider) parseGeminiSSE(ctx context.Context, resp *http.Response
 	}
 
 	scanner := bufio.NewScanner(resp.Body)
-	scanner.Buffer(make([]byte, 0, 256*1024), 256*1024)
+	scanner.Buffer(make([]byte, 0, 256*1024), 8*1024*1024)
 
 	for scanner.Scan() {
 		line := scanner.Text()
@@ -448,6 +474,24 @@ func (p *GeminiProvider) parseGeminiSSE(ctx context.Context, resp *http.Response
 		var chunk geminiResponse
 		if json.Unmarshal([]byte(data), &chunk) != nil {
 			continue
+		}
+
+		// Surface API errors delivered mid-stream as retryable.
+		if chunk.Error != nil {
+			send(t.StreamEvent{
+				Type:  t.EventError,
+				Error: &t.TransientError{Err: fmt.Errorf("gemini stream error %d: %s", chunk.Error.Code, chunk.Error.Message)},
+			})
+			return
+		}
+
+		// Surface prompt safety blocks.
+		if chunk.PromptFeedback != nil && chunk.PromptFeedback.BlockReason != "" {
+			send(t.StreamEvent{
+				Type:  t.EventError,
+				Error: fmt.Errorf("gemini prompt blocked: %s", chunk.PromptFeedback.BlockReason),
+			})
+			return
 		}
 
 		// Usage

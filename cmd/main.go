@@ -90,11 +90,18 @@ func main() {
 	// Auto-detect model specs: models.json → OpenRouter API → code defaults
 	models := config.LoadModels(cfgDir)
 	if info := config.ResolveModelInfo(cfg.Agent.Model, cfg.Agent.Provider, models, cfgDir); info.ContextWindow > 0 {
+		// Guard against a nonsensical MaxTokens that meets or exceeds the context
+		// window, which would leave no room for input. Pin to a quarter window.
+		if info.MaxTokens >= info.ContextWindow {
+			info.MaxTokens = info.ContextWindow / 4
+		}
 		cfg.Agent.ContextWindow = info.ContextWindow
 		if info.MaxTokens > 0 {
 			cfg.Agent.MaxTokens = info.MaxTokens
 		}
 		log.Printf("[main] model %s: context=%d, maxTokens=%d (auto-detected)", cfg.Agent.Model, info.ContextWindow, info.MaxTokens)
+	} else {
+		log.Printf("[main] warning: model %s unresolved; using generic default specs (context=%d, maxTokens=%d)", cfg.Agent.Model, cfg.Agent.ContextWindow, cfg.Agent.MaxTokens)
 	}
 
 	// Apply startup screen overrides (user values win over auto-resolved)
