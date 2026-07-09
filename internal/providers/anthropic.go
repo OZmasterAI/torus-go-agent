@@ -39,7 +39,12 @@ const maxRetries = 3
 
 // isTransientStatus returns true for HTTP status codes that warrant retry.
 func isTransientStatus(code int) bool {
-	return code == 429 || code == 529
+	switch code {
+	case 408, 409, 425, 429, 500, 502, 503, 504, 529:
+		return true
+	default:
+		return false
+	}
 }
 
 // isTransientSSEError checks if an SSE error payload indicates a transient condition.
@@ -338,7 +343,7 @@ func (p *AnthropicProvider) Complete(ctx context.Context, systemPrompt string, m
 
 		resp, err := p.client.Do(httpReq)
 		if err != nil {
-			return nil, fmt.Errorf("http request: %w", err)
+			return nil, &t.TransientError{Err: fmt.Errorf("http request: %w", err)}
 		}
 
 		respBody, err = io.ReadAll(resp.Body)
@@ -508,7 +513,7 @@ func (p *AnthropicProvider) StreamComplete(ctx context.Context, systemPrompt str
 
 		resp, err = p.client.Do(httpReq)
 		if err != nil {
-			return nil, fmt.Errorf("http request: %w", err)
+			return nil, &t.TransientError{Err: fmt.Errorf("http request: %w", err)}
 		}
 
 		if resp.StatusCode == 200 {
@@ -548,6 +553,7 @@ func (p *AnthropicProvider) parseAnthropicSSE(ctx context.Context, resp *http.Re
 		usage      t.Usage
 		blocks     []t.ContentBlock
 		inputJSONs []strings.Builder // accumulated tool input per block index
+		sawStop    bool              // set true once a terminal message_stop is observed
 	)
 
 	send := func(ev t.StreamEvent) bool {
@@ -560,7 +566,7 @@ func (p *AnthropicProvider) parseAnthropicSSE(ctx context.Context, resp *http.Re
 	}
 
 	scanner := bufio.NewScanner(resp.Body)
-	scanner.Buffer(make([]byte, 0, 256*1024), 256*1024)
+	scanner.Buffer(make([]byte, 0, 256*1024), 8*1024*1024)
 	var eventType string
 
 	for scanner.Scan() {
@@ -678,6 +684,7 @@ func (p *AnthropicProvider) parseAnthropicSSE(ctx context.Context, resp *http.Re
 			}
 
 		case "message_stop":
+			sawStop = true
 			assembled := &t.AssistantMessage{
 				Message:    t.Message{Role: t.RoleAssistant, Content: blocks},
 				Model:      model,
@@ -706,6 +713,18 @@ func (p *AnthropicProvider) parseAnthropicSSE(ctx context.Context, resp *http.Re
 
 	if err := scanner.Err(); err != nil {
 		send(t.StreamEvent{Type: t.EventError, Error: fmt.Errorf("sse read: %w", err)})
+		return
+	}
+
+	// The stream ended (clean EOF, no scanner error) without a terminal
+	// message_stop event. Surface this as a transient error so the stream is
+	// not silently treated as a complete response — an early EOF usually means
+	// the connection was interrupted mid-response and the call should be retried.
+	if !sawStop {
+		send(t.StreamEvent{
+			Type:  t.EventError,
+			Error: &t.TransientError{Err: fmt.Errorf("anthropic stream ended without message_stop")},
+		})
 	}
 }
 

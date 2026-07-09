@@ -249,6 +249,11 @@ type openaiStreamChunk struct {
 	Choices []openaiStreamChoice `json:"choices"`
 	Usage   *openaiUsage         `json:"usage,omitempty"`
 	Model   string               `json:"model"`
+	Error   *struct {
+		Message string `json:"message"`
+		Code    any    `json:"code"`
+		Type    string `json:"type"`
+	} `json:"error,omitempty"`
 }
 
 type openaiStreamChoice struct {
@@ -404,7 +409,11 @@ func (p *OpenRouterProvider) Complete(ctx context.Context, systemPrompt string, 
 	}
 
 	if resp.StatusCode != 200 {
-		return nil, fmt.Errorf("%s API error %d: %s", p.providerName, resp.StatusCode, string(respBody))
+		apiErr := fmt.Errorf("%s API error %d: %s", p.providerName, resp.StatusCode, string(respBody))
+		if isTransientStatus(resp.StatusCode) {
+			return nil, &t.TransientError{Err: apiErr}
+		}
+		return nil, apiErr
 	}
 
 	var apiResp openaiResponse
@@ -505,7 +514,11 @@ func (p *OpenRouterProvider) StreamComplete(ctx context.Context, systemPrompt st
 		if err != nil {
 			log.Printf("openrouter: failed to read error response body: %v", err)
 		}
-		return nil, fmt.Errorf("%s API error %d: %s", p.providerName, resp.StatusCode, string(respBody))
+		apiErr := fmt.Errorf("%s API error %d: %s", p.providerName, resp.StatusCode, string(respBody))
+		if isTransientStatus(resp.StatusCode) {
+			return nil, &t.TransientError{Err: apiErr}
+		}
+		return nil, apiErr
 	}
 
 	ch := make(chan t.StreamEvent, 32)
@@ -552,7 +565,7 @@ func (p *OpenRouterProvider) parseOpenAISSE(ctx context.Context, resp *http.Resp
 	}
 
 	scanner := bufio.NewScanner(resp.Body)
-	scanner.Buffer(make([]byte, 0, 256*1024), 256*1024)
+	scanner.Buffer(make([]byte, 0, 64*1024), 8*1024*1024)
 
 	for scanner.Scan() {
 		line := scanner.Text()
@@ -581,6 +594,14 @@ func (p *OpenRouterProvider) parseOpenAISSE(ctx context.Context, resp *http.Resp
 				TotalTokens:  chunk.Usage.TotalTokens,
 			}
 			send(t.StreamEvent{Type: t.EventUsage, Usage: &usage})
+		}
+
+		if chunk.Error != nil {
+			send(t.StreamEvent{
+				Type:  t.EventError,
+				Error: &t.TransientError{Err: fmt.Errorf("%s stream error: %s", p.providerName, chunk.Error.Message)},
+			})
+			return
 		}
 
 		if len(chunk.Choices) == 0 {

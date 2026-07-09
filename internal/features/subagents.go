@@ -18,6 +18,22 @@ import (
 // Tool is a local alias to avoid repeating the full qualified name throughout this file.
 type Tool = types.Tool
 
+// Sub-agent defaults. The parent Agent's config is not accessible from this package
+// (core.Agent.config is unexported and has no getter), so these named constants stand
+// in for values that would otherwise be inherited from the parent.
+const (
+	// defaultSubAgentMaxTurns caps a sub-agent's ReAct loop when the caller passes
+	// MaxTurns <= 0. Using a finite default (not 0/unlimited) matches the documented
+	// behaviour on SubAgentConfig.MaxTurns.
+	defaultSubAgentMaxTurns = 30
+	// defaultSubAgentMaxTokens is the per-response output cap for a sub-agent.
+	defaultSubAgentMaxTokens = 8192
+	// defaultSubAgentContextWindow sets the model's full context window so the agent
+	// loop's compaction threshold engages (loop.go only compacts when ContextWindow > 0),
+	// preventing context-overflow 400s. Mirrors the codebase-wide generic default.
+	defaultSubAgentContextWindow = 128000
+)
+
 // SubAgentConfig specifies how a sub-agent should be created and what it should do.
 type SubAgentConfig struct {
 	// Task is the user message sent to the sub-agent.
@@ -81,7 +97,7 @@ func (m *SubAgentManager) SpawnWithProvider(
 	}
 	maxTurns := cfg.MaxTurns
 	if maxTurns <= 0 {
-		maxTurns = types.DefaultMaxTurns
+		maxTurns = defaultSubAgentMaxTurns
 	}
 
 	parentDAG := parentAgent.DAG()
@@ -152,10 +168,11 @@ func (m *SubAgentManager) SpawnWithProvider(
 		})
 
 		subAgentCfg := types.AgentConfig{
-			Provider:     types.ProviderConfig{MaxTokens: 8192},
-			SystemPrompt: systemPrompt,
-			Tools:        tools,
-			MaxTurns:     maxTurns,
+			Provider:      types.ProviderConfig{MaxTokens: defaultSubAgentMaxTokens},
+			SystemPrompt:  systemPrompt,
+			Tools:         tools,
+			MaxTurns:      maxTurns,
+			ContextWindow: defaultSubAgentContextWindow,
 		}
 
 		agent := core.NewAgent(subAgentCfg, provider, hooks, subDAG)

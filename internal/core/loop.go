@@ -191,6 +191,7 @@ func (a *Agent) runLoop(ctx context.Context, userMessage string, ch chan<- Agent
 						messages = compacted
 					}
 				}
+				messages = sanitizeMessages(messages)
 			} else {
 				currentHead, compHeadErr := a.dag.GetHead()
 				if compHeadErr != nil {
@@ -344,11 +345,16 @@ func (a *Agent) runLoop(ctx context.Context, userMessage string, ch chan<- Agent
 			}
 		}
 
-		if !HasToolUse(resp) {
-			// Auto-continue when the model hit its token limit mid-response.
-			if resp.StopReason == "length" || resp.StopReason == "max_tokens" {
+		// Auto-continue when the model hit its token limit mid-response. Handle this
+		// before the tool-use branch so a truncated response mid-tool-call also
+		// triggers continuation rather than executing a partial tool call. Capped at
+		// maxContinuations consecutive continuations to prevent an infinite spin.
+		if resp.StopReason == "length" || resp.StopReason == "max_tokens" {
+			if continuations >= maxContinuations {
+				log.Printf("[loop] continuation cap reached (%d consecutive truncations, stop_reason=%q); not auto-continuing further", maxContinuations, resp.StopReason)
+			} else {
 				continuations++
-				log.Printf("[loop] response truncated (stop_reason=%q), auto-continuing (%d)", resp.StopReason, continuations)
+				log.Printf("[loop] response truncated (stop_reason=%q), auto-continuing (%d/%d)", resp.StopReason, continuations, maxContinuations)
 				contHead, _ := a.dag.GetHead()
 				contContent := []t.ContentBlock{{Type: "text", Text: "Continue."}}
 				if _, contErr := a.dag.AddNode(contHead, t.RoleUser, contContent, "", "", 0); contErr != nil {
@@ -358,6 +364,13 @@ func (a *Agent) runLoop(ctx context.Context, userMessage string, ch chan<- Agent
 				a.hooks.Fire(ctx, HookOnTurnEnd, &HookData{AgentID: "main", Response: resp})
 				continue
 			}
+		} else {
+			// Reset the consecutive-continuation counter once a full (non-truncated)
+			// response arrives.
+			continuations = 0
+		}
+
+		if !HasToolUse(resp) {
 			finalText = ExtractText(resp)
 			// HookOnStop: can override stop decision via Block.
 			stopData := &HookData{AgentID: "main", Response: resp, Meta: map[string]any{"final_text": finalText}}
@@ -444,9 +457,11 @@ func (a *Agent) runLoop(ctx context.Context, userMessage string, ch chan<- Agent
 
 func consumeStreamEmit(streamCh <-chan t.StreamEvent, emit func(AgentEvent)) (*t.AssistantMessage, error) {
 	var resp *t.AssistantMessage
+	var textBuf strings.Builder
 	for ev := range streamCh {
 		switch ev.Type {
 		case t.EventTextDelta:
+			textBuf.WriteString(ev.Text)
 			emit(AgentEvent{Type: EventAgentTextDelta, Text: ev.Text})
 		case t.EventThinkingDelta:
 			emit(AgentEvent{Type: EventAgentThinkingDelta, Text: ev.Text})
@@ -457,6 +472,14 @@ func consumeStreamEmit(streamCh <-chan t.StreamEvent, emit func(AgentEvent)) (*t
 		}
 	}
 	if resp == nil {
+		// Stream closed without an explicit stop event. If we accumulated any text,
+		// synthesize a completed assistant message rather than failing the whole turn.
+		if textBuf.Len() > 0 {
+			return &t.AssistantMessage{
+				Message:    t.Message{Content: []t.ContentBlock{{Type: "text", Text: textBuf.String()}}},
+				StopReason: "end_turn",
+			}, nil
+		}
 		return nil, fmt.Errorf("stream ended without response")
 	}
 	return resp, nil
@@ -476,6 +499,10 @@ func (a *Agent) Hooks() *HookRegistry     { return a.hooks }
 func (a *Agent) Provider() t.Provider     { return a.provider }
 func (a *Agent) SystemPrompt() string     { return a.config.SystemPrompt }
 func (a *Agent) AddTool(tool t.Tool)        { a.config.Tools = append(a.config.Tools, tool) }
+
+// maxContinuations caps consecutive auto-"Continue." injections triggered by a
+// truncated (length/max_tokens) response, preventing an infinite continuation spin.
+const maxContinuations = 10
 
 // maxActiveFiles caps the number of tracked file paths.
 const maxActiveFiles = 50
@@ -739,6 +766,7 @@ type eagerResult struct {
 // Returns the AssistantMessage, a map of eager results keyed by tool_use ID, and any error.
 func (a *Agent) consumeStreamEager(ctx context.Context, streamCh <-chan t.StreamEvent, emit func(AgentEvent)) (*t.AssistantMessage, map[string]*eagerResult, error) {
 	var resp *t.AssistantMessage
+	var textBuf strings.Builder
 	type pendingTool struct {
 		id   string
 		name string
@@ -751,6 +779,7 @@ func (a *Agent) consumeStreamEager(ctx context.Context, streamCh <-chan t.Stream
 	for ev := range streamCh {
 		switch ev.Type {
 		case t.EventTextDelta:
+			textBuf.WriteString(ev.Text)
 			emit(AgentEvent{Type: EventAgentTextDelta, Text: ev.Text})
 		case t.EventThinkingDelta:
 			emit(AgentEvent{Type: EventAgentThinkingDelta, Text: ev.Text})
@@ -847,6 +876,14 @@ func (a *Agent) consumeStreamEager(ctx context.Context, streamCh <-chan t.Stream
 	}
 
 	if resp == nil {
+		// Stream closed without an explicit stop event. If we accumulated any text,
+		// synthesize a completed assistant message rather than failing the whole turn.
+		if textBuf.Len() > 0 {
+			return &t.AssistantMessage{
+				Message:    t.Message{Content: []t.ContentBlock{{Type: "text", Text: textBuf.String()}}},
+				StopReason: "end_turn",
+			}, results, nil
+		}
 		return nil, nil, fmt.Errorf("stream ended without response")
 	}
 	return resp, results, nil
