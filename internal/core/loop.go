@@ -20,17 +20,17 @@ type Agent struct {
 	hooks           *HookRegistry
 	dag             *DAG
 	compaction      CompactionConfig
-	lastInputTokens int // actual input tokens from most recent API call
-	steeringMode  string // "mild" (default) or "aggressive"
-	activeFiles   []string       // recently-touched file paths from tool calls
-	activeFilesMu sync.RWMutex   // guards activeFiles
-	promptMu      sync.RWMutex   // guards config.SystemPrompt (written by PromptReloader goroutine)
-	Summarize     func(string) (string, error)
-	OnStreamDelta func(delta string)
-	OnToolUse     func(name string, args map[string]any, result *t.ToolResult)
-	OnStatusUpdate func(hookName string)
-	Steering      chan t.Message
-	RouteProvider func(userMessage string) t.Provider
+	lastInputTokens int          // actual input tokens from most recent API call
+	steeringMode    string       // "mild" (default) or "aggressive"
+	activeFiles     []string     // recently-touched file paths from tool calls
+	activeFilesMu   sync.RWMutex // guards activeFiles
+	promptMu        sync.RWMutex // guards config.SystemPrompt (written by PromptReloader goroutine)
+	Summarize       func(string) (string, error)
+	OnStreamDelta   func(delta string)
+	OnToolUse       func(name string, args map[string]any, result *t.ToolResult)
+	OnStatusUpdate  func(hookName string)
+	Steering        chan t.Message
+	RouteProvider   func(userMessage string) t.Provider
 }
 
 // NewAgent creates a new agent.
@@ -50,7 +50,7 @@ func NewAgent(config t.AgentConfig, provider t.Provider, hooks *HookRegistry, da
 }
 
 func (a *Agent) SetCompaction(cfg CompactionConfig) { a.compaction = cfg }
-func (a *Agent) GetCompaction() CompactionConfig     { return a.compaction }
+func (a *Agent) GetCompaction() CompactionConfig    { return a.compaction }
 
 // Notify fires the on_notification hook with the given message and metadata.
 func (a *Agent) Notify(ctx context.Context, message string, meta map[string]any) {
@@ -207,7 +207,7 @@ func (a *Agent) runLoop(ctx context.Context, userMessage string, ch chan<- Agent
 			}
 			a.hooks.Fire(ctx, HookPostCompact, &HookData{
 				AgentID: "main",
-				Meta: map[string]any{"mode": string(a.compaction.Mode), "messages_before": preCount, "messages_after": len(messages), "persistent": true},
+				Meta:    map[string]any{"mode": string(a.compaction.Mode), "messages_before": preCount, "messages_after": len(messages), "persistent": true},
 			})
 			emit(AgentEvent{Type: EventStatusUpdate, StatusHook: "post_compact"})
 		}
@@ -499,9 +499,9 @@ func (a *Agent) findTool(name string) *t.Tool {
 	return nil
 }
 
-func (a *Agent) DAG() *DAG                { return a.dag }
-func (a *Agent) Hooks() *HookRegistry     { return a.hooks }
-func (a *Agent) Provider() t.Provider     { return a.provider }
+func (a *Agent) DAG() *DAG            { return a.dag }
+func (a *Agent) Hooks() *HookRegistry { return a.hooks }
+func (a *Agent) Provider() t.Provider { return a.provider }
 
 // SystemPrompt returns the current system prompt (safe to call concurrently
 // with ReloadSystemPrompt).
@@ -510,7 +510,7 @@ func (a *Agent) SystemPrompt() string {
 	defer a.promptMu.RUnlock()
 	return a.config.SystemPrompt
 }
-func (a *Agent) AddTool(tool t.Tool)        { a.config.Tools = append(a.config.Tools, tool) }
+func (a *Agent) AddTool(tool t.Tool) { a.config.Tools = append(a.config.Tools, tool) }
 
 // maxContinuations caps consecutive auto-"Continue." injections triggered by a
 // truncated (length/max_tokens) response, preventing an infinite continuation spin.

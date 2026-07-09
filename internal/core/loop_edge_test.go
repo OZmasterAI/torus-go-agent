@@ -198,25 +198,56 @@ func (n *noResponseProvider) StreamComplete(_ context.Context, _ string, _ []typ
 	return ch, nil
 }
 
+// emptyStreamProvider streams no events at all before closing the channel.
+type emptyStreamProvider struct{}
+
+func (n *emptyStreamProvider) Name() string    { return "empty-stream" }
+func (n *emptyStreamProvider) ModelID() string { return "empty-stream-model" }
+func (n *emptyStreamProvider) Complete(_ context.Context, _ string, _ []typ.Message, _ []typ.Tool, _ int) (*typ.AssistantMessage, error) {
+	return nil, errors.New("complete not implemented")
+}
+func (n *emptyStreamProvider) StreamComplete(_ context.Context, _ string, _ []typ.Message, _ []typ.Tool, _ int) (<-chan typ.StreamEvent, error) {
+	ch := make(chan typ.StreamEvent)
+	go close(ch)
+	return ch, nil
+}
+
+// A stream that closes without an explicit message_stop event is handled two
+// ways: if any text was streamed, the turn is salvaged as a synthesized
+// end_turn message (no error); if nothing was streamed at all, it surfaces
+// EventAgentError instead of hanging or panicking.
 func TestLoopEdge_StreamEndWithoutResponse(t *testing.T) {
 	t.Parallel()
-	dag := helperNewTestDAG(t)
-	cfg := typ.AgentConfig{
-		Provider: typ.ProviderConfig{Name: "mock", Model: "mock-model-1", MaxTokens: 512},
-		MaxTurns: 1,
-	}
-	hooks := NewHookRegistry()
-	agent := NewAgent(cfg, nil, hooks, dag)
-	agent.SetCompaction(CompactionConfig{Mode: CompactionOff})
 
-	noResponseProvider := &noResponseProvider{}
-	agent.provider = noResponseProvider
-
-	evs := collectEvents(agent.RunStream(context.Background(), "test"))
-	errEvs := findEvents(evs, EventAgentError)
-	if len(errEvs) == 0 {
-		t.Error("expected EventAgentError when stream closes without response")
+	newAgent := func(t *testing.T, p typ.Provider) *Agent {
+		dag := helperNewTestDAG(t)
+		cfg := typ.AgentConfig{
+			Provider: typ.ProviderConfig{Name: "mock", Model: "mock-model-1", MaxTokens: 512},
+			MaxTurns: 1,
+		}
+		agent := NewAgent(cfg, nil, NewHookRegistry(), dag)
+		agent.SetCompaction(CompactionConfig{Mode: CompactionOff})
+		agent.provider = p
+		return agent
 	}
+
+	t.Run("text streamed but no stop event is salvaged without error", func(t *testing.T) {
+		t.Parallel()
+		agent := newAgent(t, &noResponseProvider{}) // streams "hello" then closes
+		evs := collectEvents(agent.RunStream(context.Background(), "test"))
+		if n := len(findEvents(evs, EventAgentError)); n != 0 {
+			t.Errorf("expected no EventAgentError when text was streamed before close, got %d", n)
+		}
+	})
+
+	t.Run("empty stream with no response surfaces an error", func(t *testing.T) {
+		t.Parallel()
+		agent := newAgent(t, &emptyStreamProvider{}) // streams nothing then closes
+		evs := collectEvents(agent.RunStream(context.Background(), "test"))
+		if len(findEvents(evs, EventAgentError)) == 0 {
+			t.Error("expected EventAgentError when stream closes with no response at all")
+		}
+	})
 }
 
 type toolCallProvider struct {

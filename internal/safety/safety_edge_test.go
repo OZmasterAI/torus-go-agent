@@ -265,7 +265,7 @@ func TestSafetyEdge_RmFlagsObfuscation(t *testing.T) {
 		{
 			name:       "rm with r and f separated",
 			cmd:        `rm -r -f /`,
-			shouldFind: false, // regex expects -rf combined
+			shouldFind: true, // order-independent detection catches -r and -f in any order
 		},
 		{
 			name:       "rm with flags: -fir",

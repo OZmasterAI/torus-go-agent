@@ -779,7 +779,7 @@ func TestContextEdge_SanitizeMessagesAppendsUserWhenEndsWithAssistant(t *testing
 			name: "ends with tool stays unchanged",
 			messages: []typ.Message{
 				{Role: typ.RoleUser, Content: []typ.ContentBlock{{Type: "text", Text: "hi"}}},
-				{Role: typ.RoleAssistant, Content: []typ.ContentBlock{{Type: "tool_use", ToolUseID: "t1", Text: "bash"}}},
+				{Role: typ.RoleAssistant, Content: []typ.ContentBlock{{Type: "tool_use", ID: "t1", Text: "bash"}}},
 				{Role: typ.RoleTool, Content: []typ.ContentBlock{{Type: "tool_result", ToolUseID: "t1", Content: "ok"}}},
 			},
 			wantLastRole: typ.RoleTool,
