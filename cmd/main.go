@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"fmt"
 	"log"
@@ -179,11 +180,32 @@ func main() {
 		oauthKey, err := providers.GetOpenAIAccessToken()
 		if err != nil {
 			fmt.Println("No API key. Starting Sign in with ChatGPT...")
-			creds, loginErr := providers.LoginOpenAI(
-				func(u string) {
-					fmt.Println("\nOpen this URL to sign in with ChatGPT:\n  " + u + "\n")
-				},
-			)
+			// Headless mode skips the loopback callback entirely — for remote/VPS
+			// boxes where the browser's localhost redirect points at the user's
+			// laptop, not the server. LoginOpenAI also auto-falls back to the same
+			// paste flow if it cannot bind the loopback port.
+			headless := os.Getenv("TORUS_OAUTH_HEADLESS") == "1"
+			onAuthURL := func(u string) {
+				fmt.Println("\nOpen this URL in a browser to sign in with ChatGPT:\n  " + u)
+				fmt.Println("\nOn a remote/VPS/headless machine the page at localhost will not load —")
+				fmt.Println("after you approve, copy the full URL from your browser's address bar and paste it here.")
+				fmt.Println()
+			}
+			onPromptCode := func() (string, error) {
+				fmt.Print("Paste the redirect URL (or code): ")
+				line, err := bufio.NewReader(os.Stdin).ReadString('\n')
+				if err != nil && strings.TrimSpace(line) == "" {
+					return "", err
+				}
+				return strings.TrimSpace(line), nil
+			}
+			var creds *providers.OpenAICredentials
+			var loginErr error
+			if headless {
+				creds, loginErr = providers.LoginOpenAIHeadless(onAuthURL, onPromptCode)
+			} else {
+				creds, loginErr = providers.LoginOpenAI(onAuthURL, onPromptCode)
+			}
 			if loginErr != nil {
 				log.Fatalf("ChatGPT OAuth failed: %v", loginErr)
 			}

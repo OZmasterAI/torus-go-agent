@@ -270,7 +270,7 @@ func TestSafetyEdge_RmFlagsObfuscation(t *testing.T) {
 		{
 			name:       "rm with flags: -fir",
 			cmd:        `rm -fir /var`,
-			shouldFind: false, // regex expects -rf pattern
+			shouldFind: true, // order-independent gate catches recursive+force on an absolute path
 		},
 		{
 			name:       "rm with flags: -riF",

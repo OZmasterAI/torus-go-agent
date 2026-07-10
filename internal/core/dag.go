@@ -50,6 +50,18 @@ func (d *DAG) Fork(branchID string) *DAG {
 	return &DAG{db: d.db, branchID: branchID, hooks: d.hooks}
 }
 
+// ForkFrom creates a new branch row continuing from fromNodeID and returns an
+// independent *DAG bound to that new branch. Unlike Branch, it NEVER mutates the
+// receiver's branchID, so a sub-agent can fork the parent's history without
+// racing the parent's active branch. The returned DAG shares the same *sql.DB.
+func (d *DAG) ForkFrom(fromNodeID, name string) (*DAG, error) {
+	id := "br_" + genID()
+	if _, err := d.db.Exec("INSERT INTO branches (id, name, head_node_id, forked_from) VALUES (?,?,?,?)", id, name, fromNodeID, fromNodeID); err != nil {
+		return nil, err
+	}
+	return d.Fork(id), nil
+}
+
 func genID() string {
 	b := make([]byte, 8)
 	_, _ = rand.Read(b)
@@ -85,6 +97,11 @@ func NewDAG(dbPath string) (*DAG, error) {
 	if err != nil {
 		return nil, fmt.Errorf("open db: %w", err)
 	}
+	// Pin the pool to a single connection so the one-shot PRAGMAs below apply to
+	// every query (a pooled *sql.DB otherwise hands out fresh connections that
+	// never ran these pragmas). SQLite writes serialize anyway, so this also
+	// avoids "database is locked" contention when sub-agents share this *sql.DB.
+	db.SetMaxOpenConns(1)
 	for _, p := range []string{"PRAGMA journal_mode=WAL", fmt.Sprintf("PRAGMA busy_timeout=%d", dagBusyTimeoutMs), "PRAGMA synchronous=NORMAL"} {
 		if _, err := db.Exec(p); err != nil {
 			db.Close()
@@ -142,20 +159,39 @@ func (d *DAG) AddNode(parentID string, role t.Role, content []t.ContentBlock, mo
 		return "", fmt.Errorf("marshal: %w", err)
 	}
 	ts := time.Now().UnixMilli()
-	_, err = d.db.Exec(
+
+	// Snapshot the active branch under the lock (branchID may be swapped
+	// concurrently by Branch/NewBranch/SwitchBranch).
+	d.mu.RLock()
+	branchID := d.branchID
+	d.mu.RUnlock()
+
+	// Insert the node and advance the branch head atomically in one transaction,
+	// so a crash/error between the two statements can never leave the head
+	// pointing at a half-written chain.
+	tx, err := d.db.Begin()
+	if err != nil {
+		return "", fmt.Errorf("begin tx: %w", err)
+	}
+	if _, err := tx.Exec(
 		"INSERT INTO nodes (id, parent_id, role, content, model, provider, timestamp, token_count) VALUES (?,?,?,?,?,?,?,?)",
 		id, parentID, string(role), string(cj), model, provider, ts, tokenCount,
-	)
-	if err != nil {
+	); err != nil {
+		tx.Rollback()
 		return "", fmt.Errorf("insert: %w", err)
 	}
-	if _, err := d.db.Exec("UPDATE branches SET head_node_id = ? WHERE id = ?", id, d.branchID); err != nil {
+	if _, err := tx.Exec("UPDATE branches SET head_node_id = ? WHERE id = ?", id, branchID); err != nil {
+		tx.Rollback()
 		return "", fmt.Errorf("update head: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		tx.Rollback()
+		return "", fmt.Errorf("commit: %w", err)
 	}
 	if d.hooks != nil {
 		d.hooks.Fire(context.Background(), HookOnNodeAdded, &HookData{
 			AgentID: "main",
-			Meta:    map[string]any{"node_id": id, "parent_id": parentID, "role": string(role), "branch": d.branchID},
+			Meta:    map[string]any{"node_id": id, "parent_id": parentID, "role": string(role), "branch": branchID},
 		})
 	}
 	return id, nil
@@ -234,30 +270,33 @@ func (d *DAG) PromptFrom(nodeID string) ([]t.Message, error) {
 }
 
 func (d *DAG) GetHead() (string, error) {
+	d.mu.RLock()
+	branchID := d.branchID
+	d.mu.RUnlock()
 	var h string
-	err := d.db.QueryRow("SELECT head_node_id FROM branches WHERE id = ?", d.branchID).Scan(&h)
+	err := d.db.QueryRow("SELECT head_node_id FROM branches WHERE id = ?", branchID).Scan(&h)
 	return h, err
 }
 
 // CurrentBranchInfo returns the active branch ID, name, head node, and ancestor count.
 func (d *DAG) CurrentBranchInfo() (branchID, branchName, headNode string, msgCount int, err error) {
+	d.mu.RLock()
 	branchID = d.branchID
-	if err = d.db.QueryRow("SELECT name, head_node_id FROM branches WHERE id = ?", d.branchID).Scan(&branchName, &headNode); err != nil {
+	d.mu.RUnlock()
+	if err = d.db.QueryRow("SELECT name, head_node_id FROM branches WHERE id = ?", branchID).Scan(&branchName, &headNode); err != nil {
 		return
 	}
 	if headNode != "" {
-		cur := headNode
-		for cur != "" {
-			var pid sql.NullString
-			if d.db.QueryRow("SELECT parent_id FROM nodes WHERE id = ?", cur).Scan(&pid) != nil {
-				break
-			}
-			msgCount++
-			if pid.Valid {
-				cur = pid.String
-			} else {
-				cur = ""
-			}
+		// Count ancestors in a single recursive CTE instead of one QueryRow per
+		// node (N+1). Mirrors the traversal in GetAncestors.
+		countQuery := `WITH RECURSIVE chain(id, depth) AS (
+			SELECT ?, 0
+			UNION ALL
+			SELECT n.parent_id, c.depth + 1 FROM nodes n JOIN chain c ON n.id = c.id WHERE n.parent_id IS NOT NULL AND n.parent_id != ''
+		)
+		SELECT COUNT(*) FROM nodes n JOIN chain c ON n.id = c.id`
+		if err = d.db.QueryRow(countQuery, headNode).Scan(&msgCount); err != nil {
+			return
 		}
 	}
 	return
@@ -266,6 +305,9 @@ func (d *DAG) CurrentBranchInfo() (branchID, branchName, headNode string, msgCou
 // RemoveNode deletes a node from the DAG and rewinds the branch head to the node's parent.
 // Used to roll back a dangling user node when an LLM call fails.
 func (d *DAG) RemoveNode(nodeID string) error {
+	d.mu.RLock()
+	branchID := d.branchID
+	d.mu.RUnlock()
 	var parentID sql.NullString
 	if err := d.db.QueryRow("SELECT parent_id FROM nodes WHERE id = ?", nodeID).Scan(&parentID); err != nil {
 		return fmt.Errorf("find node: %w", err)
@@ -282,7 +324,7 @@ func (d *DAG) RemoveNode(nodeID string) error {
 		tx.Rollback()
 		return fmt.Errorf("remove node: delete: %w", err)
 	}
-	if _, err := tx.Exec("UPDATE branches SET head_node_id = ? WHERE id = ?", newHead, d.branchID); err != nil {
+	if _, err := tx.Exec("UPDATE branches SET head_node_id = ? WHERE id = ?", newHead, branchID); err != nil {
 		tx.Rollback()
 		return fmt.Errorf("remove node: update head: %w", err)
 	}
@@ -296,7 +338,10 @@ func (d *DAG) RemoveNode(nodeID string) error {
 // ResetHead clears the current branch's head, so the next message starts a fresh
 // chain on the same branch. Existing nodes remain in the DB but won't be traversed.
 func (d *DAG) ResetHead() error {
-	_, err := d.db.Exec("UPDATE branches SET head_node_id = '' WHERE id = ?", d.branchID)
+	d.mu.RLock()
+	branchID := d.branchID
+	d.mu.RUnlock()
+	_, err := d.db.Exec("UPDATE branches SET head_node_id = '' WHERE id = ?", branchID)
 	return err
 }
 

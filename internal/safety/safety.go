@@ -46,21 +46,26 @@ var dangerPatterns = []struct {
 // flags and targets from separate commands are not mixed together.
 var cmdSep = regexp.MustCompile(`[;|&\n]+`)
 
-// isRootTarget reports whether an rm target resolves to a catastrophic path
-// (root, home, or a top-level glob).
-func isRootTarget(t string) bool {
-	switch t {
-	case "/", "~", "*", "/*", "~/", "~/*", "/.":
-		return true
-	}
-	return false
+// isDangerousTarget reports whether an rm target is broad enough to treat as
+// dangerous: any absolute path (starts with /), any home-relative path
+// (starts with ~), or anything containing a glob wildcard (*). This is a
+// superset of the old hardcoded root set (/, ~, *, /*, ~/, ~/*, /.), so no
+// previously blocked target is weakened.
+func isDangerousTarget(t string) bool {
+	return strings.HasPrefix(t, "/") || strings.HasPrefix(t, "~") || strings.Contains(t, "*")
 }
 
 // isDangerousRm parses each command segment for an rm invocation and reports
 // true when the recursive (-r/-R/--recursive) and force (-f/--force) flags are
-// both present, in any order or combined form (e.g. -rf, -fr, -r -f), and one
-// of the targets resolves to a catastrophic path. This makes detection
-// order-independent, unlike a single positional regex.
+// both present, in any order or combined form (e.g. -rf, -fr, -Rf, -r -f,
+// --recursive --force), and one of the targets is an absolute path, a home
+// path, or a glob. This makes detection order-independent, unlike a single
+// positional regex.
+//
+// NOTE: this gate is ADVISORY defense-in-depth only, not a containment
+// boundary. Token parsing cannot see through quoting, variable expansion,
+// subshells, or wrappers (e.g. xargs, find -delete), so it must never be
+// relied on as the sole protection against destructive commands.
 func isDangerousRm(cmd string) bool {
 	for _, seg := range cmdSep.Split(cmd, -1) {
 		fields := strings.Fields(seg)
@@ -76,13 +81,16 @@ func isDangerousRm(cmd string) bool {
 		}
 		recursive := false
 		force := false
-		rootTarget := false
+		dangerTarget := false
 		for _, f := range fields[idx+1:] {
 			switch {
 			case f == "--recursive":
 				recursive = true
 			case f == "--force":
 				force = true
+			case f == "--":
+				// end-of-options marker; everything after is a target,
+				// which the default case handles.
 			case strings.HasPrefix(f, "--"):
 				// unrelated long flag; ignore
 			case strings.HasPrefix(f, "-") && len(f) > 1:
@@ -96,12 +104,12 @@ func isDangerousRm(cmd string) bool {
 					}
 				}
 			default:
-				if isRootTarget(f) {
-					rootTarget = true
+				if isDangerousTarget(f) {
+					dangerTarget = true
 				}
 			}
 		}
-		if recursive && force && rootTarget {
+		if recursive && force && dangerTarget {
 			return true
 		}
 	}

@@ -6,14 +6,19 @@ package features
 import (
 	"context"
 	"fmt"
-	"log"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"torus_go_agent/internal/core"
 	"torus_go_agent/internal/tools"
 	"torus_go_agent/internal/types"
 )
+
+// subAgentIDSeq guarantees unique sub-agent IDs even when two spawns land on the
+// same clock tick (time.Now().UnixNano() can repeat on coarse-resolution clocks,
+// e.g. Windows).
+var subAgentIDSeq atomic.Uint64
 
 // Tool is a local alias to avoid repeating the full qualified name throughout this file.
 type Tool = types.Tool
@@ -89,7 +94,7 @@ func (m *SubAgentManager) SpawnWithProvider(
 		return "", fmt.Errorf("subagents: provider must not be nil")
 	}
 
-	id := fmt.Sprintf("sa_%d_%s", time.Now().UnixNano(), cfg.AgentType)
+	id := fmt.Sprintf("sa_%d_%d_%s", time.Now().UnixNano(), subAgentIDSeq.Add(1), cfg.AgentType)
 
 	tools := cfg.Tools
 	if tools == nil {
@@ -106,19 +111,15 @@ func (m *SubAgentManager) SpawnWithProvider(
 		return "", fmt.Errorf("subagents: get parent head: %w", err)
 	}
 
-	// Save parent branch, create sub-branch (Branch switches branchID), then restore.
-	parentBranchID := parentDAG.CurrentBranchID()
+	// Fork an independent DAG for the sub-agent WITHOUT mutating the parent's
+	// active branch. ForkFrom inserts the branch row and returns a DAG bound to
+	// it (shares DB, own branchID), so the parent's branchID is never touched.
 	branchName := fmt.Sprintf("subagent_%s", id)
-	subBranchID, err := parentDAG.Branch(parentHead, branchName)
+	subDAG, err := parentDAG.ForkFrom(parentHead, branchName)
 	if err != nil {
 		return "", fmt.Errorf("subagents: create branch: %w", err)
 	}
-	if err := parentDAG.SwitchBranch(parentBranchID); err != nil {
-		log.Printf("[subagents] warning: restore parent branch %q: %v", parentBranchID, err)
-	}
-
-	// Fork an independent DAG for the sub-agent (shares DB, own branchID).
-	subDAG := parentDAG.Fork(subBranchID)
+	subBranchID := subDAG.CurrentBranchID()
 
 	state := &subAgentState{result: make(chan *SubAgentResult, 1)}
 	m.running.Store(id, state)

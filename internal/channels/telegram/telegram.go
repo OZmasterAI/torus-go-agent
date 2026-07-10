@@ -43,6 +43,7 @@ type pendingMsg struct {
 type chatState struct {
 	mu      sync.Mutex
 	running bool
+	retired bool // set (under mu) when this state has been removed from the chats map
 	queue   []pendingMsg
 }
 
@@ -98,11 +99,21 @@ func startTelegram(agent *core.Agent, cfg config.TelegramConfig) error {
 			sessionKey = fmt.Sprintf("telegram:group:%d", chatID)
 		}
 
-		// Load or create chat state
-		val, _ := chats.LoadOrStore(chatID, &chatState{})
-		cs := val.(*chatState)
+		// Load or create chat state. A drained handler may retire (delete)
+		// a state concurrently; if we grabbed a retired one, retry so we
+		// never enqueue onto a state no longer reachable from the map.
+		var cs *chatState
+		for {
+			val, _ := chats.LoadOrStore(chatID, &chatState{})
+			cs = val.(*chatState)
+			cs.mu.Lock()
+			if !cs.retired {
+				break
+			}
+			cs.mu.Unlock()
+		}
 
-		cs.mu.Lock()
+		// cs.mu is held here.
 		if cs.running {
 			// Agent busy — queue the message
 			cs.queue = append(cs.queue, pendingMsg{text: text, messageID: msg.MessageID})
@@ -115,16 +126,19 @@ func startTelegram(agent *core.Agent, cfg config.TelegramConfig) error {
 		cs.mu.Unlock()
 
 		// Launch handler goroutine
-		go handleMessage(bot, agent, cs, chatID, userID, sessionKey, text, msg.MessageID)
+		go handleMessage(bot, agent, &chats, cs, chatID, userID, sessionKey, text, msg.MessageID)
 	}
 
 	return nil
 }
 
 // handleMessage runs agent.Run for one message, then drains the queue.
+// When the queue is confirmed empty it retires the chat's state and deletes it
+// from the chats map, so memory does not grow with every unique chat seen.
 func handleMessage(
 	bot *tgbotapi.BotAPI,
 	agent *core.Agent,
+	chats *sync.Map,
 	cs *chatState,
 	chatID int64,
 	_ int64, // userID — reserved for future per-user session isolation
@@ -138,6 +152,13 @@ func handleMessage(
 			cs.mu.Lock()
 			if len(cs.queue) == 0 {
 				cs.running = false
+				// Queue drained and we hold cs.mu: retire this state and
+				// remove it from the map. Marking retired before unlocking
+				// means any dispatcher that already loaded this pointer will
+				// observe retired==true under the lock and re-load a fresh
+				// state, so no message can be enqueued onto a dead state.
+				cs.retired = true
+				chats.Delete(chatID)
 				cs.mu.Unlock()
 				return
 			}
