@@ -121,8 +121,10 @@ func ensureFreshOpenAI(creds *OpenAICredentials) *OpenAICredentials {
 // ── Login flow ────────────────────────────────────────────────────────────────
 
 // LoginOpenAI runs the "Sign in with ChatGPT" OAuth PKCE flow using a local
-// loopback callback server. onAuthURL is called with the URL to open.
-func LoginOpenAI(onAuthURL func(string)) (*OpenAICredentials, error) {
+// loopback callback server. onAuthURL is called with the URL to open. If no
+// loopback port can bind (e.g. on a locked-down box), it falls back to the
+// headless paste flow, prompting for the code via onPromptCode.
+func LoginOpenAI(onAuthURL func(string), onPromptCode func() (string, error)) (*OpenAICredentials, error) {
 	verifier, challenge := generatePKCE()
 
 	stateBytes := make([]byte, 32)
@@ -144,7 +146,8 @@ func LoginOpenAI(onAuthURL func(string)) (*OpenAICredentials, error) {
 		lastErr = err
 	}
 	if listener == nil {
-		return nil, fmt.Errorf("could not bind loopback callback port %v: %w", openaiCallbackPorts, lastErr)
+		log.Printf("[openai-oauth] loopback callback unavailable on %v (%v); falling back to headless paste flow", openaiCallbackPorts, lastErr)
+		return LoginOpenAIHeadless(onAuthURL, onPromptCode)
 	}
 	redirectURI := fmt.Sprintf("http://localhost:%d%s", port, openaiCallbackPath)
 
@@ -195,6 +198,74 @@ func LoginOpenAI(onAuthURL func(string)) (*OpenAICredentials, error) {
 	return exchangeOpenAICode(res.code, verifier, redirectURI)
 }
 
+// parseOpenAIRedirect extracts the authorization code and state from whatever
+// the user pasted after approving the ChatGPT consent screen. It accepts:
+//   - a full redirect URL (http://localhost:1455/auth/callback?code=XXX&state=YYY),
+//   - a "code#state" string,
+//   - a bare code (no separators) -> code=pasted, state="".
+// Whitespace is trimmed so pasting the whole address bar is robust.
+func parseOpenAIRedirect(pasted string) (code, state string) {
+	pasted = strings.TrimSpace(pasted)
+	if pasted == "" {
+		return "", ""
+	}
+	// Full redirect URL pasted from the browser address bar.
+	if strings.Contains(pasted, "://") || strings.Contains(pasted, "?") {
+		if u, err := url.Parse(pasted); err == nil {
+			q := u.Query()
+			if c := q.Get("code"); c != "" {
+				return c, q.Get("state")
+			}
+		}
+	}
+	// "code#state" form.
+	if strings.Contains(pasted, "#") {
+		parts := strings.SplitN(pasted, "#", 2)
+		return strings.TrimSpace(parts[0]), strings.TrimSpace(parts[1])
+	}
+	// Bare code, no separators.
+	return pasted, ""
+}
+
+// LoginOpenAIHeadless runs the "Sign in with ChatGPT" OAuth PKCE flow WITHOUT a
+// loopback callback server. This is for remote/VPS/headless machines where the
+// browser lands on a localhost URL that points at the user's laptop, not the
+// server. onAuthURL is called with the URL to open; after approving, the user
+// copies the full redirect URL (or the code) from the browser address bar and
+// pastes it back via onPromptCode. No server is started — the code is exchanged
+// with a fixed redirect_uri that only has to match the authorize request.
+func LoginOpenAIHeadless(onAuthURL func(string), onPromptCode func() (string, error)) (*OpenAICredentials, error) {
+	verifier, challenge := generatePKCE()
+
+	stateBytes := make([]byte, 32)
+	if _, err := rand.Read(stateBytes); err != nil {
+		return nil, fmt.Errorf("failed to generate OAuth state: %w", err)
+	}
+	expectedState := base64URLEncode(stateBytes)
+
+	redirectURI := "http://localhost:1455" + openaiCallbackPath
+
+	onAuthURL(buildOpenAIAuthorizeURL(challenge, expectedState, redirectURI))
+
+	pasted, err := onPromptCode()
+	if err != nil {
+		return nil, fmt.Errorf("failed to read authorization code from user: %w", err)
+	}
+
+	code, state := parseOpenAIRedirect(pasted)
+	if code == "" {
+		return nil, fmt.Errorf("no authorization code received")
+	}
+	if state != "" && state != expectedState {
+		return nil, fmt.Errorf("OAuth state mismatch: possible CSRF (got %q, want %q)", state, expectedState)
+	}
+	if state == "" {
+		log.Printf("[openai-oauth] warning: bare code pasted; CSRF/state check skipped")
+	}
+
+	return exchangeOpenAICode(code, verifier, redirectURI)
+}
+
 func buildOpenAIAuthorizeURL(challenge, state, redirectURI string) string {
 	params := url.Values{
 		"response_type":              {"code"},
@@ -237,7 +308,9 @@ func RefreshOpenAIToken(refreshToken string) (*OpenAICredentials, error) {
 }
 
 func postOpenAIToken(form url.Values) (*OpenAICredentials, error) {
-	resp, err := http.PostForm(openaiTokenURL, form)
+	// Uses the shared oauthHTTPClient (oauth.go) so a hung token endpoint
+	// cannot stall the auth-refresh path indefinitely.
+	resp, err := oauthHTTPClient.PostForm(openaiTokenURL, form)
 	if err != nil {
 		return nil, fmt.Errorf("token endpoint unreachable: %w", err)
 	}

@@ -12,12 +12,17 @@ import (
 	"torus_go_agent/internal/core"
 )
 
+// maxSpans bounds the span buffer. Once full, the oldest span is overwritten
+// (ring-buffer style) so memory stays constant in long-lived processes.
+const maxSpans = 1000
+
 // TelemetryCollector collects timing and usage metrics from hook events.
 // All methods are goroutine-safe.
 type TelemetryCollector struct {
-	mu      sync.Mutex
-	spans   []Span
-	metrics Metrics
+	mu       sync.Mutex
+	spans    []Span // bounded ring buffer of at most maxSpans entries
+	spanNext int    // when len(spans) == maxSpans: index of the oldest span (next overwrite slot)
+	metrics  Metrics
 }
 
 // Span represents a timed operation.
@@ -55,12 +60,27 @@ func (tc *TelemetryCollector) GetMetrics() Metrics {
 	return tc.metrics
 }
 
-// GetSpans returns a copy of all recorded spans.
+// appendSpanLocked records a span in the bounded ring buffer, overwriting the
+// oldest entry once maxSpans is reached. Caller must hold tc.mu.
+func (tc *TelemetryCollector) appendSpanLocked(s Span) {
+	if len(tc.spans) < maxSpans {
+		tc.spans = append(tc.spans, s)
+		return
+	}
+	tc.spans[tc.spanNext] = s
+	tc.spanNext = (tc.spanNext + 1) % maxSpans
+}
+
+// GetSpans returns a copy of the recorded spans (at most maxSpans, oldest first).
 func (tc *TelemetryCollector) GetSpans() []Span {
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
-	out := make([]Span, len(tc.spans))
-	copy(out, tc.spans)
+	out := make([]Span, 0, len(tc.spans))
+	if len(tc.spans) < maxSpans {
+		return append(out, tc.spans...)
+	}
+	out = append(out, tc.spans[tc.spanNext:]...)
+	out = append(out, tc.spans[:tc.spanNext]...)
 	return out
 }
 
@@ -100,7 +120,7 @@ func (tc *TelemetryCollector) RegisterHooks(hooks *core.HookRegistry) {
 		if start, ok := d.Meta["_telem_llm_start"].(time.Time); ok {
 			dur := time.Since(start)
 			tc.metrics.TotalLLMTime += dur
-			tc.spans = append(tc.spans, Span{Name: "llm.call", Start: start, Duration: dur, Meta: map[string]any{
+			tc.appendSpanLocked(Span{Name: "llm.call", Start: start, Duration: dur, Meta: map[string]any{
 				"tokens_in": d.TokensIn, "tokens_out": d.TokensOut,
 			}})
 		}
@@ -123,7 +143,7 @@ func (tc *TelemetryCollector) RegisterHooks(hooks *core.HookRegistry) {
 		if start, ok := d.Meta["_telem_tool_start"].(time.Time); ok {
 			dur := time.Since(start)
 			tc.metrics.TotalToolTime += dur
-			tc.spans = append(tc.spans, Span{Name: "tool." + d.ToolName, Start: start, Duration: dur})
+			tc.appendSpanLocked(Span{Name: "tool." + d.ToolName, Start: start, Duration: dur})
 		}
 		return nil
 	}, 1)

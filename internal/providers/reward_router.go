@@ -14,13 +14,19 @@ import (
 // RewardRouter wraps a Router and asynchronously scores responses using
 // a reward model to learn per-model quality weights over time.
 // Enable with NewRewardRouter; disable by using the Router directly.
+// maxConcurrentScores caps the number of in-flight reward-scoring goroutines.
+// When all slots are busy, scoring for a response is dropped (best-effort)
+// rather than blocking the response path or spawning unbounded goroutines.
+const maxConcurrentScores = 4
+
 type RewardRouter struct {
 	router      *Router
 	rewardModel *OpenRouterProvider // the reward model provider (nvidia NIM endpoint)
 	scores      map[string]*modelStats
 	mu          sync.RWMutex
 	totalScored int
-	updateEvery int // recalculate weights every N scored responses (default 10)
+	updateEvery int           // recalculate weights every N scored responses (default 10)
+	scoreSem    chan struct{} // semaphore bounding concurrent scoring goroutines
 	ctx         context.Context
 	cancel      context.CancelFunc
 }
@@ -43,6 +49,7 @@ func NewRewardRouter(router *Router, apiKey string) *RewardRouter {
 		rewardModel: reward,
 		scores:      scores,
 		updateEvery: 10,
+		scoreSem:    make(chan struct{}, maxConcurrentScores),
 		ctx:         ctx,
 		cancel:      cancel,
 	}
@@ -73,9 +80,9 @@ func (rr *RewardRouter) Complete(ctx context.Context, systemPrompt string, messa
 	// Get which model actually served this
 	modelKey := resp.Model
 
-	// Async score -- fire and forget
+	// Async score -- fire and forget, bounded by scoreSem
 	if userPrompt != "" && assistantText != "" {
-		go rr.scoreAndUpdate(userPrompt, assistantText, modelKey)
+		rr.tryScoreAsync(userPrompt, assistantText, modelKey)
 	}
 
 	return resp, nil
@@ -101,13 +108,28 @@ func (rr *RewardRouter) StreamComplete(ctx context.Context, systemPrompt string,
 				assistantText := extractText(ev.Response)
 				modelKey := ev.Response.Model
 				if assistantText != "" {
-					go rr.scoreAndUpdate(userPrompt, assistantText, modelKey)
+					rr.tryScoreAsync(userPrompt, assistantText, modelKey)
 				}
 			}
 		}
 	}()
 
 	return wrapped, nil
+}
+
+// tryScoreAsync launches scoreAndUpdate in a goroutine, bounded by scoreSem
+// (at most maxConcurrentScores in flight). If all slots are busy, scoring for
+// this response is dropped non-blockingly -- the response path never waits.
+func (rr *RewardRouter) tryScoreAsync(userPrompt, assistantText, modelKey string) {
+	select {
+	case rr.scoreSem <- struct{}{}:
+		go func() {
+			defer func() { <-rr.scoreSem }()
+			rr.scoreAndUpdate(userPrompt, assistantText, modelKey)
+		}()
+	default:
+		// Scoring capacity saturated -- skip (reward scoring is best-effort).
+	}
 }
 
 // scoreAndUpdate calls the reward model to score a response, then updates

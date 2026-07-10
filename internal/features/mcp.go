@@ -416,6 +416,53 @@ func (c *MCPClient) GetToolSchema(name string) (*MCPTool, error) {
 	return nil, fmt.Errorf("tool %q not found in tools/list response", name)
 }
 
+// hydrateAllSchemas fetches tools/list ONCE per server and fills in the
+// InputSchema for every cached tool still missing one. This replaces the
+// O(N^2) pattern where AsTools called GetToolSchema per tool and each call
+// issued its own full tools/list round-trip. Errors are logged and skipped;
+// tools whose schema could not be hydrated keep InputSchema == nil and fall
+// back to the permissive empty-object schema in AsTools.
+func (c *MCPClient) hydrateAllSchemas() {
+	// Snapshot state under the read lock; do network I/O outside it.
+	c.mu.RLock()
+	needed := false
+	for _, t := range c.tools {
+		if t.InputSchema == nil {
+			needed = true
+			break
+		}
+	}
+	srvs := make([]*MCPServer, 0, len(c.servers))
+	for _, s := range c.servers {
+		srvs = append(srvs, s)
+	}
+	c.mu.RUnlock()
+
+	if !needed {
+		return
+	}
+
+	for _, srv := range srvs {
+		raw, err := srv.call("tools/list", nil)
+		if err != nil {
+			log.Printf("[mcp] warning: tools/list for schema hydration on %q: %v", srv.Name, err)
+			continue
+		}
+		var result mcpToolsListResult
+		if err := json.Unmarshal(raw, &result); err != nil {
+			log.Printf("[mcp] warning: parse tools/list from %q for schema hydration: %v", srv.Name, err)
+			continue
+		}
+		c.mu.Lock()
+		for _, def := range result.Tools {
+			if tool, ok := c.tools[def.Name]; ok && tool.InputSchema == nil && tool.ServerName == srv.Name {
+				tool.InputSchema = def.InputSchema
+			}
+		}
+		c.mu.Unlock()
+	}
+}
+
 // CallTool sends a tools/call JSON-RPC request to the appropriate server and
 // returns the result as a *types.ToolResult.
 func (c *MCPClient) CallTool(name string, args map[string]any) (*types.ToolResult, error) {
@@ -478,10 +525,15 @@ func (c *MCPClient) CallTool(name string, args map[string]any) (*types.ToolResul
 // AsTools converts all MCP tools to types.Tool format so they can be registered
 // directly in AgentConfig.Tools. The Execute function calls CallTool.
 //
-// In progressive mode, GetToolSchema is called per tool to ensure InputSchema
-// is populated before constructing the types.Tool (the agent needs the schema
-// to describe the tool to the LLM).
+// In progressive mode, hydrateAllSchemas is called once to warm the schema
+// cache for all tools with a single tools/list round-trip per server (the
+// agent needs the schema to describe the tool to the LLM); the loop below
+// then reads every schema straight from the cache.
 func (c *MCPClient) AsTools() []types.Tool {
+	if c.progressive {
+		c.hydrateAllSchemas()
+	}
+
 	c.mu.RLock()
 	names := make([]string, 0, len(c.tools))
 	for n := range c.tools {
@@ -494,19 +546,13 @@ func (c *MCPClient) AsTools() []types.Tool {
 		toolName := name // capture for closure
 
 		var schema map[string]any
-		if c.progressive {
-			// Fetch (and cache) the full schema now, before building the tool.
-			full, err := c.GetToolSchema(toolName)
-			if err == nil && full != nil {
-				schema = full.InputSchema
-			}
-		} else {
-			c.mu.RLock()
-			if t, ok := c.tools[toolName]; ok {
-				schema = t.InputSchema
-			}
-			c.mu.RUnlock()
+		var desc string
+		c.mu.RLock()
+		if t, ok := c.tools[toolName]; ok {
+			schema = t.InputSchema
+			desc = t.Description
 		}
+		c.mu.RUnlock()
 
 		if schema == nil {
 			schema = map[string]any{
@@ -514,10 +560,6 @@ func (c *MCPClient) AsTools() []types.Tool {
 				"properties": map[string]any{},
 			}
 		}
-
-		c.mu.RLock()
-		desc := c.tools[toolName].Description
-		c.mu.RUnlock()
 
 		out = append(out, types.Tool{
 			Name:        toolName,

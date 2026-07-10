@@ -26,6 +26,11 @@ const (
 	tokenRefreshBuffer = 5 * 60 * 1000 // 5 minutes in milliseconds
 )
 
+// oauthHTTPClient is used for token-endpoint calls (exchange/refresh). Unlike
+// the streaming clients, these are short request/response round-trips, so a
+// hard timeout prevents a hung token endpoint from stalling auth refresh.
+var oauthHTTPClient = &http.Client{Timeout: 30 * time.Second}
+
 // OAuthCredentials holds the OAuth tokens.
 type OAuthCredentials struct {
 	Access    string `json:"access"`
@@ -171,7 +176,7 @@ func postTokenRequest(payload map[string]string) (*OAuthCredentials, error) {
 		return nil, fmt.Errorf("failed to marshal token request: %w", err)
 	}
 
-	resp, err := http.Post(oauthTokenURL, "application/json", strings.NewReader(string(body)))
+	resp, err := oauthHTTPClient.Post(oauthTokenURL, "application/json", strings.NewReader(string(body)))
 	if err != nil {
 		return nil, fmt.Errorf("token endpoint unreachable: %w", err)
 	}

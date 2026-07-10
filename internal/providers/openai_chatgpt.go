@@ -262,11 +262,11 @@ func (p *OpenAIChatGPTProvider) StreamComplete(ctx context.Context, systemPrompt
 		return nil, apiErr
 	}
 
-	ch := make(chan t.StreamEvent)
+	ch := make(chan t.StreamEvent, 32)
 	go func() {
 		defer resp.Body.Close()
 		defer close(ch)
-		p.parseResponsesSSE(resp.Body, ch)
+		p.parseResponsesSSE(ctx, resp.Body, ch)
 	}()
 	return ch, nil
 }
@@ -293,7 +293,19 @@ func lastChatgptTool(m map[string]*chatgptToolAcc, order []string) *chatgptToolA
 }
 
 // parseResponsesSSE converts the response.* SSE event stream into StreamEvents.
-func (p *OpenAIChatGPTProvider) parseResponsesSSE(r io.Reader, ch chan<- t.StreamEvent) {
+func (p *OpenAIChatGPTProvider) parseResponsesSSE(ctx context.Context, r io.Reader, ch chan<- t.StreamEvent) {
+	// send delivers an event unless the request context is cancelled; a false
+	// return means the consumer is gone and parsing should stop (the caller's
+	// deferred resp.Body.Close/close(ch) handle cleanup).
+	send := func(ev t.StreamEvent) bool {
+		select {
+		case ch <- ev:
+			return true
+		case <-ctx.Done():
+			return false
+		}
+	}
+
 	scanner := bufio.NewScanner(r)
 	scanner.Buffer(make([]byte, 0, 64*1024), 8*1024*1024)
 
@@ -350,13 +362,17 @@ func (p *OpenAIChatGPTProvider) parseResponsesSSE(r io.Reader, ch chan<- t.Strea
 		case "response.output_text.delta":
 			if ev.Delta != "" {
 				textBuf.WriteString(ev.Delta)
-				ch <- t.StreamEvent{Type: t.EventTextDelta, Text: ev.Delta, ContentIndex: blockIndex}
+				if !send(t.StreamEvent{Type: t.EventTextDelta, Text: ev.Delta, ContentIndex: blockIndex}) {
+					return
+				}
 			}
 		case "response.reasoning_summary_text.delta", "response.reasoning_text.delta":
 			if ev.Delta != "" {
 				reasoningBuf.WriteString(ev.Delta)
 				// Consumers read thinking text from .Text (see loop.go EventThinkingDelta).
-				ch <- t.StreamEvent{Type: t.EventThinkingDelta, Text: ev.Delta, ContentIndex: blockIndex}
+				if !send(t.StreamEvent{Type: t.EventThinkingDelta, Text: ev.Delta, ContentIndex: blockIndex}) {
+					return
+				}
 			}
 		case "response.output_item.added":
 			if ev.Item.Type == "function_call" {
@@ -368,22 +384,30 @@ func (p *OpenAIChatGPTProvider) parseResponsesSSE(r io.Reader, ch chan<- t.Strea
 				ta := &chatgptToolAcc{id: id, name: ev.Item.Name, index: blockIndex}
 				toolByID[id] = ta
 				toolOrder = append(toolOrder, id)
-				ch <- t.StreamEvent{Type: t.EventToolUseStart, ID: id, Name: ev.Item.Name, ContentIndex: blockIndex}
+				if !send(t.StreamEvent{Type: t.EventToolUseStart, ID: id, Name: ev.Item.Name, ContentIndex: blockIndex}) {
+					return
+				}
 			}
 		case "response.function_call_arguments.delta":
 			if ta := lastChatgptTool(toolByID, toolOrder); ta != nil && ev.Delta != "" {
 				ta.args.WriteString(ev.Delta)
-				ch <- t.StreamEvent{Type: t.EventInputDelta, InputDelta: ev.Delta, ContentIndex: ta.index}
+				if !send(t.StreamEvent{Type: t.EventInputDelta, InputDelta: ev.Delta, ContentIndex: ta.index}) {
+					return
+				}
 			}
 		case "response.function_call_arguments.done":
 			if ta := lastChatgptTool(toolByID, toolOrder); ta != nil {
 				if ta.args.Len() == 0 && ev.Arguments != "" {
 					ta.args.WriteString(ev.Arguments)
-					ch <- t.StreamEvent{Type: t.EventInputDelta, InputDelta: ev.Arguments, ContentIndex: ta.index}
+					if !send(t.StreamEvent{Type: t.EventInputDelta, InputDelta: ev.Arguments, ContentIndex: ta.index}) {
+						return
+					}
 				}
 				if !ta.stopped {
 					ta.stopped = true
-					ch <- t.StreamEvent{Type: t.EventContentBlockStop, ContentIndex: ta.index}
+					if !send(t.StreamEvent{Type: t.EventContentBlockStop, ContentIndex: ta.index}) {
+						return
+					}
 				}
 			}
 		case "response.output_item.done":
@@ -398,13 +422,17 @@ func (p *OpenAIChatGPTProvider) parseResponsesSSE(r io.Reader, ch chan<- t.Strea
 					}
 					if ta.args.Len() == 0 && ev.Item.Arguments != "" {
 						ta.args.WriteString(ev.Item.Arguments)
-						ch <- t.StreamEvent{Type: t.EventInputDelta, InputDelta: ev.Item.Arguments, ContentIndex: ta.index}
+						if !send(t.StreamEvent{Type: t.EventInputDelta, InputDelta: ev.Item.Arguments, ContentIndex: ta.index}) {
+							return
+						}
 					}
 					// Finalize even if function_call_arguments.done never fired
 					// (e.g. a zero-argument call), so eager dispatch still triggers.
 					if !ta.stopped {
 						ta.stopped = true
-						ch <- t.StreamEvent{Type: t.EventContentBlockStop, ContentIndex: ta.index}
+						if !send(t.StreamEvent{Type: t.EventContentBlockStop, ContentIndex: ta.index}) {
+							return
+						}
 					}
 				}
 			}
@@ -421,15 +449,15 @@ func (p *OpenAIChatGPTProvider) parseResponsesSSE(r io.Reader, ch chan<- t.Strea
 				}
 			}
 		case "response.failed":
-			ch <- t.StreamEvent{Type: t.EventError, Error: &t.TransientError{Err: fmt.Errorf("openai chatgpt response failed")}}
+			send(t.StreamEvent{Type: t.EventError, Error: &t.TransientError{Err: fmt.Errorf("openai chatgpt response failed")}})
 			return
 		case "error":
-			ch <- t.StreamEvent{Type: t.EventError, Error: &t.TransientError{Err: fmt.Errorf("openai chatgpt stream error: %s", string(ev.Error))}}
+			send(t.StreamEvent{Type: t.EventError, Error: &t.TransientError{Err: fmt.Errorf("openai chatgpt stream error: %s", string(ev.Error))}})
 			return
 		}
 	}
 	if err := scanner.Err(); err != nil {
-		ch <- t.StreamEvent{Type: t.EventError, Error: &t.TransientError{Err: fmt.Errorf("stream read: %w", err)}}
+		send(t.StreamEvent{Type: t.EventError, Error: &t.TransientError{Err: fmt.Errorf("stream read: %w", err)}})
 		return
 	}
 
@@ -461,12 +489,14 @@ func (p *OpenAIChatGPTProvider) parseResponsesSSE(r io.Reader, ch chan<- t.Strea
 	}
 
 	if !sawTerminal && len(blocks) == 0 {
-		ch <- t.StreamEvent{Type: t.EventError, Error: &t.TransientError{Err: fmt.Errorf("openai chatgpt: stream closed before completion")}}
+		send(t.StreamEvent{Type: t.EventError, Error: &t.TransientError{Err: fmt.Errorf("openai chatgpt: stream closed before completion")}})
 		return
 	}
 
 	if usage != nil {
-		ch <- t.StreamEvent{Type: t.EventUsage, Usage: usage}
+		if !send(t.StreamEvent{Type: t.EventUsage, Usage: usage}) {
+			return
+		}
 	}
 	resp := &t.AssistantMessage{
 		Message:    t.Message{Role: t.RoleAssistant, Content: blocks},
@@ -476,7 +506,7 @@ func (p *OpenAIChatGPTProvider) parseResponsesSSE(r io.Reader, ch chan<- t.Strea
 	if usage != nil {
 		resp.Usage = *usage
 	}
-	ch <- t.StreamEvent{Type: t.EventMessageStop, StopReason: stopReason, Response: resp}
+	send(t.StreamEvent{Type: t.EventMessageStop, StopReason: stopReason, Response: resp})
 }
 
 // newUUIDv4 generates a random RFC-4122 v4 UUID for the session-id header.

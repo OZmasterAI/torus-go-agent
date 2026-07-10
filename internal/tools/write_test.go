@@ -319,17 +319,17 @@ func TestWriteTool_FilePermissions(t *testing.T) {
 		t.Fatalf("Expected success, got error: %s", result.Content)
 	}
 
-	// Verify file has correct permissions (0644)
+	// Verify file has correct permissions (0600 — agent-written files may hold secrets)
 	info, err := os.Stat(filePath)
 	if err != nil {
 		t.Fatalf("Failed to stat file: %v", err)
 	}
 
-	expectedPerm := os.FileMode(0644)
+	expectedPerm := os.FileMode(0600)
 	actualPerm := info.Mode() & os.ModePerm
 
 	if actualPerm != expectedPerm {
-		t.Errorf("Expected file permission 0644, got %o", actualPerm)
+		t.Errorf("Expected file permission 0600, got %o", actualPerm)
 	}
 }
 
