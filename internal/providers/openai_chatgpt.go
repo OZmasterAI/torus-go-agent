@@ -80,16 +80,26 @@ func (p *OpenAIChatGPTProvider) auth() (token, account string) {
 // ── Responses API request types ───────────────────────────────────────────────
 
 type responsesRequest struct {
-	Model             string          `json:"model"`
-	Instructions      string          `json:"instructions"`
-	Input             []responsesItem `json:"input"`
-	Tools             []responsesTool `json:"tools,omitempty"`
-	ToolChoice        string          `json:"tool_choice,omitempty"`
-	ParallelToolCalls bool            `json:"parallel_tool_calls"`
-	Store             bool            `json:"store"`
-	Stream            bool            `json:"stream"`
-	Include           []string        `json:"include,omitempty"`
-	MaxOutputTokens   int             `json:"max_output_tokens,omitempty"`
+	Model             string              `json:"model"`
+	Instructions      string              `json:"instructions"`
+	Input             []responsesItem     `json:"input"`
+	Tools             []responsesTool     `json:"tools,omitempty"`
+	ToolChoice        string              `json:"tool_choice,omitempty"`
+	ParallelToolCalls bool                `json:"parallel_tool_calls"`
+	Reasoning         *responsesReasoning `json:"reasoning,omitempty"`
+	Store             bool                `json:"store"`
+	Stream            bool                `json:"stream"`
+	Include           []string            `json:"include,omitempty"`
+	// NOTE: the ChatGPT/Codex backend rejects max_output_tokens / temperature /
+	// top_p / metadata etc. with 400 "unsupported parameter" — only the fields
+	// above are on its allowlist.
+}
+
+// responsesReasoning mirrors Codex's reasoning object. It is required for
+// reasoning models (gpt-5 / gpt-5-codex) on the ChatGPT backend.
+type responsesReasoning struct {
+	Effort  string `json:"effort,omitempty"`
+	Summary string `json:"summary,omitempty"`
 }
 
 type responsesItem struct {
@@ -228,11 +238,9 @@ func (p *OpenAIChatGPTProvider) Complete(ctx context.Context, systemPrompt strin
 
 // StreamComplete streams a Responses-API request through the ChatGPT backend.
 func (p *OpenAIChatGPTProvider) StreamComplete(ctx context.Context, systemPrompt string, messages []t.Message, tools []t.Tool, maxTokens int) (<-chan t.StreamEvent, error) {
-	// Mirror gemini.go / anthropic.go: a non-positive maxTokens means "unset",
-	// so fall back to a sane default rather than sending 0 (or omitting the cap).
-	if maxTokens <= 0 {
-		maxTokens = 8192
-	}
+	// The ChatGPT/Codex backend does NOT accept an output-token cap
+	// (max_output_tokens) — sending it 400s — so maxTokens is intentionally unused.
+	_ = maxTokens
 	instructions := systemPrompt
 	if strings.TrimSpace(instructions) == "" {
 		instructions = "You are a helpful coding assistant."
@@ -243,11 +251,11 @@ func (p *OpenAIChatGPTProvider) StreamComplete(ctx context.Context, systemPrompt
 		Input:             buildResponsesInput(messages),
 		Tools:             buildResponsesTools(tools),
 		ToolChoice:        "auto",
-		ParallelToolCalls: false,
+		ParallelToolCalls: true,
+		Reasoning:         &responsesReasoning{Effort: "medium", Summary: "auto"},
 		Store:             false,
 		Stream:            true,
 		Include:           []string{"reasoning.encrypted_content"},
-		MaxOutputTokens:   maxTokens,
 	}
 	body, err := json.Marshal(reqBody)
 	if err != nil {

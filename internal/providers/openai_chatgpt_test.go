@@ -76,50 +76,54 @@ func joinTextDeltas(events []tp.StreamEvent) string {
 // minimal well-formed terminal frame reused across tests.
 const sseCompleted = "data: {\"type\":\"response.completed\",\"response\":{\"status\":\"completed\",\"usage\":{\"total_tokens\":3}}}\n\n"
 
-// ── Finding #1: max_output_tokens is populated (and defaulted for maxTokens<=0) ──
+// ── ChatGPT/Codex backend request schema: only allowlisted params ──
+// The backend 400s on max_output_tokens / temperature / top_p / metadata etc.,
+// and it REQUIRES a reasoning object for gpt-5 / gpt-5-codex. Verify our body.
 
-func TestOpenAIChatGPTMaxOutputTokens(t *testing.T) {
+func TestOpenAIChatGPTRequestSchema(t *testing.T) {
 	// t.Setenv forbids t.Parallel; use a temp HOME so no real credential file is
 	// found and auth() deterministically falls back to the constructor token.
 	t.Setenv("HOME", t.TempDir())
 
-	tests := []struct {
-		name      string
-		maxTokens int
-		want      float64 // JSON numbers decode to float64
-	}{
-		{"positive value is forwarded", 4096, 4096},
-		{"large value is forwarded", 200000, 200000},
-		{"zero defaults to 8192", 0, 8192},
-		{"negative defaults to 8192", -1, 8192},
+	mt := &mockChatGPTTransport{statusCode: 200, body: sseCompleted}
+	p := NewOpenAIChatGPTProvider("test-token", "test-account", "gpt-5")
+	p.client = &http.Client{Transport: mt}
+
+	msgs := []tp.Message{{Role: tp.RoleUser, Content: []tp.ContentBlock{{Type: "text", Text: "hi"}}}}
+	ch, err := p.StreamComplete(context.Background(), "system", msgs, nil, 4096)
+	if err != nil {
+		t.Fatalf("StreamComplete returned error: %v", err)
+	}
+	for range ch { // drain so the request completes
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			mt := &mockChatGPTTransport{statusCode: 200, body: sseCompleted}
-			p := NewOpenAIChatGPTProvider("test-token", "test-account", "gpt-5")
-			p.client = &http.Client{Transport: mt}
+	var body map[string]any
+	if err := json.Unmarshal(mt.capturedBody, &body); err != nil {
+		t.Fatalf("captured body is not valid JSON: %v (body=%q)", err, string(mt.capturedBody))
+	}
 
-			msgs := []tp.Message{{Role: tp.RoleUser, Content: []tp.ContentBlock{{Type: "text", Text: "hi"}}}}
-			ch, err := p.StreamComplete(context.Background(), "system", msgs, nil, tt.maxTokens)
-			if err != nil {
-				t.Fatalf("StreamComplete returned error: %v", err)
-			}
-			for range ch { // drain so the request completes
-			}
+	// Params the ChatGPT/Codex backend rejects with 400 "unsupported parameter".
+	for _, banned := range []string{"max_output_tokens", "max_tokens", "temperature", "top_p", "metadata"} {
+		if _, ok := body[banned]; ok {
+			t.Errorf("request body must NOT contain %q (ChatGPT backend 400s on it): %s", banned, string(mt.capturedBody))
+		}
+	}
 
-			var body map[string]any
-			if err := json.Unmarshal(mt.capturedBody, &body); err != nil {
-				t.Fatalf("captured body is not valid JSON: %v (body=%q)", err, string(mt.capturedBody))
-			}
-			got, ok := body["max_output_tokens"]
-			if !ok {
-				t.Fatalf("max_output_tokens missing from request body: %s", string(mt.capturedBody))
-			}
-			if got != tt.want {
-				t.Errorf("max_output_tokens = %v, want %v", got, tt.want)
-			}
-		})
+	// reasoning is required for gpt-5 / gpt-5-codex.
+	reasoning, ok := body["reasoning"].(map[string]any)
+	if !ok {
+		t.Fatalf("reasoning object missing from request body: %s", string(mt.capturedBody))
+	}
+	if reasoning["effort"] == nil || reasoning["summary"] == nil {
+		t.Errorf("reasoning must set effort+summary, got %v", reasoning)
+	}
+
+	// store must be present and false; stream must be true.
+	if s, ok := body["store"].(bool); !ok || s {
+		t.Errorf("store must be present and false, got %v", body["store"])
+	}
+	if s, ok := body["stream"].(bool); !ok || !s {
+		t.Errorf("stream must be true, got %v", body["stream"])
 	}
 }
 
