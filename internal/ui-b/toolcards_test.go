@@ -10,6 +10,7 @@ import (
 // ── Verbose (level 1) — original tests updated for 3-arg Render ──────────────
 
 func TestToolCardRegistryBash(t *testing.T) {
+	t.Parallel()
 	reg := NewToolCardRegistry(DefaultTheme())
 	card := reg.Render(&ToolEvent{Name: "bash", Args: map[string]any{"command": "ls -la"}}, 80, shared.VerbosityVerbose)
 	if !strings.Contains(card, "bash") {
@@ -21,6 +22,7 @@ func TestToolCardRegistryBash(t *testing.T) {
 }
 
 func TestToolCardRegistryEdit(t *testing.T) {
+	t.Parallel()
 	reg := NewToolCardRegistry(DefaultTheme())
 	card := reg.Render(&ToolEvent{
 		Name:     "edit",
@@ -36,6 +38,7 @@ func TestToolCardRegistryEdit(t *testing.T) {
 }
 
 func TestToolCardRegistryWrite(t *testing.T) {
+	t.Parallel()
 	reg := NewToolCardRegistry(DefaultTheme())
 	card := reg.Render(&ToolEvent{
 		Name:     "write",
@@ -51,6 +54,7 @@ func TestToolCardRegistryWrite(t *testing.T) {
 }
 
 func TestToolCardRegistryRead(t *testing.T) {
+	t.Parallel()
 	reg := NewToolCardRegistry(DefaultTheme())
 	card := reg.Render(&ToolEvent{
 		Name:     "read",
@@ -62,6 +66,7 @@ func TestToolCardRegistryRead(t *testing.T) {
 }
 
 func TestToolCardRegistrySearch(t *testing.T) {
+	t.Parallel()
 	reg := NewToolCardRegistry(DefaultTheme())
 	card := reg.Render(&ToolEvent{
 		Name:   "grep",
@@ -74,6 +79,7 @@ func TestToolCardRegistrySearch(t *testing.T) {
 }
 
 func TestToolCardRegistryCustomRenderer(t *testing.T) {
+	t.Parallel()
 	reg := NewToolCardRegistry(DefaultTheme())
 	reg.Register("custom_tool", &testRenderer{})
 	card := reg.Render(&ToolEvent{Name: "custom_tool"}, 80, shared.VerbosityVerbose)
@@ -97,6 +103,7 @@ func (r *testRenderer) RenderFull(ev *ToolEvent, maxWidth int, theme Theme) stri
 }
 
 func TestToolCardRegistryFallback(t *testing.T) {
+	t.Parallel()
 	reg := NewToolCardRegistry(DefaultTheme())
 	card := reg.Render(&ToolEvent{Name: "unknown_mcp_tool", Result: "some result"}, 80, shared.VerbosityVerbose)
 	if !strings.Contains(card, "unknown_mcp_tool") {
@@ -107,6 +114,7 @@ func TestToolCardRegistryFallback(t *testing.T) {
 // ── Compact (level 0) ────────────────────────────────────────────────────────
 
 func TestCompactBash(t *testing.T) {
+	t.Parallel()
 	reg := NewToolCardRegistry(DefaultTheme())
 	card := reg.Render(&ToolEvent{
 		Name:   "bash",
@@ -123,6 +131,7 @@ func TestCompactBash(t *testing.T) {
 }
 
 func TestCompactEdit(t *testing.T) {
+	t.Parallel()
 	reg := NewToolCardRegistry(DefaultTheme())
 	card := reg.Render(&ToolEvent{
 		Name:     "edit",
@@ -142,6 +151,7 @@ func TestCompactEdit(t *testing.T) {
 }
 
 func TestCompactWrite(t *testing.T) {
+	t.Parallel()
 	reg := NewToolCardRegistry(DefaultTheme())
 	card := reg.Render(&ToolEvent{
 		Name:     "write",
@@ -157,6 +167,7 @@ func TestCompactWrite(t *testing.T) {
 }
 
 func TestCompactRead(t *testing.T) {
+	t.Parallel()
 	reg := NewToolCardRegistry(DefaultTheme())
 	card := reg.Render(&ToolEvent{
 		Name:     "read",
@@ -173,6 +184,7 @@ func TestCompactRead(t *testing.T) {
 }
 
 func TestCompactReadOverflow(t *testing.T) {
+	t.Parallel()
 	reg := NewToolCardRegistry(DefaultTheme())
 	card := reg.Render(&ToolEvent{
 		Name:     "read",
@@ -185,6 +197,7 @@ func TestCompactReadOverflow(t *testing.T) {
 }
 
 func TestCompactSearch(t *testing.T) {
+	t.Parallel()
 	reg := NewToolCardRegistry(DefaultTheme())
 	card := reg.Render(&ToolEvent{
 		Name:   "grep",
@@ -200,6 +213,7 @@ func TestCompactSearch(t *testing.T) {
 }
 
 func TestCompactDefault(t *testing.T) {
+	t.Parallel()
 	reg := NewToolCardRegistry(DefaultTheme())
 	card := reg.Render(&ToolEvent{
 		Name:   "mcp_tool",
@@ -211,6 +225,7 @@ func TestCompactDefault(t *testing.T) {
 }
 
 func TestCompactNoHeaderFooter(t *testing.T) {
+	t.Parallel()
 	reg := NewToolCardRegistry(DefaultTheme())
 	card := reg.Render(&ToolEvent{
 		Name: "bash",
@@ -223,6 +238,7 @@ func TestCompactNoHeaderFooter(t *testing.T) {
 }
 
 func TestCompactCustomRenderer(t *testing.T) {
+	t.Parallel()
 	reg := NewToolCardRegistry(DefaultTheme())
 	reg.Register("custom_tool", &testRenderer{})
 	card := reg.Render(&ToolEvent{Name: "custom_tool"}, 80, shared.VerbosityCompact)
@@ -234,6 +250,7 @@ func TestCompactCustomRenderer(t *testing.T) {
 // ── Full (level 2) ──────────────────────────────────────────────────────────
 
 func TestFullBash(t *testing.T) {
+	t.Parallel()
 	// Build a result with 10 lines.
 	var lines []string
 	for i := 0; i < 10; i++ {
@@ -255,6 +272,7 @@ func TestFullBash(t *testing.T) {
 }
 
 func TestFullEdit(t *testing.T) {
+	t.Parallel()
 	reg := NewToolCardRegistry(DefaultTheme())
 	// Build old/new with 15 lines each.
 	old := strings.Repeat("old\n", 15)
@@ -271,6 +289,7 @@ func TestFullEdit(t *testing.T) {
 }
 
 func TestFullWrite(t *testing.T) {
+	t.Parallel()
 	reg := NewToolCardRegistry(DefaultTheme())
 	content := strings.Repeat("line\n", 25)
 	card := reg.Render(&ToolEvent{
@@ -288,6 +307,7 @@ func TestFullWrite(t *testing.T) {
 }
 
 func TestFullRead(t *testing.T) {
+	t.Parallel()
 	reg := NewToolCardRegistry(DefaultTheme())
 	result := strings.Repeat("line\n", 25)
 	card := reg.Render(&ToolEvent{
@@ -302,6 +322,7 @@ func TestFullRead(t *testing.T) {
 }
 
 func TestFullSearch(t *testing.T) {
+	t.Parallel()
 	reg := NewToolCardRegistry(DefaultTheme())
 	result := "file1.go\nfile2.go\nfile3.go\nfile4.go\nfile5.go"
 	card := reg.Render(&ToolEvent{
@@ -316,6 +337,7 @@ func TestFullSearch(t *testing.T) {
 }
 
 func TestFullCustomRenderer(t *testing.T) {
+	t.Parallel()
 	reg := NewToolCardRegistry(DefaultTheme())
 	reg.Register("custom_tool", &testRenderer{})
 	card := reg.Render(&ToolEvent{Name: "custom_tool"}, 80, shared.VerbosityFull)
@@ -327,6 +349,7 @@ func TestFullCustomRenderer(t *testing.T) {
 // ── Helper tests ────────────────────────────────────────────────────────────
 
 func TestSplitNonEmpty(t *testing.T) {
+	t.Parallel()
 	lines := splitNonEmpty("a\n\nb\nc\n")
 	if len(lines) != 3 {
 		t.Fatalf("expected 3 non-empty lines, got %d", len(lines))
@@ -334,6 +357,7 @@ func TestSplitNonEmpty(t *testing.T) {
 }
 
 func TestRenderTreeLines(t *testing.T) {
+	t.Parallel()
 	theme := DefaultTheme()
 	out := renderTreeLines([]string{"one", "two", "three"}, theme.ToolDim, 56)
 	if !strings.Contains(out, "\u251c\u2500") {
@@ -345,6 +369,7 @@ func TestRenderTreeLines(t *testing.T) {
 }
 
 func TestRenderTreeLinesSingle(t *testing.T) {
+	t.Parallel()
 	theme := DefaultTheme()
 	out := renderTreeLines([]string{"only"}, theme.ToolDim, 56)
 	if !strings.Contains(out, "\u2514\u2500") {
@@ -356,6 +381,7 @@ func TestRenderTreeLinesSingle(t *testing.T) {
 }
 
 func TestRenderDiffFull(t *testing.T) {
+	t.Parallel()
 	theme := DefaultTheme()
 	old := strings.Repeat("old\n", 20)
 	new := strings.Repeat("new\n", 20)
@@ -367,6 +393,7 @@ func TestRenderDiffFull(t *testing.T) {
 }
 
 func TestCountMatches(t *testing.T) {
+	t.Parallel()
 	if n := countMatches("a\nb\nc"); n != 3 {
 		t.Fatalf("expected 3 matches, got %d", n)
 	}

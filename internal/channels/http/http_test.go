@@ -8,6 +8,7 @@ import (
 )
 
 func TestHandleHealth(t *testing.T) {
+	t.Parallel()
 	req := httptest.NewRequest("GET", "/api/health", nil)
 	w := httptest.NewRecorder()
 	handleHealth(w, req)
@@ -21,6 +22,7 @@ func TestHandleHealth(t *testing.T) {
 }
 
 func TestAuthMiddleware_NoKey(t *testing.T) {
+	t.Parallel()
 	called := false
 	handler := authMiddleware("", func(w http.ResponseWriter, r *http.Request) {
 		called = true
@@ -37,6 +39,7 @@ func TestAuthMiddleware_NoKey(t *testing.T) {
 }
 
 func TestAuthMiddleware_ValidKey(t *testing.T) {
+	t.Parallel()
 	called := false
 	handler := authMiddleware("secret123", func(w http.ResponseWriter, r *http.Request) {
 		called = true
@@ -54,6 +57,7 @@ func TestAuthMiddleware_ValidKey(t *testing.T) {
 }
 
 func TestAuthMiddleware_InvalidKey(t *testing.T) {
+	t.Parallel()
 	called := false
 	handler := authMiddleware("secret123", func(w http.ResponseWriter, r *http.Request) {
 		called = true
@@ -73,6 +77,7 @@ func TestAuthMiddleware_InvalidKey(t *testing.T) {
 }
 
 func TestAuthMiddleware_MissingHeader(t *testing.T) {
+	t.Parallel()
 	handler := authMiddleware("secret123", func(w http.ResponseWriter, r *http.Request) {})
 
 	req := httptest.NewRequest("GET", "/", nil)
@@ -85,6 +90,7 @@ func TestAuthMiddleware_MissingHeader(t *testing.T) {
 }
 
 func TestHandleChat_MethodNotAllowed(t *testing.T) {
+	t.Parallel()
 	handler := handleChat(nil)
 
 	req := httptest.NewRequest("GET", "/api/chat", nil)
@@ -97,6 +103,7 @@ func TestHandleChat_MethodNotAllowed(t *testing.T) {
 }
 
 func TestHandleChat_InvalidJSON(t *testing.T) {
+	t.Parallel()
 	handler := handleChat(nil)
 
 	req := httptest.NewRequest("POST", "/api/chat", strings.NewReader("not json"))
@@ -109,6 +116,7 @@ func TestHandleChat_InvalidJSON(t *testing.T) {
 }
 
 func TestHandleChat_EmptyMessage(t *testing.T) {
+	t.Parallel()
 	handler := handleChat(nil)
 
 	req := httptest.NewRequest("POST", "/api/chat", strings.NewReader(`{"message":""}`))
@@ -121,6 +129,7 @@ func TestHandleChat_EmptyMessage(t *testing.T) {
 }
 
 func TestHttpChannel_Name(t *testing.T) {
+	t.Parallel()
 	ch := &httpChannel{}
 	if ch.Name() != "http" {
 		t.Errorf("Name: got %q, want %q", ch.Name(), "http")

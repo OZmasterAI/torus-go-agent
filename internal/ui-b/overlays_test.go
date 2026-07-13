@@ -3,6 +3,7 @@ package uib
 import "testing"
 
 func TestOverlayOpenClose(t *testing.T) {
+	t.Parallel()
 	o := newOverlayModel(DefaultTheme())
 	if o.Active() {
 		t.Fatal("overlay should start inactive")
@@ -25,6 +26,7 @@ func TestOverlayOpenClose(t *testing.T) {
 }
 
 func TestOverlayFilter(t *testing.T) {
+	t.Parallel()
 	o := newOverlayModel(DefaultTheme())
 	items := []OverlayItem{
 		{Name: "New conversation", Command: "/new"},
@@ -43,6 +45,7 @@ func TestOverlayFilter(t *testing.T) {
 }
 
 func TestOverlayFilterEmpty(t *testing.T) {
+	t.Parallel()
 	o := newOverlayModel(DefaultTheme())
 	items := []OverlayItem{{Name: "A", Command: "/a"}}
 	o.Open("palette", items)
@@ -53,6 +56,7 @@ func TestOverlayFilterEmpty(t *testing.T) {
 }
 
 func TestOverlaySelected(t *testing.T) {
+	t.Parallel()
 	o := newOverlayModel(DefaultTheme())
 	items := []OverlayItem{
 		{Name: "A", Command: "/a"},

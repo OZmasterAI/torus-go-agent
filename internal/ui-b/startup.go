@@ -144,6 +144,61 @@ func fetchOpenRouterModels() []startupModelCategory {
 	return categories
 }
 
+// nativeProviderPrefix maps native provider keys to their author prefix in the
+// OpenRouter universal registry, so each native provider's model list (and the
+// real context/maxTokens) can be derived live from the same /api/v1/models fetch.
+// Azure is intentionally excluded — its models are user-defined deployment names
+// that no public registry can enumerate.
+var nativeProviderPrefix = map[string]string{
+	"anthropic": "anthropic",
+	"openai":    "openai",
+	"grok":      "x-ai",
+	"deepseek":  "deepseek",
+	"gemini":    "google",
+	"vertex":    "google",
+}
+
+// modelsForAuthor derives a native provider's model list from OpenRouter registry
+// categories: it keeps models whose ID is "<authorPrefix>/<id>", strips the prefix
+// to the native ID the provider's own API expects, and carries the registry's
+// context/maxTokens (what each model actually supports). It skips the FREE MODELS
+// bucket and OpenRouter-only routing variants (":free"/":nitro"/…), dedupes, and
+// appends a "Custom model ID" entry. Returns nil if none match, so the caller
+// keeps its static fallback list.
+func modelsForAuthor(cats []startupModelCategory, authorPrefix string) []startupModelChoice {
+	var out []startupModelChoice
+	seen := map[string]bool{}
+	for _, cat := range cats {
+		if cat.Name == "FREE MODELS" {
+			continue // OpenRouter-specific free variants, not the native catalog
+		}
+		for _, mc := range cat.Models {
+			if !strings.HasPrefix(mc.ID, authorPrefix+"/") {
+				continue
+			}
+			nativeID := mc.ID[len(authorPrefix)+1:]
+			if strings.Contains(nativeID, ":") {
+				continue // routing suffix (:free/:nitro/:floor) — not a native model ID
+			}
+			if seen[nativeID] {
+				continue
+			}
+			seen[nativeID] = true
+			out = append(out, startupModelChoice{
+				Name:          mc.Name,
+				ID:            nativeID,
+				ContextWindow: mc.ContextWindow,
+				MaxTokens:     mc.MaxTokens,
+			})
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	out = append(out, startupModelChoice{Name: "Custom model ID", ID: ""})
+	return out
+}
+
 // ── NVIDIA NIM model fetching ────────────────────────────────────────────────
 
 type nvidiaNIMModelResp struct {
@@ -159,7 +214,7 @@ type nvidiaNIMModel struct {
 
 // nvidiaNIMFreeModels lists model IDs confirmed free on build.nvidia.com.
 var nvidiaNIMFreeModels = map[string]bool{
-	"qwen/qwen3.5-122b-a10b":                        true,
+	"qwen/qwen3.5-122b-a10b":                         true,
 	"z-ai/glm4.7":                                    true,
 	"z-ai/glm5":                                      true,
 	"stepfun-ai/step-3.5-flash":                      true,
@@ -183,15 +238,15 @@ var nvidiaNIMFreeModels = map[string]bool{
 	"google/gemma-2-2b-it":                           true,
 	"google/gemma-3n-e4b-it":                         true,
 	"google/shieldgemma-9b":                          true,
-	"igenius/colosseum_355b_instruct_16k":             true,
+	"igenius/colosseum_355b_instruct_16k":            true,
 	"tiiuae/falcon3-7b-instruct":                     true,
-	"igenius/italia_10b_instruct_16k":                 true,
+	"igenius/italia_10b_instruct_16k":                true,
 	"nvidia/cosmos-nemotron-34b":                     true,
 	"nvidia/cosmos-reason2-8b":                       true,
-	"qwen/qwen2.5-coder-7b-instruct":                true,
-	"qwen/qwen2-7b-instruct":                        true,
-	"abacusai/dracarys-llama-3.1-70b-instruct":      true,
-	"thudm/chatglm3-6b":                             true,
+	"qwen/qwen2.5-coder-7b-instruct":                 true,
+	"qwen/qwen2-7b-instruct":                         true,
+	"abacusai/dracarys-llama-3.1-70b-instruct":       true,
+	"thudm/chatglm3-6b":                              true,
 	"baichuan-inc/baichuan2-13b-chat":                true,
 	"nvidia/nemotron-3-super-120b-a12b":              true,
 	"nvidia/nemotron-3-nano-30b-a3b":                 true,
@@ -201,7 +256,7 @@ var nvidiaNIMFreeModels = map[string]bool{
 	"nvidia/nemotron-content-safety-reasoning-4b":    true,
 	"nvidia/llama-3.1-nemotron-safety-guard-8b-v3":   true,
 	"nvidia/llama-3.1-nemotron-70b-reward":           true,
-	"marin/marin-8b-instruct":                       true,
+	"marin/marin-8b-instruct":                        true,
 	"nv-mistralai/mistral-nemo-12b-instruct":         true,
 }
 
@@ -401,28 +456,28 @@ type startupConfigField struct {
 }
 
 var startupConfigFields = []startupConfigField{
-	{"Compaction", "cycle", []string{"llm", "sliding", "off"}},             // 0
-	{"CompactionTrigger", "cycle", []string{"both", "tokens", "messages"}}, // 1
-	{"CompactionThreshold", "int", nil},                                    // 2
-	{"CompactionMaxMessages", "int", nil},                                  // 3
-	{"CompactionKeepLastN", "int", nil},                                    // 4
-	{"CompactionModel", "string", nil},                                     // 5
-	{"ContinuousCompression", "bool", nil},                                 // 6
-	{"CompressionKeepFirst", "int", nil},                                   // 7
-	{"CompressionKeepLast", "int", nil},                                    // 8
-	{"CompressionMinMessages", "int", nil},                                 // 9
-	{"ZoneBudgeting", "bool", nil},                                         // 10
-	{"ZoneArchivePercent", "int", nil},                                     // 11
-	{"SmartRouting", "bool", nil},                                          // 12
-	{"SmartRoutingModel", "string", nil},                                   // 13
-	{"SteeringMode", "cycle", []string{"mild", "aggressive"}},              // 14
-	{"PersistThinking", "bool", nil},                                       // 15
+	{"Compaction", "cycle", []string{"llm", "sliding", "off"}},                // 0
+	{"CompactionTrigger", "cycle", []string{"both", "tokens", "messages"}},    // 1
+	{"CompactionThreshold", "int", nil},                                       // 2
+	{"CompactionMaxMessages", "int", nil},                                     // 3
+	{"CompactionKeepLastN", "int", nil},                                       // 4
+	{"CompactionModel", "string", nil},                                        // 5
+	{"ContinuousCompression", "bool", nil},                                    // 6
+	{"CompressionKeepFirst", "int", nil},                                      // 7
+	{"CompressionKeepLast", "int", nil},                                       // 8
+	{"CompressionMinMessages", "int", nil},                                    // 9
+	{"ZoneBudgeting", "bool", nil},                                            // 10
+	{"ZoneArchivePercent", "int", nil},                                        // 11
+	{"SmartRouting", "bool", nil},                                             // 12
+	{"SmartRoutingModel", "string", nil},                                      // 13
+	{"SteeringMode", "cycle", []string{"mild", "aggressive"}},                 // 14
+	{"PersistThinking", "bool", nil},                                          // 15
 	{"Thinking", "cycle", []string{"", "low", "mid", "high", "max", "ultra"}}, // 16
-	{"ThinkingBudget", "int", nil},                                         // 17
-	{"MaxTokens", "int", nil},                                              // 18
-	{"ContextWindow", "int", nil},                                          // 19
-	{"ForceStream", "bool", nil},                                           // 20
-	{"RewardScoring", "bool", nil},                                         // 21
+	{"ThinkingBudget", "int", nil},                                            // 17
+	{"MaxTokens", "int", nil},                                                 // 18
+	{"ContextWindow", "int", nil},                                             // 19
+	{"ForceStream", "bool", nil},                                              // 20
+	{"RewardScoring", "bool", nil},                                            // 21
 }
 
 // formatStartupProviderModel formats "provider:model" as "model (provider)" for display.
@@ -733,7 +788,10 @@ func defaultStartupProviderGroups() []startupProviderGroup {
 		},
 		{
 			Name: "OpenAI", ProviderKey: "openai",
-			AuthMethods: []startupAuthMethod{{Name: "API key", NeedsKey: "OPENAI_API_KEY"}},
+			AuthMethods: []startupAuthMethod{
+				{Name: "Sign in with ChatGPT (no key needed)", NeedsKey: ""},
+				{Name: "API key", NeedsKey: "OPENAI_API_KEY"},
+			},
 			Models: []startupModelChoice{
 				{Name: "GPT-5.4", ID: "gpt-5.4"},
 				{Name: "GPT-5.4 Mini", ID: "gpt-5.4-mini"},
@@ -761,6 +819,15 @@ func defaultStartupProviderGroups() []startupProviderGroup {
 				{Name: "Grok 4.1 Fast (reasoning)", ID: "grok-4-1-fast-reasoning", ContextWindow: 2000000, MaxTokens: 131072},
 				{Name: "Grok 4.1 Fast (non-reasoning)", ID: "grok-4-1-fast-non-reasoning", ContextWindow: 2000000, MaxTokens: 131072},
 				{Name: "grok-3-mini", ID: "grok-3-mini", ContextWindow: 131072, MaxTokens: 131072},
+				{Name: "Custom model ID", ID: ""},
+			},
+		},
+		{
+			Name: "DeepSeek", ProviderKey: "deepseek",
+			AuthMethods: []startupAuthMethod{{Name: "API key", NeedsKey: "DEEPSEEK_API_KEY"}},
+			Models: []startupModelChoice{
+				{Name: "DeepSeek V3 (deepseek-chat)", ID: "deepseek-chat", ContextWindow: 131072, MaxTokens: 8192},
+				{Name: "DeepSeek R1 (deepseek-reasoner)", ID: "deepseek-reasoner", ContextWindow: 131072, MaxTokens: 65536},
 				{Name: "Custom model ID", ID: ""},
 			},
 		},
@@ -1012,12 +1079,20 @@ type startupModel struct {
 func newStartupModel() startupModel {
 	groups := defaultStartupProviderGroups()
 
-	// Fetch live OpenRouter models; replace all categories on success
+	// Fetch live OpenRouter models once; reuse for the OpenRouter group AND to
+	// auto-refresh every native provider's list (with accurate context/maxTokens)
+	// from the same universal registry. Static lists remain the offline fallback.
 	if cats := fetchOpenRouterModels(); len(cats) > 0 {
 		for i := range groups {
 			if groups[i].ProviderKey == "openrouter" {
 				groups[i].Categories = cats
-				break
+				continue
+			}
+			if prefix, ok := nativeProviderPrefix[groups[i].ProviderKey]; ok {
+				if models := modelsForAuthor(cats, prefix); len(models) > 0 {
+					groups[i].Models = models
+					groups[i].Categories = nil
+				}
 			}
 		}
 	}

@@ -43,6 +43,7 @@ type pendingMsg struct {
 type chatState struct {
 	mu      sync.Mutex
 	running bool
+	retired bool // set (under mu) when this state has been removed from the chats map
 	queue   []pendingMsg
 }
 
@@ -98,11 +99,21 @@ func startTelegram(agent *core.Agent, cfg config.TelegramConfig) error {
 			sessionKey = fmt.Sprintf("telegram:group:%d", chatID)
 		}
 
-		// Load or create chat state
-		val, _ := chats.LoadOrStore(chatID, &chatState{})
-		cs := val.(*chatState)
+		// Load or create chat state. A drained handler may retire (delete)
+		// a state concurrently; if we grabbed a retired one, retry so we
+		// never enqueue onto a state no longer reachable from the map.
+		var cs *chatState
+		for {
+			val, _ := chats.LoadOrStore(chatID, &chatState{})
+			cs = val.(*chatState)
+			cs.mu.Lock()
+			if !cs.retired {
+				break
+			}
+			cs.mu.Unlock()
+		}
 
-		cs.mu.Lock()
+		// cs.mu is held here.
 		if cs.running {
 			// Agent busy — queue the message
 			cs.queue = append(cs.queue, pendingMsg{text: text, messageID: msg.MessageID})
@@ -115,16 +126,19 @@ func startTelegram(agent *core.Agent, cfg config.TelegramConfig) error {
 		cs.mu.Unlock()
 
 		// Launch handler goroutine
-		go handleMessage(bot, agent, cs, chatID, userID, sessionKey, text, msg.MessageID)
+		go handleMessage(bot, agent, &chats, cs, chatID, userID, sessionKey, text, msg.MessageID)
 	}
 
 	return nil
 }
 
 // handleMessage runs agent.Run for one message, then drains the queue.
+// When the queue is confirmed empty it retires the chat's state and deletes it
+// from the chats map, so memory does not grow with every unique chat seen.
 func handleMessage(
 	bot *tgbotapi.BotAPI,
 	agent *core.Agent,
+	chats *sync.Map,
 	cs *chatState,
 	chatID int64,
 	_ int64, // userID — reserved for future per-user session isolation
@@ -138,6 +152,13 @@ func handleMessage(
 			cs.mu.Lock()
 			if len(cs.queue) == 0 {
 				cs.running = false
+				// Queue drained and we hold cs.mu: retire this state and
+				// remove it from the map. Marking retired before unlocking
+				// means any dispatcher that already loaded this pointer will
+				// observe retired==true under the lock and re-load a fresh
+				// state, so no message can be enqueued onto a dead state.
+				cs.retired = true
+				chats.Delete(chatID)
 				cs.mu.Unlock()
 				return
 			}
@@ -241,20 +262,25 @@ func editOrSend(bot *tgbotapi.BotAPI, chatID int64, msgID int, text string) erro
 // splitChunks divides text into segments no longer than maxLen. It tries to
 // break on the last whitespace before the limit to avoid splitting words.
 func splitChunks(text string, maxLen int) []string {
-	if len(text) <= maxLen {
+	// Operate on runes, not bytes, so multibyte UTF-8 characters are never
+	// split across chunks (a byte-level cut would corrupt a rune and cause
+	// Telegram to reject the message). maxLen is treated as a rune count,
+	// which also matches Telegram's character-based message limit.
+	runes := []rune(text)
+	if len(runes) <= maxLen {
 		return []string{text}
 	}
 
 	var chunks []string
-	for len(text) > 0 {
-		if len(text) <= maxLen {
-			chunks = append(chunks, text)
+	for len(runes) > 0 {
+		if len(runes) <= maxLen {
+			chunks = append(chunks, string(runes))
 			break
 		}
 
 		cut := maxLen
 		// Walk back to find a whitespace boundary
-		for cut > maxLen/2 && cut < len(text) && text[cut] != ' ' && text[cut] != '\n' {
+		for cut > maxLen/2 && cut < len(runes) && runes[cut] != ' ' && runes[cut] != '\n' {
 			cut--
 		}
 		// If no whitespace found in the back half, hard-cut at maxLen
@@ -262,8 +288,8 @@ func splitChunks(text string, maxLen int) []string {
 			cut = maxLen
 		}
 
-		chunks = append(chunks, text[:cut])
-		text = strings.TrimLeft(text[cut:], " \n")
+		chunks = append(chunks, string(runes[:cut]))
+		runes = []rune(strings.TrimLeft(string(runes[cut:]), " \n"))
 	}
 	return chunks
 }

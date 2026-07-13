@@ -9,6 +9,7 @@ import (
 )
 
 func TestXXHash64_KnownVectors(t *testing.T) {
+	t.Parallel()
 	// Empty input with seed 0 → known reference value.
 	// XXH64("", 0) = 0xEF46DB3751D8E999
 	got := xxhash64([]byte{}, 0)
@@ -27,6 +28,7 @@ func TestXXHash64_KnownVectors(t *testing.T) {
 }
 
 func TestXXHash64_Seeded(t *testing.T) {
+	t.Parallel()
 	// With a non-zero seed, output should differ from seed=0.
 	a := xxhash64([]byte("hello"), 0)
 	b := xxhash64([]byte("hello"), cchSeed)
@@ -36,6 +38,7 @@ func TestXXHash64_Seeded(t *testing.T) {
 }
 
 func TestXXHash64_LargeInput(t *testing.T) {
+	t.Parallel()
 	// Input >= 32 bytes exercises the 4-lane accumulator path.
 	data := bytes.Repeat([]byte("abcdefgh"), 8) // 64 bytes
 	h := xxhash64(data, cchSeed)
@@ -51,6 +54,7 @@ func TestXXHash64_LargeInput(t *testing.T) {
 }
 
 func TestXXHash64_Endianness(t *testing.T) {
+	t.Parallel()
 	// Verify the implementation reads little-endian correctly.
 	buf := make([]byte, 8)
 	binary.LittleEndian.PutUint64(buf, 0x0102030405060708)
@@ -61,6 +65,7 @@ func TestXXHash64_Endianness(t *testing.T) {
 }
 
 func TestComputeFingerprint(t *testing.T) {
+	t.Parallel()
 	msgs := []tp.Message{
 		{Role: tp.RoleUser, Content: []tp.ContentBlock{
 			{Type: "text", Text: "Hello, how are you doing today?"},
@@ -85,6 +90,7 @@ func TestComputeFingerprint(t *testing.T) {
 }
 
 func TestComputeFingerprint_ShortMessage(t *testing.T) {
+	t.Parallel()
 	// Message shorter than index 20 — should use '0' fallback.
 	msgs := []tp.Message{
 		{Role: tp.RoleUser, Content: []tp.ContentBlock{
@@ -98,6 +104,7 @@ func TestComputeFingerprint_ShortMessage(t *testing.T) {
 }
 
 func TestComputeFingerprint_NoUserMessage(t *testing.T) {
+	t.Parallel()
 	msgs := []tp.Message{
 		{Role: tp.RoleAssistant, Content: []tp.ContentBlock{
 			{Type: "text", Text: "Hello!"},
@@ -110,6 +117,7 @@ func TestComputeFingerprint_NoUserMessage(t *testing.T) {
 }
 
 func TestBuildAttributionHeader(t *testing.T) {
+	t.Parallel()
 	h := buildAttributionHeader("a4f")
 	want := "x-anthropic-billing-header: cc_version=2.1.87.a4f; cc_entrypoint=cli; cch=00000;"
 	if h != want {
@@ -118,6 +126,7 @@ func TestBuildAttributionHeader(t *testing.T) {
 }
 
 func TestApplyCCH(t *testing.T) {
+	t.Parallel()
 	body := []byte(`{"system":[{"type":"text","text":"x-anthropic-billing-header: cc_version=2.1.87.abc; cc_entrypoint=cli; cch=00000;"}]}`)
 
 	patched := applyCCH(body)
@@ -139,6 +148,7 @@ func TestApplyCCH(t *testing.T) {
 }
 
 func TestApplyCCH_NoPlaceholder(t *testing.T) {
+	t.Parallel()
 	body := []byte(`{"system":"hello"}`)
 	patched := applyCCH(body)
 	if !bytes.Equal(body, patched) {
@@ -147,6 +157,7 @@ func TestApplyCCH_NoPlaceholder(t *testing.T) {
 }
 
 func TestApplyCCH_Deterministic(t *testing.T) {
+	t.Parallel()
 	body := []byte(`{"system":[{"type":"text","text":"x-anthropic-billing-header: cc_version=2.1.87.abc; cc_entrypoint=cli; cch=00000;"}],"messages":[]}`)
 
 	p1 := applyCCH(body)

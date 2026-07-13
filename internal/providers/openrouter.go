@@ -30,7 +30,7 @@ type OpenRouterProvider struct {
 	APIKey       string
 	Model        string
 	BaseURL      string
-	endpointPath string    // override for chat completions path (default: "/chat/completions")
+	endpointPath string // override for chat completions path (default: "/chat/completions")
 	auth         authStyle
 	client       *http.Client
 }
@@ -152,6 +152,18 @@ func NewGrokProvider(apiKey, model string) *OpenRouterProvider {
 	}
 }
 
+// NewDeepSeekProvider creates a native provider for DeepSeek models
+// (deepseek-chat = V3, deepseek-reasoner = R1). DeepSeek's API is OpenAI-compatible.
+func NewDeepSeekProvider(apiKey, model string) *OpenRouterProvider {
+	return &OpenRouterProvider{
+		providerName: "deepseek",
+		APIKey:       apiKey,
+		Model:        model,
+		BaseURL:      "https://api.deepseek.com/v1",
+		client:       &http.Client{},
+	}
+}
+
 // NewAzureOpenAIProvider creates a provider for Azure-hosted OpenAI models.
 // resource is your Azure resource name, deployment is the model deployment name,
 // apiVersion is e.g. "2024-06-01".
@@ -249,6 +261,11 @@ type openaiStreamChunk struct {
 	Choices []openaiStreamChoice `json:"choices"`
 	Usage   *openaiUsage         `json:"usage,omitempty"`
 	Model   string               `json:"model"`
+	Error   *struct {
+		Message string `json:"message"`
+		Code    any    `json:"code"`
+		Type    string `json:"type"`
+	} `json:"error,omitempty"`
 }
 
 type openaiStreamChoice struct {
@@ -404,7 +421,11 @@ func (p *OpenRouterProvider) Complete(ctx context.Context, systemPrompt string, 
 	}
 
 	if resp.StatusCode != 200 {
-		return nil, fmt.Errorf("%s API error %d: %s", p.providerName, resp.StatusCode, string(respBody))
+		apiErr := fmt.Errorf("%s API error %d: %s", p.providerName, resp.StatusCode, string(respBody))
+		if isTransientStatus(resp.StatusCode) {
+			return nil, &t.TransientError{Err: apiErr}
+		}
+		return nil, apiErr
 	}
 
 	var apiResp openaiResponse
@@ -463,7 +484,7 @@ func (p *OpenRouterProvider) Complete(ctx context.Context, systemPrompt string, 
 	}, nil
 }
 
-func (p *OpenRouterProvider) Name() string   { return p.providerName }
+func (p *OpenRouterProvider) Name() string    { return p.providerName }
 func (p *OpenRouterProvider) ModelID() string { return p.Model }
 
 // StreamComplete sends a streaming request to the OpenRouter (OpenAI-compatible) API.
@@ -505,7 +526,11 @@ func (p *OpenRouterProvider) StreamComplete(ctx context.Context, systemPrompt st
 		if err != nil {
 			log.Printf("openrouter: failed to read error response body: %v", err)
 		}
-		return nil, fmt.Errorf("%s API error %d: %s", p.providerName, resp.StatusCode, string(respBody))
+		apiErr := fmt.Errorf("%s API error %d: %s", p.providerName, resp.StatusCode, string(respBody))
+		if isTransientStatus(resp.StatusCode) {
+			return nil, &t.TransientError{Err: apiErr}
+		}
+		return nil, apiErr
 	}
 
 	ch := make(chan t.StreamEvent, 32)
@@ -552,7 +577,7 @@ func (p *OpenRouterProvider) parseOpenAISSE(ctx context.Context, resp *http.Resp
 	}
 
 	scanner := bufio.NewScanner(resp.Body)
-	scanner.Buffer(make([]byte, 0, 256*1024), 256*1024)
+	scanner.Buffer(make([]byte, 0, 64*1024), 8*1024*1024)
 
 	for scanner.Scan() {
 		line := scanner.Text()
@@ -581,6 +606,14 @@ func (p *OpenRouterProvider) parseOpenAISSE(ctx context.Context, resp *http.Resp
 				TotalTokens:  chunk.Usage.TotalTokens,
 			}
 			send(t.StreamEvent{Type: t.EventUsage, Usage: &usage})
+		}
+
+		if chunk.Error != nil {
+			send(t.StreamEvent{
+				Type:  t.EventError,
+				Error: &t.TransientError{Err: fmt.Errorf("%s stream error: %s", p.providerName, chunk.Error.Message)},
+			})
+			return
 		}
 
 		if len(chunk.Choices) == 0 {
@@ -695,4 +728,3 @@ func (p *OpenRouterProvider) parseOpenAISSE(ctx context.Context, resp *http.Resp
 		Response:   assembled,
 	})
 }
-

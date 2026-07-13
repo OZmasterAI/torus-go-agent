@@ -9,6 +9,7 @@ import (
 // ---- 1. defaultCompactionConfig Tests ----
 
 func TestDefaultCompactionConfig_ZeroThreshold(tt *testing.T) {
+	tt.Parallel()
 	cfg := CompactionConfig{
 		Threshold:     0,
 		KeepLastN:     5,
@@ -21,6 +22,7 @@ func TestDefaultCompactionConfig_ZeroThreshold(tt *testing.T) {
 }
 
 func TestDefaultCompactionConfig_ZeroKeepLastN(tt *testing.T) {
+	tt.Parallel()
 	cfg := CompactionConfig{
 		Threshold:     85,
 		KeepLastN:     0,
@@ -33,6 +35,7 @@ func TestDefaultCompactionConfig_ZeroKeepLastN(tt *testing.T) {
 }
 
 func TestDefaultCompactionConfig_ZeroContextWindow(tt *testing.T) {
+	tt.Parallel()
 	cfg := CompactionConfig{
 		Threshold:     85,
 		KeepLastN:     5,
@@ -45,6 +48,7 @@ func TestDefaultCompactionConfig_ZeroContextWindow(tt *testing.T) {
 }
 
 func TestDefaultCompactionConfig_AllDefaults(tt *testing.T) {
+	tt.Parallel()
 	cfg := CompactionConfig{}
 	result := defaultCompactionConfig(cfg)
 	if result.Threshold != 80 {
@@ -59,6 +63,7 @@ func TestDefaultCompactionConfig_AllDefaults(tt *testing.T) {
 }
 
 func TestDefaultCompactionConfig_PreservesNonZeroValues(tt *testing.T) {
+	tt.Parallel()
 	cfg := CompactionConfig{
 		Threshold:     75,
 		KeepLastN:     15,
@@ -79,6 +84,7 @@ func TestDefaultCompactionConfig_PreservesNonZeroValues(tt *testing.T) {
 // ---- 2. NeedsCompaction Tests ----
 
 func TestNeedsCompaction_CompactionOff(tt *testing.T) {
+	tt.Parallel()
 	messages := []typ.Message{
 		{Role: typ.RoleUser, Content: textContent("hello")},
 		{Role: typ.RoleAssistant, Content: textContent("hi")},
@@ -94,6 +100,7 @@ func TestNeedsCompaction_CompactionOff(tt *testing.T) {
 }
 
 func TestNeedsCompaction_TokenBased_BelowThreshold(tt *testing.T) {
+	tt.Parallel()
 	// Small messages that won't hit the threshold
 	messages := []typ.Message{
 		{Role: typ.RoleUser, Content: textContent("hi")},
@@ -110,6 +117,7 @@ func TestNeedsCompaction_TokenBased_BelowThreshold(tt *testing.T) {
 }
 
 func TestNeedsCompaction_TokenBased_AboveThreshold(tt *testing.T) {
+	tt.Parallel()
 	// Create messages that will exceed token threshold
 	// With ContextWindow=1000 and Threshold=50, limit is 500 tokens
 	// EstimateTokens divides JSON length by 3.5
@@ -133,6 +141,7 @@ func TestNeedsCompaction_TokenBased_AboveThreshold(tt *testing.T) {
 }
 
 func TestNeedsCompaction_MessageBased_BelowLimit(tt *testing.T) {
+	tt.Parallel()
 	messages := []typ.Message{
 		{Role: typ.RoleUser, Content: textContent("msg1")},
 		{Role: typ.RoleAssistant, Content: textContent("msg2")},
@@ -151,6 +160,7 @@ func TestNeedsCompaction_MessageBased_BelowLimit(tt *testing.T) {
 }
 
 func TestNeedsCompaction_MessageBased_AboveLimit(tt *testing.T) {
+	tt.Parallel()
 	messages := make([]typ.Message, 15)
 	for i := 0; i < 15; i++ {
 		if i%2 == 0 {
@@ -172,6 +182,7 @@ func TestNeedsCompaction_MessageBased_AboveLimit(tt *testing.T) {
 }
 
 func TestNeedsCompaction_BothMode_TokensHit(tt *testing.T) {
+	tt.Parallel()
 	// Create messages that hit tokens but not message count
 	largeText := ""
 	for i := 0; i < 200; i++ {
@@ -193,6 +204,7 @@ func TestNeedsCompaction_BothMode_TokensHit(tt *testing.T) {
 }
 
 func TestNeedsCompaction_BothMode_MessagesHit(tt *testing.T) {
+	tt.Parallel()
 	// Create messages that hit message count but keep tokens low
 	messages := make([]typ.Message, 15)
 	for i := 0; i < 15; i++ {
@@ -215,6 +227,7 @@ func TestNeedsCompaction_BothMode_MessagesHit(tt *testing.T) {
 }
 
 func TestNeedsCompaction_BothMode_BothMissed(tt *testing.T) {
+	tt.Parallel()
 	// Small messages, well below limits
 	messages := []typ.Message{
 		{Role: typ.RoleUser, Content: textContent("a")},
@@ -233,6 +246,7 @@ func TestNeedsCompaction_BothMode_BothMissed(tt *testing.T) {
 }
 
 func TestNeedsCompaction_DefaultTrigger_IsTokens(tt *testing.T) {
+	tt.Parallel()
 	// When Trigger is empty string, should default to "tokens"
 	messages := []typ.Message{
 		{Role: typ.RoleUser, Content: textContent("hi")},
@@ -251,6 +265,7 @@ func TestNeedsCompaction_DefaultTrigger_IsTokens(tt *testing.T) {
 // ---- 3. CompactSliding Tests ----
 
 func TestCompactSliding_UnchangedWhenSmall(tt *testing.T) {
+	tt.Parallel()
 	messages := []typ.Message{
 		{Role: typ.RoleUser, Content: textContent("msg1")},
 		{Role: typ.RoleAssistant, Content: textContent("msg2")},
@@ -265,6 +280,7 @@ func TestCompactSliding_UnchangedWhenSmall(tt *testing.T) {
 }
 
 func TestCompactSliding_KeepsFirstAndLastN(tt *testing.T) {
+	tt.Parallel()
 	// Create 20 messages: indices 0-19
 	// With KeepLastN=5, we should keep:
 	//   - message[0] (first)
@@ -305,6 +321,7 @@ func TestCompactSliding_KeepsFirstAndLastN(tt *testing.T) {
 }
 
 func TestCompactSliding_DefaultKeepLastN(tt *testing.T) {
+	tt.Parallel()
 	// Create 50 messages
 	messages := make([]typ.Message, 50)
 	for i := 0; i < 50; i++ {
@@ -326,6 +343,7 @@ func TestCompactSliding_DefaultKeepLastN(tt *testing.T) {
 }
 
 func TestCompactSliding_NegativeKeepLastN(tt *testing.T) {
+	tt.Parallel()
 	// Negative KeepLastN should also default to 10
 	messages := make([]typ.Message, 50)
 	for i := 0; i < 50; i++ {
@@ -346,6 +364,7 @@ func TestCompactSliding_NegativeKeepLastN(tt *testing.T) {
 }
 
 func TestCompactSliding_ExactBoundary(tt *testing.T) {
+	tt.Parallel()
 	// Test the boundary case: len(messages) == keepLastN+1
 	// With 11 messages and KeepLastN=10, should return unchanged
 	messages := make([]typ.Message, 11)
@@ -370,6 +389,7 @@ func TestCompactSliding_ExactBoundary(tt *testing.T) {
 }
 
 func TestCompactSliding_OneOverBoundary(tt *testing.T) {
+	tt.Parallel()
 	// With 12 messages and KeepLastN=10, should compact to 11 (first + last 10)
 	messages := make([]typ.Message, 12)
 	for i := 0; i < 12; i++ {
@@ -399,6 +419,7 @@ func TestCompactSliding_OneOverBoundary(tt *testing.T) {
 }
 
 func TestCompactSliding_PreservesRoles(tt *testing.T) {
+	tt.Parallel()
 	// Verify that roles are preserved through compaction
 	messages := make([]typ.Message, 15)
 	for i := 0; i < 15; i++ {
@@ -433,6 +454,7 @@ func TestCompactSliding_PreservesRoles(tt *testing.T) {
 }
 
 func TestCompactSliding_EmptySlice(tt *testing.T) {
+	tt.Parallel()
 	messages := []typ.Message{}
 	result := CompactSliding(messages, 5)
 	if len(result) != 0 {
@@ -441,6 +463,7 @@ func TestCompactSliding_EmptySlice(tt *testing.T) {
 }
 
 func TestCompactSliding_SingleMessage(tt *testing.T) {
+	tt.Parallel()
 	messages := []typ.Message{
 		{Role: typ.RoleUser, Content: textContent("only")},
 	}
@@ -456,6 +479,7 @@ func TestCompactSliding_SingleMessage(tt *testing.T) {
 // ---- 4. Integration Tests with DAG (bonus) ----
 
 func TestCompactSliding_WithDAG_Consistency(tt *testing.T) {
+	tt.Parallel()
 	// Create a DAG with a few nodes
 	dag := newTestDAG(tt)
 
@@ -483,6 +507,7 @@ func TestCompactSliding_WithDAG_Consistency(tt *testing.T) {
 }
 
 func TestNeedsCompaction_WithDAG(tt *testing.T) {
+	tt.Parallel()
 	// Create a DAG with messages
 	dag := newTestDAG(tt)
 

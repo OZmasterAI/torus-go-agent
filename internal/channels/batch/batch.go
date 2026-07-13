@@ -69,12 +69,16 @@ type Result struct {
 	Trace        []TraceEvent `json:"trace"`
 }
 
-func (b *batchChannel) Start(agent *core.Agent, cfg config.Config, _ *features.SkillRegistry) error {
-	// Batch mode always starts with a fresh branch (no prior conversation context)
+// freshBatchBranch switches the DAG to a fresh branch so batch runs never
+// inherit prior conversation context. Called after input validation so that
+// invalid invocations error out before any side effects.
+func freshBatchBranch(agent *core.Agent) {
 	if _, err := agent.DAG().NewBranch("batch"); err != nil {
 		log.Printf("[batch] warning: could not create fresh branch: %v", err)
 	}
+}
 
+func (b *batchChannel) Start(agent *core.Agent, cfg config.Config, _ *features.SkillRegistry) error {
 	promptFile := Config.PromptFile
 	outputDir := Config.OutputDir
 
@@ -130,6 +134,8 @@ func (b *batchChannel) Start(agent *core.Agent, cfg config.Config, _ *features.S
 	if Config.MultiTurn {
 		return b.runMultiTurn(agent, prompt, outputDir)
 	}
+
+	freshBatchBranch(agent)
 
 	// Run agent and collect trace
 	start := time.Now()
@@ -289,6 +295,8 @@ func (b *batchChannel) runMultiTurn(agent *core.Agent, rawPrompt string, outputD
 	if len(messages) == 0 {
 		return fmt.Errorf("batch: multi-turn: empty message array")
 	}
+
+	freshBatchBranch(agent)
 
 	log.Printf("[batch] multi-turn: %d messages", len(messages))
 	start := time.Now()

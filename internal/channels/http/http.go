@@ -1,10 +1,12 @@
 package http
 
 import (
-	"context"
+	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/json"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
 	"os"
 
@@ -25,26 +27,56 @@ func (h *httpChannel) Start(agent *core.Agent, cfg config.Config, _ *features.Sk
 	if port == "" {
 		port = "8080"
 	}
+	// Bind to loopback by default so the agent (which can execute tools) is
+	// not exposed to the network. Set TORUS_HTTP_BIND (e.g. "0.0.0.0:8080")
+	// to deliberately bind a wider address.
+	bind := "127.0.0.1:" + port
+	if v := os.Getenv("TORUS_HTTP_BIND"); v != "" {
+		bind = v
+	}
+
+	// Fail closed on auth: require TORUSGO_API_KEY. Running without a key is
+	// only permitted when the bind address is loopback AND the operator has
+	// explicitly opted out via TORUS_HTTP_ALLOW_NOAUTH=1.
 	apiKey := os.Getenv("TORUSGO_API_KEY")
 	if apiKey == "" {
-		log.Println("[http] WARNING: no TORUSGO_API_KEY set — all requests will be accepted without authentication")
+		if os.Getenv("TORUS_HTTP_ALLOW_NOAUTH") != "1" || !isLoopbackBind(bind) {
+			return fmt.Errorf("[http] refusing to start: TORUSGO_API_KEY is not set; set it, or bind loopback and set TORUS_HTTP_ALLOW_NOAUTH=1 to explicitly run without authentication")
+		}
+		log.Println("[http] WARNING: TORUS_HTTP_ALLOW_NOAUTH=1 — accepting unauthenticated requests on loopback")
 	}
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/health", handleHealth)
 	mux.HandleFunc("/api/chat", authMiddleware(apiKey, handleChat(agent)))
 
-	log.Printf("[http] listening on :%s", port)
-	return http.ListenAndServe(":"+port, mux)
+	log.Printf("[http] listening on %s", bind)
+	return http.ListenAndServe(bind, mux)
 }
 
-// authMiddleware checks the Authorization header against the API key.
-// If no key is configured, all requests are allowed.
+// isLoopbackBind reports whether the bind address resolves to a loopback
+// host ("localhost" or a loopback IP such as 127.0.0.1 / ::1).
+func isLoopbackBind(bind string) bool {
+	host, _, err := net.SplitHostPort(bind)
+	if err != nil {
+		host = bind
+	}
+	if host == "localhost" {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
+}
+
+// authMiddleware checks the Authorization header against the API key using a
+// constant-time comparison. An empty apiKey (only reachable via the explicit
+// TORUS_HTTP_ALLOW_NOAUTH=1 loopback opt-out in Start) allows all requests.
 func authMiddleware(apiKey string, next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if apiKey != "" {
-			got := r.Header.Get("Authorization")
-			if got != "Bearer "+apiKey {
+			got := sha256.Sum256([]byte(r.Header.Get("Authorization")))
+			want := sha256.Sum256([]byte("Bearer " + apiKey))
+			if subtle.ConstantTimeCompare(got[:], want[:]) != 1 {
 				http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
 				return
 			}
@@ -146,7 +178,7 @@ func handleStreamChat(w http.ResponseWriter, r *http.Request, agent *core.Agent,
 }
 
 func handleBlockingChat(w http.ResponseWriter, r *http.Request, agent *core.Agent, message string) {
-	text, err := agent.Run(context.Background(), message)
+	text, err := agent.Run(r.Context(), message)
 	w.Header().Set("Content-Type", "application/json")
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)

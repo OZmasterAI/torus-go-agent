@@ -9,6 +9,7 @@ import (
 
 // TestLoadConfig_BasicParsing tests basic JSON parsing from a config file.
 func TestLoadConfig_BasicParsing(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "config.json")
 
@@ -43,6 +44,7 @@ func TestLoadConfig_BasicParsing(t *testing.T) {
 
 // TestLoadConfig_DefaultMaxTokens tests that MaxTokens defaults to 8192 when 0.
 func TestLoadConfig_DefaultMaxTokens(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "config.json")
 
@@ -61,6 +63,7 @@ func TestLoadConfig_DefaultMaxTokens(t *testing.T) {
 
 // TestLoadConfig_DefaultContextWindow tests that ContextWindow defaults to 128000 when omitted.
 func TestLoadConfig_DefaultContextWindow(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "config.json")
 
@@ -78,6 +81,7 @@ func TestLoadConfig_DefaultContextWindow(t *testing.T) {
 
 // TestLoadConfig_DefaultCompaction tests that Compaction defaults to "llm" when omitted.
 func TestLoadConfig_DefaultCompaction(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "config.json")
 
@@ -95,6 +99,7 @@ func TestLoadConfig_DefaultCompaction(t *testing.T) {
 
 // TestLoadConfig_ExplicitValues tests that explicit values override defaults.
 func TestLoadConfig_ExplicitValues(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "config.json")
 
@@ -219,6 +224,7 @@ func TestLoadConfig_EnvOverride_TelegramToken(t *testing.T) {
 
 // TestLoadConfig_FileNotFound returns defaults when config file is missing.
 func TestLoadConfig_FileNotFound(t *testing.T) {
+	t.Parallel()
 	cfg, err := LoadConfig("/nonexistent/path/config.json")
 	if err != nil {
 		t.Fatalf("LoadConfig should return defaults for missing file, got error: %v", err)
@@ -234,6 +240,7 @@ func TestLoadConfig_FileNotFound(t *testing.T) {
 
 // TestSaveConfig_RoundTrip tests that SaveConfig writes a file LoadConfig can read back.
 func TestSaveConfig_RoundTrip(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	path := filepath.Join(tmpDir, "config.json")
 	original := &Config{Agent: DefaultAgentConfig()}
@@ -259,6 +266,7 @@ func TestSaveConfig_RoundTrip(t *testing.T) {
 
 // TestLoadConfig_InvalidJSON tests error handling for malformed JSON.
 func TestLoadConfig_InvalidJSON(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "config.json")
 	os.WriteFile(configPath, []byte(`{invalid json}`), 0644)
@@ -271,6 +279,7 @@ func TestLoadConfig_InvalidJSON(t *testing.T) {
 
 // TestLoadConfig_WithRoutingAndFallback tests parsing of routing and fallback settings.
 func TestLoadConfig_WithRoutingAndFallback(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "config.json")
 
@@ -311,6 +320,7 @@ func TestLoadConfig_WithRoutingAndFallback(t *testing.T) {
 
 // TestLoadModels_Success tests successful loading of models.json.
 func TestLoadModels_Success(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	modelsPath := filepath.Join(tmpDir, "models.json")
 
@@ -341,6 +351,7 @@ func TestLoadModels_Success(t *testing.T) {
 
 // TestLoadModels_FileNotFound tests that missing models.json returns nil (no error).
 func TestLoadModels_FileNotFound(t *testing.T) {
+	t.Parallel()
 	loaded := LoadModels("/nonexistent/path")
 	if loaded != nil {
 		t.Errorf("LoadModels should return nil for missing file, got %v", loaded)
@@ -349,6 +360,7 @@ func TestLoadModels_FileNotFound(t *testing.T) {
 
 // TestLoadModels_InvalidJSON tests error handling for malformed models.json.
 func TestLoadModels_InvalidJSON(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	modelsPath := filepath.Join(tmpDir, "models.json")
 	os.WriteFile(modelsPath, []byte(`{invalid json}`), 0644)
@@ -362,6 +374,7 @@ func TestLoadModels_InvalidJSON(t *testing.T) {
 
 // TestResolveModelInfo_LocalLookup tests local models.json lookup.
 func TestResolveModelInfo_LocalLookup(t *testing.T) {
+	t.Parallel()
 	models := map[string]ModelInfo{
 		"claude-3-sonnet-20250219": {ContextWindow: 200000, MaxTokens: 4096},
 	}
@@ -377,6 +390,7 @@ func TestResolveModelInfo_LocalLookup(t *testing.T) {
 
 // TestResolveModelInfo_NotFound tests that zero ModelInfo is returned when model not found.
 func TestResolveModelInfo_NotFound(t *testing.T) {
+	t.Parallel()
 	models := map[string]ModelInfo{
 		"claude-3-sonnet-20250219": {ContextWindow: 200000, MaxTokens: 4096},
 	}
@@ -389,6 +403,7 @@ func TestResolveModelInfo_NotFound(t *testing.T) {
 
 // TestResolveModelInfo_NilModels tests handling when models map is nil.
 func TestResolveModelInfo_NilModels(t *testing.T) {
+	t.Parallel()
 	info := ResolveModelInfo("some-model", "anthropic", nil, "")
 	if info.ContextWindow != 0 || info.MaxTokens != 0 {
 		t.Errorf("Nil models should return zero ModelInfo, got %+v", info)
@@ -397,6 +412,7 @@ func TestResolveModelInfo_NilModels(t *testing.T) {
 
 // TestLoadTorus_Success tests successful loading of TORUS.md.
 func TestLoadTorus_Success(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	torusPath := filepath.Join(tmpDir, "TORUS.md")
 	torusContent := "You are a helpful AI assistant with specific personality traits."
@@ -410,6 +426,7 @@ func TestLoadTorus_Success(t *testing.T) {
 
 // TestLoadTorus_DefaultFallback tests default fallback when TORUS.md not found.
 func TestLoadTorus_DefaultFallback(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	defaultMsg := "You are an AI assistant with access to tools."
 
@@ -421,6 +438,7 @@ func TestLoadTorus_DefaultFallback(t *testing.T) {
 
 // TestLoadSchema_Success tests successful loading of SCHEMA.md.
 func TestLoadSchema_Success(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	schemaPath := filepath.Join(tmpDir, "SCHEMA.md")
 	schemaContent := "# Architecture\n\nDetailed system architecture..."
@@ -434,6 +452,7 @@ func TestLoadSchema_Success(t *testing.T) {
 
 // TestLoadSchema_FileNotFound tests default fallback (empty string) when SCHEMA.md not found.
 func TestLoadSchema_FileNotFound(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 
 	loaded := LoadSchema(tmpDir)
@@ -444,6 +463,7 @@ func TestLoadSchema_FileNotFound(t *testing.T) {
 
 // TestConfig_DataDir_ExplicitAbsolute tests DataDir with explicit absolute path.
 func TestConfig_DataDir_ExplicitAbsolute(t *testing.T) {
+	t.Parallel()
 	cfg := &Config{
 		Data: DataConfig{
 			Dir: "/absolute/path/to/data",
@@ -458,6 +478,7 @@ func TestConfig_DataDir_ExplicitAbsolute(t *testing.T) {
 
 // TestConfig_DataDir_ExplicitRelative tests DataDir with explicit relative path.
 func TestConfig_DataDir_ExplicitRelative(t *testing.T) {
+	t.Parallel()
 	configDir := "/etc/myapp"
 	cfg := &Config{
 		Data: DataConfig{
@@ -651,6 +672,7 @@ func TestAPIKeyFor_CaseInsensitive(t *testing.T) {
 
 // TestConfig_CompactionSettings tests parsing of compaction-related settings.
 func TestConfig_CompactionSettings(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "config.json")
 
@@ -694,6 +716,7 @@ func TestConfig_CompactionSettings(t *testing.T) {
 
 // TestConfig_ContinuousCompressionSettings tests parsing of continuous compression settings.
 func TestConfig_ContinuousCompressionSettings(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "config.json")
 
@@ -728,14 +751,15 @@ func TestConfig_ContinuousCompressionSettings(t *testing.T) {
 
 // TestConfig_ZoneBudgetingSettings tests parsing of zone budgeting settings.
 func TestConfig_ZoneBudgetingSettings(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "config.json")
 
 	cfg := Config{
 		Agent: AgentConfig{
-			Provider:          "anthropic",
-			Model:             "claude-3-sonnet-20250219",
-			ZoneBudgeting:     true,
+			Provider:           "anthropic",
+			Model:              "claude-3-sonnet-20250219",
+			ZoneBudgeting:      true,
 			ZoneArchivePercent: 40,
 		},
 	}
@@ -758,6 +782,7 @@ func TestConfig_ZoneBudgetingSettings(t *testing.T) {
 
 // TestConfig_SmartRoutingSettings tests parsing of smart routing settings.
 func TestConfig_SmartRoutingSettings(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "config.json")
 
@@ -788,14 +813,15 @@ func TestConfig_SmartRoutingSettings(t *testing.T) {
 
 // TestConfig_AzureSettings tests parsing of Azure-specific settings.
 func TestConfig_AzureSettings(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "config.json")
 
 	cfg := Config{
 		Agent: AgentConfig{
-			Provider:       "azure",
-			Model:          "gpt-4",
-			AzureResource:  "my-resource",
+			Provider:        "azure",
+			Model:           "gpt-4",
+			AzureResource:   "my-resource",
 			AzureDeployment: "my-deployment",
 			AzureAPIVersion: "2024-08-01-preview",
 		},
@@ -822,15 +848,16 @@ func TestConfig_AzureSettings(t *testing.T) {
 
 // TestConfig_VertexSettings tests parsing of Google Vertex-specific settings.
 func TestConfig_VertexSettings(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "config.json")
 
 	cfg := Config{
 		Agent: AgentConfig{
-			Provider:     "vertex",
-			Model:        "gemini-1.5-pro",
+			Provider:      "vertex",
+			Model:         "gemini-1.5-pro",
 			VertexProject: "my-gcp-project",
-			VertexRegion: "us-central1",
+			VertexRegion:  "us-central1",
 		},
 	}
 
@@ -852,6 +879,7 @@ func TestConfig_VertexSettings(t *testing.T) {
 
 // TestConfig_SteeringMode tests parsing of steering mode.
 func TestConfig_SteeringMode(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "config.json")
 
@@ -878,6 +906,7 @@ func TestConfig_SteeringMode(t *testing.T) {
 
 // TestConfig_MCPServers tests parsing of MCP server configurations.
 func TestConfig_MCPServers(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "config.json")
 
@@ -926,6 +955,7 @@ func TestConfig_MCPServers(t *testing.T) {
 
 // TestConfig_SkillsDir tests parsing of skills directory.
 func TestConfig_SkillsDir(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "config.json")
 
@@ -952,6 +982,7 @@ func TestConfig_SkillsDir(t *testing.T) {
 
 // TestConfig_PersistThinking tests that PersistThinking parses from JSON.
 func TestConfig_PersistThinking(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "config.json")
 
@@ -978,6 +1009,7 @@ func TestConfig_PersistThinking(t *testing.T) {
 
 // TestConfig_PersistThinking_DefaultFalse tests that PersistThinking defaults to false.
 func TestConfig_PersistThinking_DefaultFalse(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "config.json")
 
@@ -1003,6 +1035,7 @@ func TestConfig_PersistThinking_DefaultFalse(t *testing.T) {
 
 // TestConfig_TelegramAllowedUsers tests parsing of Telegram allowed users.
 func TestConfig_TelegramAllowedUsers(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "config.json")
 

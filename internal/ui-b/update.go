@@ -161,6 +161,19 @@ func (m Model) handleSubmit() (tea.Model, tea.Cmd) {
 		return m.executeCommand(input)
 	}
 
+	return m.submitToAgent(input)
+}
+
+// submitToAgent formats skill commands, appends the user message, and starts
+// the streaming pipeline. Called from handleSubmit (plain input) and
+// cmdSkillDispatch (typed skill/unknown slash commands).
+func (m Model) submitToAgent(input string) (tea.Model, tea.Cmd) {
+	// Re-entrancy guard: palette/overlay paths bypass handleSubmit's steering
+	// branch, so refuse to start a second turn while the agent is running.
+	if m.status.processing {
+		return m, nil
+	}
+
 	// Skill dispatch.
 	if m.skills != nil {
 		if skillName, ok := m.skills.IsSkillCommand(input); ok {
@@ -223,8 +236,12 @@ func (m Model) handleSubmit() (tea.Model, tea.Cmd) {
 func (m Model) handleStreamEvent(msg StreamEventMsg) (tea.Model, tea.Cmd) {
 	switch msg.Type {
 	case StreamTextDelta:
-		m.chat.AppendDelta(msg.Delta)
-		m.status.statusPhrase = "Torus relaying..."
+		// Guard against post-finalize stragglers: once the agent is done the
+		// event channel is nil, so any late delta must be ignored.
+		if m.eventCh != nil {
+			m.chat.AppendDelta(msg.Delta)
+			m.status.statusPhrase = "Torus relaying..."
+		}
 
 	case StreamThinkingDelta:
 		m.chat.thinking.AppendDelta(msg.Thinking)
@@ -284,13 +301,16 @@ func (m Model) handleAgentDone(msg AgentDoneMsg) (tea.Model, tea.Cmd) {
 	m.status.totalTokensOut += msg.TokensOut
 	m.status.totalCost += msg.Cost
 
-	// Clean up empty trailing placeholder.
+	// Finalize the trailing assistant message. Prefer the authoritative final
+	// text from the done message over whatever was streamed, and only drop the
+	// placeholder when both are empty.
 	if len(m.chat.messages) > 0 {
 		last := &m.chat.messages[len(m.chat.messages)-1]
-		if last.Role == "assistant" && last.Text == "" {
+		if last.Role == "assistant" {
 			if msg.Text != "" {
 				last.Text = msg.Text
-			} else {
+				last.Rendered = ""
+			} else if last.Text == "" {
 				m.chat.messages = m.chat.messages[:len(m.chat.messages)-1]
 			}
 		}

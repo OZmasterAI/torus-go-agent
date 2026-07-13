@@ -278,6 +278,7 @@ func TestNames(t *testing.T) {
 }
 
 func TestChannelInterface(t *testing.T) {
+	t.Parallel()
 	t.Run("channel_name", func(t *testing.T) {
 		ch := &mockChannel{name: "test_channel"}
 		name := ch.Name()

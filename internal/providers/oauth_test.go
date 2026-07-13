@@ -13,6 +13,7 @@ import (
 
 // TestGeneratePKCE tests that generatePKCE produces valid output.
 func TestGeneratePKCE(t *testing.T) {
+	t.Parallel()
 	verifier, challenge := generatePKCE()
 
 	// Verifier should be 43 chars (32 bytes * 4/3 with base64url, no padding).
@@ -49,6 +50,7 @@ func TestGeneratePKCE(t *testing.T) {
 
 // TestGeneratePKCEUniqueness tests that generatePKCE produces unique values on each call.
 func TestGeneratePKCEUniqueness(t *testing.T) {
+	t.Parallel()
 	v1, c1 := generatePKCE()
 	v2, c2 := generatePKCE()
 
@@ -62,13 +64,14 @@ func TestGeneratePKCEUniqueness(t *testing.T) {
 
 // TestBase64URLEncode tests URL-safe base64 encoding.
 func TestBase64URLEncode(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		input    []byte
 		expected string
 	}{
 		{[]byte("hello"), "aGVsbG8"},
-		{[]byte("test+/=="), "dGVzdCsvPT0"},  // base64url without padding
-		{[]byte{0xFF, 0xFE, 0xFD}, "__79"},   // uses - and _ instead of + and /
+		{[]byte("test+/=="), "dGVzdCsvPT0"}, // base64url without padding
+		{[]byte{0xFF, 0xFE, 0xFD}, "__79"},  // uses - and _ instead of + and /
 	}
 
 	for _, tt := range tests {
@@ -115,6 +118,7 @@ func TestGetAnthropicKeyFromEnv(t *testing.T) {
 
 // TestOAuthCredentialsJSON tests JSON marshaling/unmarshaling of OAuthCredentials.
 func TestOAuthCredentialsJSON(t *testing.T) {
+	t.Parallel()
 	original := &OAuthCredentials{
 		Access:    "access-token-abc123",
 		Refresh:   "refresh-token-xyz789",
@@ -149,6 +153,7 @@ func TestOAuthCredentialsJSON(t *testing.T) {
 // TestOAuthCredentialsRoundTrip tests saving and loading credentials from disk.
 // Since authDir() is not overridable, we test the JSON serialization behavior.
 func TestOAuthCredentialsRoundTrip(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	credFile := filepath.Join(tmpDir, "auth.json")
 

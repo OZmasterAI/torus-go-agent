@@ -7,6 +7,7 @@ import (
 
 // TestBashToolSimpleEcho tests basic echo command execution.
 func TestBashToolSimpleEcho(t *testing.T) {
+	t.Parallel()
 	tool := bashTool()
 	args := map[string]any{
 		"command": "echo hello",
@@ -32,6 +33,7 @@ func TestBashToolSimpleEcho(t *testing.T) {
 
 // TestBashToolExitCodeZero tests a command with explicit success (exit 0).
 func TestBashToolExitCodeZero(t *testing.T) {
+	t.Parallel()
 	tool := bashTool()
 	args := map[string]any{
 		"command": "true",
@@ -53,6 +55,7 @@ func TestBashToolExitCodeZero(t *testing.T) {
 
 // TestBashToolFailure tests a command that exits with error code.
 func TestBashToolFailure(t *testing.T) {
+	t.Parallel()
 	tool := bashTool()
 	args := map[string]any{
 		"command": "false",
@@ -74,6 +77,7 @@ func TestBashToolFailure(t *testing.T) {
 
 // TestBashToolWithWorkingDirectory tests command execution in a specific directory.
 func TestBashToolWithWorkingDirectory(t *testing.T) {
+	t.Parallel()
 	tool := bashTool()
 	args := map[string]any{
 		"command": "pwd",
@@ -100,6 +104,7 @@ func TestBashToolWithWorkingDirectory(t *testing.T) {
 
 // TestBashToolNoOutput tests a command with no output.
 func TestBashToolNoOutput(t *testing.T) {
+	t.Parallel()
 	tool := bashTool()
 	args := map[string]any{
 		"command": "true",
@@ -122,6 +127,7 @@ func TestBashToolNoOutput(t *testing.T) {
 
 // TestBashToolMultipleCommands tests piped commands.
 func TestBashToolMultipleCommands(t *testing.T) {
+	t.Parallel()
 	tool := bashTool()
 	args := map[string]any{
 		"command": "echo hello | cat",
@@ -147,6 +153,7 @@ func TestBashToolMultipleCommands(t *testing.T) {
 
 // TestBashToolToolType verifies the tool is correctly configured.
 func TestBashToolToolType(t *testing.T) {
+	t.Parallel()
 	tool := bashTool()
 
 	if tool.Name != "bash" {
@@ -187,6 +194,7 @@ func TestBashToolToolType(t *testing.T) {
 
 // TestBashToolReturnType verifies the return type is correct.
 func TestBashToolReturnType(t *testing.T) {
+	t.Parallel()
 	tool := bashTool()
 	args := map[string]any{
 		"command": "echo test",
@@ -206,6 +214,7 @@ func TestBashToolReturnType(t *testing.T) {
 
 // TestBashToolMissingCommand tests behavior when command argument is missing.
 func TestBashToolMissingCommand(t *testing.T) {
+	t.Parallel()
 	tool := bashTool()
 	args := map[string]any{}
 

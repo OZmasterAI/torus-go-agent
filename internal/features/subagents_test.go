@@ -85,8 +85,8 @@ func newSubagentTestAgent(t *testing.T, mp *subagentMockProvider) (*core.Agent, 
 	t.Helper()
 	dag := newSubagentTestDAG(t)
 	cfg := typ.AgentConfig{
-		Provider:  typ.ProviderConfig{Name: mp.name, Model: mp.modelID, MaxTokens: 1024},
-		MaxTurns:  3,
+		Provider: typ.ProviderConfig{Name: mp.name, Model: mp.modelID, MaxTokens: 1024},
+		MaxTurns: 3,
 	}
 	hooks := core.NewHookRegistry()
 	agent := core.NewAgent(cfg, mp, hooks, dag)
@@ -98,6 +98,7 @@ func newSubagentTestAgent(t *testing.T, mp *subagentMockProvider) (*core.Agent, 
 // --- Tests ---
 
 func TestNewSubAgentManager(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name string
 		want *SubAgentManager
@@ -123,6 +124,7 @@ func TestNewSubAgentManager(t *testing.T) {
 }
 
 func TestDefaultToolsForType_Builder(t *testing.T) {
+	t.Parallel()
 	tools := DefaultToolsForType("builder")
 	if len(tools) != 6 {
 		t.Fatalf("builder should have 6 tools, got %d", len(tools))
@@ -140,6 +142,7 @@ func TestDefaultToolsForType_Builder(t *testing.T) {
 }
 
 func TestDefaultToolsForType_Researcher(t *testing.T) {
+	t.Parallel()
 	tools := DefaultToolsForType("researcher")
 	if len(tools) != 3 {
 		t.Fatalf("researcher should have 3 tools, got %d", len(tools))
@@ -164,6 +167,7 @@ func TestDefaultToolsForType_Researcher(t *testing.T) {
 }
 
 func TestDefaultToolsForType_Tester(t *testing.T) {
+	t.Parallel()
 	tools := DefaultToolsForType("tester")
 	if len(tools) != 4 {
 		t.Fatalf("tester should have 4 tools, got %d", len(tools))
@@ -188,6 +192,7 @@ func TestDefaultToolsForType_Tester(t *testing.T) {
 }
 
 func TestDefaultToolsForType_Unknown(t *testing.T) {
+	t.Parallel()
 	tools := DefaultToolsForType("unknown")
 	if len(tools) != 6 {
 		t.Fatalf("unknown type should default to all 6 tools, got %d", len(tools))
@@ -195,6 +200,7 @@ func TestDefaultToolsForType_Unknown(t *testing.T) {
 }
 
 func TestDefaultToolsForType_FreshCopy(t *testing.T) {
+	t.Parallel()
 	tools1 := DefaultToolsForType("researcher")
 	tools2 := DefaultToolsForType("researcher")
 
@@ -210,6 +216,7 @@ func TestDefaultToolsForType_FreshCopy(t *testing.T) {
 }
 
 func TestSpawnWithProvider_NilParentAgent(t *testing.T) {
+	t.Parallel()
 	m := NewSubAgentManager()
 	mp := &subagentMockProvider{name: "test", modelID: "test-model", cannedText: "response"}
 
@@ -230,6 +237,7 @@ func TestSpawnWithProvider_NilParentAgent(t *testing.T) {
 }
 
 func TestSpawnWithProvider_NilProvider(t *testing.T) {
+	t.Parallel()
 	m := NewSubAgentManager()
 	mp := &subagentMockProvider{name: "test", modelID: "test-model"}
 	parentAgent, _ := newSubagentTestAgent(t, mp)
@@ -251,6 +259,7 @@ func TestSpawnWithProvider_NilProvider(t *testing.T) {
 }
 
 func TestSpawnWithProvider_ValidSpawn(t *testing.T) {
+	t.Parallel()
 	m := NewSubAgentManager()
 	mp := &subagentMockProvider{
 		name:       "test",
@@ -284,6 +293,7 @@ func TestSpawnWithProvider_ValidSpawn(t *testing.T) {
 }
 
 func TestSpawnWithProvider_DefaultMaxTurns(t *testing.T) {
+	t.Parallel()
 	m := NewSubAgentManager()
 	mp := &subagentMockProvider{
 		name:       "test",
@@ -307,6 +317,7 @@ func TestSpawnWithProvider_DefaultMaxTurns(t *testing.T) {
 }
 
 func TestSpawnWithProvider_CustomTools(t *testing.T) {
+	t.Parallel()
 	m := NewSubAgentManager()
 	mp := &subagentMockProvider{
 		name:       "test",
@@ -326,9 +337,9 @@ func TestSpawnWithProvider_CustomTools(t *testing.T) {
 	}
 
 	id, err := m.SpawnWithProvider(parentAgent, mp, "system prompt", SubAgentConfig{
-		Task:      "test task",
-		Tools:     customTools,
-		MaxTurns:  5,
+		Task:     "test task",
+		Tools:    customTools,
+		MaxTurns: 5,
 	})
 
 	if err != nil {
@@ -340,6 +351,7 @@ func TestSpawnWithProvider_CustomTools(t *testing.T) {
 }
 
 func TestGetResult_Unknown(t *testing.T) {
+	t.Parallel()
 	m := NewSubAgentManager()
 
 	result, ok := m.GetResult("unknown_id")
@@ -353,6 +365,7 @@ func TestGetResult_Unknown(t *testing.T) {
 }
 
 func TestListRunning_Empty(t *testing.T) {
+	t.Parallel()
 	m := NewSubAgentManager()
 
 	running := m.ListRunning()
@@ -363,6 +376,7 @@ func TestListRunning_Empty(t *testing.T) {
 }
 
 func TestWait_UnknownID(t *testing.T) {
+	t.Parallel()
 	m := NewSubAgentManager()
 
 	result := m.Wait("unknown_id")
@@ -376,6 +390,7 @@ func TestWait_UnknownID(t *testing.T) {
 }
 
 func TestWait_AlreadyCompleted(t *testing.T) {
+	t.Parallel()
 	m := NewSubAgentManager()
 	id := "test_id"
 	expectedResult := &SubAgentResult{
@@ -402,6 +417,7 @@ func TestWait_AlreadyCompleted(t *testing.T) {
 }
 
 func TestSpawnAndWait_Integration(t *testing.T) {
+	t.Parallel()
 	m := NewSubAgentManager()
 	mp := &subagentMockProvider{
 		name:       "test",
@@ -457,6 +473,7 @@ func TestSpawnAndWait_Integration(t *testing.T) {
 }
 
 func TestFilterTools(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name      string
 		tools     []typ.Tool
@@ -511,6 +528,7 @@ func TestFilterTools(t *testing.T) {
 }
 
 func TestFilterTools_OrderPreserved(t *testing.T) {
+	t.Parallel()
 	tools := []typ.Tool{
 		{Name: "bash"},
 		{Name: "read"},
@@ -538,6 +556,7 @@ func TestFilterTools_OrderPreserved(t *testing.T) {
 }
 
 func TestSubAgentConfig_ZeroValue(t *testing.T) {
+	t.Parallel()
 	cfg := SubAgentConfig{}
 
 	if cfg.Task != "" {
@@ -555,6 +574,7 @@ func TestSubAgentConfig_ZeroValue(t *testing.T) {
 }
 
 func TestSubAgentResult_ZeroValue(t *testing.T) {
+	t.Parallel()
 	result := SubAgentResult{}
 
 	if result.Text != "" {
@@ -572,6 +592,7 @@ func TestSubAgentResult_ZeroValue(t *testing.T) {
 }
 
 func TestSpawnWithProvider_ParentBranchUnchanged(t *testing.T) {
+	t.Parallel()
 	m := NewSubAgentManager()
 	mp := &subagentMockProvider{
 		name:       "test",

@@ -28,6 +28,7 @@ func (c *captureMockProvider) StreamComplete(ctx context.Context, sys string, ms
 // configured value. This prevents 400 errors on models where max_completion_tokens
 // equals the full context window.
 func TestLoopEdge_DynamicMaxTokens(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name          string
 		contextWindow int
@@ -86,6 +87,7 @@ func helperNewTestDAG(t *testing.T) *DAG {
 }
 
 func TestLoopEdge_ContextCancellation(t *testing.T) {
+	t.Parallel()
 	mp := &mockProvider{
 		name:       "mock",
 		modelID:    "mock-model-1",
@@ -104,6 +106,7 @@ func TestLoopEdge_ContextCancellation(t *testing.T) {
 }
 
 func TestLoopEdge_EmptyUserMessage(t *testing.T) {
+	t.Parallel()
 	mp := &mockProvider{
 		name:       "mock",
 		modelID:    "mock-model-1",
@@ -124,6 +127,7 @@ func TestLoopEdge_EmptyUserMessage(t *testing.T) {
 }
 
 func TestLoopEdge_MaxTurnsExhausted(t *testing.T) {
+	t.Parallel()
 	mp := &mockProvider{
 		name:       "mock",
 		modelID:    "mock-model-1",
@@ -151,6 +155,7 @@ func TestLoopEdge_MaxTurnsExhausted(t *testing.T) {
 }
 
 func TestLoopEdge_MaxTurnsZero(t *testing.T) {
+	t.Parallel()
 	mp := &mockProvider{
 		name:       "mock",
 		modelID:    "mock-model-1",
@@ -193,24 +198,56 @@ func (n *noResponseProvider) StreamComplete(_ context.Context, _ string, _ []typ
 	return ch, nil
 }
 
+// emptyStreamProvider streams no events at all before closing the channel.
+type emptyStreamProvider struct{}
+
+func (n *emptyStreamProvider) Name() string    { return "empty-stream" }
+func (n *emptyStreamProvider) ModelID() string { return "empty-stream-model" }
+func (n *emptyStreamProvider) Complete(_ context.Context, _ string, _ []typ.Message, _ []typ.Tool, _ int) (*typ.AssistantMessage, error) {
+	return nil, errors.New("complete not implemented")
+}
+func (n *emptyStreamProvider) StreamComplete(_ context.Context, _ string, _ []typ.Message, _ []typ.Tool, _ int) (<-chan typ.StreamEvent, error) {
+	ch := make(chan typ.StreamEvent)
+	go close(ch)
+	return ch, nil
+}
+
+// A stream that closes without an explicit message_stop event is handled two
+// ways: if any text was streamed, the turn is salvaged as a synthesized
+// end_turn message (no error); if nothing was streamed at all, it surfaces
+// EventAgentError instead of hanging or panicking.
 func TestLoopEdge_StreamEndWithoutResponse(t *testing.T) {
-	dag := helperNewTestDAG(t)
-	cfg := typ.AgentConfig{
-		Provider: typ.ProviderConfig{Name: "mock", Model: "mock-model-1", MaxTokens: 512},
-		MaxTurns: 1,
-	}
-	hooks := NewHookRegistry()
-	agent := NewAgent(cfg, nil, hooks, dag)
-	agent.SetCompaction(CompactionConfig{Mode: CompactionOff})
+	t.Parallel()
 
-	noResponseProvider := &noResponseProvider{}
-	agent.provider = noResponseProvider
-
-	evs := collectEvents(agent.RunStream(context.Background(), "test"))
-	errEvs := findEvents(evs, EventAgentError)
-	if len(errEvs) == 0 {
-		t.Error("expected EventAgentError when stream closes without response")
+	newAgent := func(t *testing.T, p typ.Provider) *Agent {
+		dag := helperNewTestDAG(t)
+		cfg := typ.AgentConfig{
+			Provider: typ.ProviderConfig{Name: "mock", Model: "mock-model-1", MaxTokens: 512},
+			MaxTurns: 1,
+		}
+		agent := NewAgent(cfg, nil, NewHookRegistry(), dag)
+		agent.SetCompaction(CompactionConfig{Mode: CompactionOff})
+		agent.provider = p
+		return agent
 	}
+
+	t.Run("text streamed but no stop event is salvaged without error", func(t *testing.T) {
+		t.Parallel()
+		agent := newAgent(t, &noResponseProvider{}) // streams "hello" then closes
+		evs := collectEvents(agent.RunStream(context.Background(), "test"))
+		if n := len(findEvents(evs, EventAgentError)); n != 0 {
+			t.Errorf("expected no EventAgentError when text was streamed before close, got %d", n)
+		}
+	})
+
+	t.Run("empty stream with no response surfaces an error", func(t *testing.T) {
+		t.Parallel()
+		agent := newAgent(t, &emptyStreamProvider{}) // streams nothing then closes
+		evs := collectEvents(agent.RunStream(context.Background(), "test"))
+		if len(findEvents(evs, EventAgentError)) == 0 {
+			t.Error("expected EventAgentError when stream closes with no response at all")
+		}
+	})
 }
 
 type toolCallProvider struct {
@@ -250,6 +287,7 @@ func (t *toolCallProvider) StreamComplete(_ context.Context, _ string, _ []typ.M
 }
 
 func TestLoopEdge_ToolNotFound(t *testing.T) {
+	t.Parallel()
 	dag := helperNewTestDAG(t)
 	cfg := typ.AgentConfig{
 		Provider: typ.ProviderConfig{Name: "mock", Model: "mock-model-1", MaxTokens: 512},
@@ -280,6 +318,7 @@ func TestLoopEdge_ToolNotFound(t *testing.T) {
 }
 
 func TestLoopEdge_HookBlocksUserInput(t *testing.T) {
+	t.Parallel()
 	mp := &mockProvider{
 		name:       "mock",
 		modelID:    "mock-model-1",
@@ -309,6 +348,7 @@ func TestLoopEdge_HookBlocksUserInput(t *testing.T) {
 }
 
 func TestLoopEdge_HookBlocksLLMCall(t *testing.T) {
+	t.Parallel()
 	mp := &mockProvider{
 		name:       "mock",
 		modelID:    "mock-model-1",
@@ -335,6 +375,7 @@ func TestLoopEdge_HookBlocksLLMCall(t *testing.T) {
 }
 
 func TestLoopEdge_DAGAddNodeFailure(t *testing.T) {
+	t.Parallel()
 	mp := &mockProvider{
 		name:       "mock",
 		modelID:    "mock-model-1",
@@ -358,6 +399,7 @@ func TestLoopEdge_DAGAddNodeFailure(t *testing.T) {
 }
 
 func TestLoopEdge_OnStreamDeltaCallback(t *testing.T) {
+	t.Parallel()
 	mp := &mockProvider{
 		name:       "mock",
 		modelID:    "mock-model-1",
@@ -457,6 +499,7 @@ func (s *switchingToolProvider) StreamComplete(_ context.Context, _ string, _ []
 }
 
 func TestLoopEdge_OnToolUseCallback(t *testing.T) {
+	t.Parallel()
 	// Verify OnToolUse callback is called during normal tool use in a multi-turn scenario
 	dag := helperNewTestDAG(t)
 	cfg := typ.AgentConfig{
@@ -498,6 +541,7 @@ func TestLoopEdge_OnToolUseCallback(t *testing.T) {
 }
 
 func TestLoopEdge_OnStatusUpdateCallback(t *testing.T) {
+	t.Parallel()
 	mp := &mockProvider{
 		name:       "mock",
 		modelID:    "mock-model-1",
@@ -564,6 +608,7 @@ func (m *multiToolProvider) StreamComplete(_ context.Context, _ string, _ []typ.
 }
 
 func TestLoopEdge_MultipleToolCallsInOneTurn(t *testing.T) {
+	t.Parallel()
 	dag := helperNewTestDAG(t)
 	cfg := typ.AgentConfig{
 		Provider: typ.ProviderConfig{Name: "mock", Model: "mock-model-1", MaxTokens: 512},
@@ -614,6 +659,7 @@ func TestLoopEdge_MultipleToolCallsInOneTurn(t *testing.T) {
 }
 
 func TestLoopEdge_UserMessageModifiedByHook(t *testing.T) {
+	t.Parallel()
 	mp := &mockProvider{
 		name:       "mock",
 		modelID:    "mock-model-1",
@@ -654,6 +700,7 @@ func TestLoopEdge_UserMessageModifiedByHook(t *testing.T) {
 }
 
 func TestLoopEdge_SteeringChannelBasic(t *testing.T) {
+	t.Parallel()
 	// Test that steering channel messages are added to DAG during loop
 	// This requires a provider that makes multiple turns
 	mp := &mockProvider{
@@ -705,6 +752,7 @@ func TestLoopEdge_SteeringChannelBasic(t *testing.T) {
 }
 
 func TestLoopEdge_FindTool(t *testing.T) {
+	t.Parallel()
 	mp := &mockProvider{
 		name:       "mock",
 		modelID:    "mock-model-1",
@@ -737,6 +785,7 @@ func TestLoopEdge_FindTool(t *testing.T) {
 }
 
 func TestLoopEdge_SteeringMode(t *testing.T) {
+	t.Parallel()
 	mp := &mockProvider{
 		name:       "mock",
 		modelID:    "mock-model-1",
@@ -755,6 +804,7 @@ func TestLoopEdge_SteeringMode(t *testing.T) {
 }
 
 func TestLoopEdge_CompactionOffByDefault(t *testing.T) {
+	t.Parallel()
 	mp := &mockProvider{
 		name:       "mock",
 		modelID:    "mock-model-1",
@@ -768,6 +818,7 @@ func TestLoopEdge_CompactionOffByDefault(t *testing.T) {
 }
 
 func TestLoopEdge_GetCompaction(t *testing.T) {
+	t.Parallel()
 	mp := &mockProvider{
 		name:       "mock",
 		modelID:    "mock-model-1",
@@ -793,6 +844,7 @@ func TestLoopEdge_GetCompaction(t *testing.T) {
 }
 
 func TestLoopEdge_AddToolToAgent(t *testing.T) {
+	t.Parallel()
 	mp := &mockProvider{
 		name:       "mock",
 		modelID:    "mock-model-1",
@@ -822,6 +874,7 @@ func TestLoopEdge_AddToolToAgent(t *testing.T) {
 }
 
 func TestLoopEdge_DAGAndHooksGetters(t *testing.T) {
+	t.Parallel()
 	mp := &mockProvider{
 		name:       "mock",
 		modelID:    "mock-model-1",
@@ -839,6 +892,7 @@ func TestLoopEdge_DAGAndHooksGetters(t *testing.T) {
 }
 
 func TestLoopEdge_PromptBuildError(t *testing.T) {
+	t.Parallel()
 	mp := &mockProvider{
 		name:       "mock",
 		modelID:    "mock-model-1",
@@ -862,6 +916,7 @@ func TestLoopEdge_PromptBuildError(t *testing.T) {
 }
 
 func TestLoopEdge_TurnEventSequence(t *testing.T) {
+	t.Parallel()
 	mp := &mockProvider{
 		name:       "mock",
 		modelID:    "mock-model-1",
@@ -885,6 +940,7 @@ func TestLoopEdge_TurnEventSequence(t *testing.T) {
 }
 
 func TestLoopEdge_LargeContextWindow(t *testing.T) {
+	t.Parallel()
 	mp := &mockProvider{
 		name:       "mock",
 		modelID:    "mock-model-1",
@@ -908,6 +964,7 @@ func TestLoopEdge_LargeContextWindow(t *testing.T) {
 }
 
 func TestLoopEdge_CompressionBeforeCompaction(t *testing.T) {
+	t.Parallel()
 	mp := &mockProvider{
 		name:       "mock",
 		modelID:    "mock-model-1",
@@ -1002,14 +1059,19 @@ func TestLoopEdge_ParallelToolExecution(t *testing.T) {
 	}
 
 	// Parallel: ~100ms + overhead. Sequential would be ~300ms. Use 250ms as threshold.
-	if elapsed > 250*time.Millisecond {
-		t.Errorf("parallel execution took %v, expected < 250ms (sequential would be ~300ms)", elapsed)
+	limit := 250 * time.Millisecond
+	if raceEnabled {
+		limit = 1500 * time.Millisecond // (tolerates -race overhead)
+	}
+	if elapsed > limit {
+		t.Errorf("parallel execution took %v, expected < %v (sequential would be ~300ms)", elapsed, limit)
 	}
 }
 
 // TestLoopEdge_ParallelToolsDisabled_RunsSequentially verifies that with
 // ParallelTools=false (default), tools still run sequentially.
 func TestLoopEdge_ParallelToolsDisabled_RunsSequentially(t *testing.T) {
+	t.Parallel()
 	dag := helperNewTestDAG(t)
 	cfg := typ.AgentConfig{
 		Provider:      typ.ProviderConfig{Name: "mock", Model: "mock-model-1", MaxTokens: 512},
@@ -1050,6 +1112,7 @@ func TestLoopEdge_ParallelToolsDisabled_RunsSequentially(t *testing.T) {
 // TestLoopEdge_ParallelToolExecution_UnsafeRunsInline verifies that unsafe tools
 // (write, edit) run sequentially even when ParallelTools is enabled.
 func TestLoopEdge_ParallelToolExecution_UnsafeRunsInline(t *testing.T) {
+	t.Parallel()
 	var mu sync.Mutex
 	var order []string
 
@@ -1110,6 +1173,7 @@ func TestLoopEdge_ParallelToolExecution_UnsafeRunsInline(t *testing.T) {
 // TestLoopEdge_ParallelToolExecution_HookBlocksOne verifies that a before-hook
 // can block individual tools in parallel mode.
 func TestLoopEdge_ParallelToolExecution_HookBlocksOne(t *testing.T) {
+	t.Parallel()
 	dag := helperNewTestDAG(t)
 	cfg := typ.AgentConfig{
 		Provider:      typ.ProviderConfig{Name: "mock", Model: "mock-model-1", MaxTokens: 512},
@@ -1313,8 +1377,12 @@ func TestLoopEdge_EagerStreamingToolExecution(t *testing.T) {
 	}
 
 	// Parallel eager execution: 3 tools x 100ms each should complete in ~100ms, not ~300ms
-	if elapsed > 250*time.Millisecond {
-		t.Errorf("eager streaming execution took %v, expected < 250ms (sequential would be ~300ms)", elapsed)
+	limit := 250 * time.Millisecond
+	if raceEnabled {
+		limit = 1500 * time.Millisecond // (tolerates -race overhead)
+	}
+	if elapsed > limit {
+		t.Errorf("eager streaming execution took %v, expected < %v (sequential would be ~300ms)", elapsed, limit)
 	}
 }
 
@@ -1322,6 +1390,7 @@ func TestLoopEdge_EagerStreamingToolExecution(t *testing.T) {
 // but the provider doesn't emit per-block events, the code falls back to the
 // normal parallel execution path.
 func TestLoopEdge_EagerStreamingFallback(t *testing.T) {
+	t.Parallel()
 	dag := helperNewTestDAG(t)
 	cfg := typ.AgentConfig{
 		Provider:      typ.ProviderConfig{Name: "mock", Model: "mock-model-1", MaxTokens: 512},
@@ -1370,9 +1439,9 @@ func TestLoopEdge_EagerStreamingFallback(t *testing.T) {
 // trackingProvider records which method was called: Complete or StreamComplete.
 type trackingProvider struct {
 	mockProvider
-	mu             sync.Mutex
-	completeCalls  int
-	streamCalls    int
+	mu            sync.Mutex
+	completeCalls int
+	streamCalls   int
 }
 
 func (tp *trackingProvider) Complete(ctx context.Context, sys string, msgs []typ.Message, tools []typ.Tool, maxTokens int) (*typ.AssistantMessage, error) {
@@ -1391,6 +1460,7 @@ func (tp *trackingProvider) StreamComplete(ctx context.Context, sys string, msgs
 
 // TestLoopEdge_RunUsesComplete verifies that Run() calls Complete, not StreamComplete.
 func TestLoopEdge_RunUsesComplete(t *testing.T) {
+	t.Parallel()
 	tp := &trackingProvider{
 		mockProvider: mockProvider{name: "track", modelID: "track-1", cannedText: "hello"},
 	}
@@ -1420,6 +1490,7 @@ func TestLoopEdge_RunUsesComplete(t *testing.T) {
 
 // TestLoopEdge_RunStreamUsesStreamComplete verifies that RunStream() calls StreamComplete, not Complete.
 func TestLoopEdge_RunStreamUsesStreamComplete(t *testing.T) {
+	t.Parallel()
 	tp := &trackingProvider{
 		mockProvider: mockProvider{name: "track", modelID: "track-1", cannedText: "hello"},
 	}
@@ -1453,6 +1524,7 @@ func TestLoopEdge_RunStreamUsesStreamComplete(t *testing.T) {
 
 // TestLoopEdge_ForceStreamOverridesRun verifies that ForceStream=true makes Run() use StreamComplete.
 func TestLoopEdge_ForceStreamOverridesRun(t *testing.T) {
+	t.Parallel()
 	tp := &trackingProvider{
 		mockProvider: mockProvider{name: "track", modelID: "track-1", cannedText: "hello"},
 	}
@@ -1541,6 +1613,7 @@ func (f *failingToolProvider) StreamComplete(_ context.Context, _ string, _ []ty
 }
 
 func TestLoopEdge_PostToolUseFailure(t *testing.T) {
+	t.Parallel()
 	dag := helperNewTestDAG(t)
 	cfg := typ.AgentConfig{
 		Provider: typ.ProviderConfig{Name: "mock", Model: "mock-model-1", MaxTokens: 512},
@@ -1577,6 +1650,7 @@ func TestLoopEdge_PostToolUseFailure(t *testing.T) {
 }
 
 func TestLoopEdge_StopOverride(t *testing.T) {
+	t.Parallel()
 	dag := helperNewTestDAG(t)
 	cfg := typ.AgentConfig{
 		Provider: typ.ProviderConfig{Name: "mock", Model: "mock-model-1", MaxTokens: 512},
@@ -1609,6 +1683,7 @@ func TestLoopEdge_StopOverride(t *testing.T) {
 }
 
 func TestLoopEdge_Notify(t *testing.T) {
+	t.Parallel()
 	mp := &mockProvider{name: "mock", modelID: "mock-model-1", cannedText: "r"}
 	agent, _ := newTestAgent(t, mp)
 	var fired bool
@@ -1628,6 +1703,7 @@ func TestLoopEdge_Notify(t *testing.T) {
 }
 
 func TestLoopEdge_SessionStartEnd(t *testing.T) {
+	t.Parallel()
 	mp := &mockProvider{name: "mock", modelID: "mock-model-1", cannedText: "session test"}
 	agent, _ := newTestAgent(t, mp)
 	var startFired, endFired bool
@@ -1652,6 +1728,7 @@ func TestLoopEdge_SessionStartEnd(t *testing.T) {
 }
 
 func TestLoopEdge_SessionEndFiresOnError(t *testing.T) {
+	t.Parallel()
 	mp := &mockProvider{name: "mock", modelID: "mock-model-1", streamErr: errors.New("down"), completeErr: errors.New("down")}
 	agent, _ := newTestAgent(t, mp)
 	var endFired bool
@@ -1666,6 +1743,7 @@ func TestLoopEdge_SessionEndFiresOnError(t *testing.T) {
 }
 
 func TestLoopEdge_SetConfig(t *testing.T) {
+	t.Parallel()
 	mp := &mockProvider{name: "mock", modelID: "mock-model-1", cannedText: "r"}
 	agent, _ := newTestAgent(t, mp)
 	var fired bool

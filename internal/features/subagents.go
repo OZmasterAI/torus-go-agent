@@ -6,8 +6,8 @@ package features
 import (
 	"context"
 	"fmt"
-	"log"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"torus_go_agent/internal/core"
@@ -15,8 +15,29 @@ import (
 	"torus_go_agent/internal/types"
 )
 
+// subAgentIDSeq guarantees unique sub-agent IDs even when two spawns land on the
+// same clock tick (time.Now().UnixNano() can repeat on coarse-resolution clocks,
+// e.g. Windows).
+var subAgentIDSeq atomic.Uint64
+
 // Tool is a local alias to avoid repeating the full qualified name throughout this file.
 type Tool = types.Tool
+
+// Sub-agent defaults. The parent Agent's config is not accessible from this package
+// (core.Agent.config is unexported and has no getter), so these named constants stand
+// in for values that would otherwise be inherited from the parent.
+const (
+	// defaultSubAgentMaxTurns caps a sub-agent's ReAct loop when the caller passes
+	// MaxTurns <= 0. Using a finite default (not 0/unlimited) matches the documented
+	// behaviour on SubAgentConfig.MaxTurns.
+	defaultSubAgentMaxTurns = 30
+	// defaultSubAgentMaxTokens is the per-response output cap for a sub-agent.
+	defaultSubAgentMaxTokens = 8192
+	// defaultSubAgentContextWindow sets the model's full context window so the agent
+	// loop's compaction threshold engages (loop.go only compacts when ContextWindow > 0),
+	// preventing context-overflow 400s. Mirrors the codebase-wide generic default.
+	defaultSubAgentContextWindow = 128000
+)
 
 // SubAgentConfig specifies how a sub-agent should be created and what it should do.
 type SubAgentConfig struct {
@@ -73,7 +94,7 @@ func (m *SubAgentManager) SpawnWithProvider(
 		return "", fmt.Errorf("subagents: provider must not be nil")
 	}
 
-	id := fmt.Sprintf("sa_%d_%s", time.Now().UnixNano(), cfg.AgentType)
+	id := fmt.Sprintf("sa_%d_%d_%s", time.Now().UnixNano(), subAgentIDSeq.Add(1), cfg.AgentType)
 
 	tools := cfg.Tools
 	if tools == nil {
@@ -81,7 +102,7 @@ func (m *SubAgentManager) SpawnWithProvider(
 	}
 	maxTurns := cfg.MaxTurns
 	if maxTurns <= 0 {
-		maxTurns = types.DefaultMaxTurns
+		maxTurns = defaultSubAgentMaxTurns
 	}
 
 	parentDAG := parentAgent.DAG()
@@ -90,19 +111,15 @@ func (m *SubAgentManager) SpawnWithProvider(
 		return "", fmt.Errorf("subagents: get parent head: %w", err)
 	}
 
-	// Save parent branch, create sub-branch (Branch switches branchID), then restore.
-	parentBranchID := parentDAG.CurrentBranchID()
+	// Fork an independent DAG for the sub-agent WITHOUT mutating the parent's
+	// active branch. ForkFrom inserts the branch row and returns a DAG bound to
+	// it (shares DB, own branchID), so the parent's branchID is never touched.
 	branchName := fmt.Sprintf("subagent_%s", id)
-	subBranchID, err := parentDAG.Branch(parentHead, branchName)
+	subDAG, err := parentDAG.ForkFrom(parentHead, branchName)
 	if err != nil {
 		return "", fmt.Errorf("subagents: create branch: %w", err)
 	}
-	if err := parentDAG.SwitchBranch(parentBranchID); err != nil {
-		log.Printf("[subagents] warning: restore parent branch %q: %v", parentBranchID, err)
-	}
-
-	// Fork an independent DAG for the sub-agent (shares DB, own branchID).
-	subDAG := parentDAG.Fork(subBranchID)
+	subBranchID := subDAG.CurrentBranchID()
 
 	state := &subAgentState{result: make(chan *SubAgentResult, 1)}
 	m.running.Store(id, state)
@@ -152,10 +169,11 @@ func (m *SubAgentManager) SpawnWithProvider(
 		})
 
 		subAgentCfg := types.AgentConfig{
-			Provider:     types.ProviderConfig{MaxTokens: 8192},
-			SystemPrompt: systemPrompt,
-			Tools:        tools,
-			MaxTurns:     maxTurns,
+			Provider:      types.ProviderConfig{MaxTokens: defaultSubAgentMaxTokens},
+			SystemPrompt:  systemPrompt,
+			Tools:         tools,
+			MaxTurns:      maxTurns,
+			ContextWindow: defaultSubAgentContextWindow,
 		}
 
 		agent := core.NewAgent(subAgentCfg, provider, hooks, subDAG)

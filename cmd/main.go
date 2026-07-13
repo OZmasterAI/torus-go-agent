@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"fmt"
 	"log"
@@ -13,12 +14,11 @@ import (
 	"github.com/joho/godotenv"
 
 	"torus_go_agent/internal/channels"
+	batchchan "torus_go_agent/internal/channels/batch"
 	_ "torus_go_agent/internal/channels/http"     // register http channel
 	_ "torus_go_agent/internal/channels/telegram" // register telegram channel
-	batchchan "torus_go_agent/internal/channels/batch"
 	tuichan "torus_go_agent/internal/channels/tui"
 	tuibchan "torus_go_agent/internal/channels/tui-b"
-	uib "torus_go_agent/internal/ui-b"
 	"torus_go_agent/internal/config"
 	"torus_go_agent/internal/constants"
 	"torus_go_agent/internal/core"
@@ -28,6 +28,7 @@ import (
 	"torus_go_agent/internal/tools"
 	"torus_go_agent/internal/types"
 	"torus_go_agent/internal/ui"
+	uib "torus_go_agent/internal/ui-b"
 )
 
 // resolveConfigDir returns the config directory, checking in order:
@@ -90,11 +91,18 @@ func main() {
 	// Auto-detect model specs: models.json → OpenRouter API → code defaults
 	models := config.LoadModels(cfgDir)
 	if info := config.ResolveModelInfo(cfg.Agent.Model, cfg.Agent.Provider, models, cfgDir); info.ContextWindow > 0 {
+		// Guard against a nonsensical MaxTokens that meets or exceeds the context
+		// window, which would leave no room for input. Pin to a quarter window.
+		if info.MaxTokens >= info.ContextWindow {
+			info.MaxTokens = info.ContextWindow / 4
+		}
 		cfg.Agent.ContextWindow = info.ContextWindow
 		if info.MaxTokens > 0 {
 			cfg.Agent.MaxTokens = info.MaxTokens
 		}
 		log.Printf("[main] model %s: context=%d, maxTokens=%d (auto-detected)", cfg.Agent.Model, info.ContextWindow, info.MaxTokens)
+	} else {
+		log.Printf("[main] warning: model %s unresolved; using generic default specs (context=%d, maxTokens=%d)", cfg.Agent.Model, cfg.Agent.ContextWindow, cfg.Agent.MaxTokens)
 	}
 
 	// Apply startup screen overrides (user values win over auto-resolved)
@@ -168,16 +176,67 @@ func main() {
 		// (e.g. compactionModel or smartRoutingModel using an Anthropic model)
 		os.Setenv("ANTHROPIC_API_KEY", key)
 	}
+	if key == "" && cfg.Agent.Provider == "openai" {
+		oauthKey, err := providers.GetOpenAIAccessToken()
+		if err != nil {
+			fmt.Println("No API key. Starting Sign in with ChatGPT...")
+			// Headless mode skips the loopback callback entirely — for remote/VPS
+			// boxes where the browser's localhost redirect points at the user's
+			// laptop, not the server. LoginOpenAI also auto-falls back to the same
+			// paste flow if it cannot bind the loopback port.
+			headless := os.Getenv("TORUS_OAUTH_HEADLESS") == "1"
+			onAuthURL := func(u string) {
+				fmt.Println("\nOpen this URL in a browser to sign in with ChatGPT:\n  " + u)
+				fmt.Println("\nOn a remote/VPS/headless machine the page at localhost will not load —")
+				fmt.Println("after you approve, copy the full URL from your browser's address bar and paste it here.")
+				fmt.Println()
+			}
+			onPromptCode := func() (string, error) {
+				fmt.Print("Paste the redirect URL (or code): ")
+				line, err := bufio.NewReader(os.Stdin).ReadString('\n')
+				if err != nil && strings.TrimSpace(line) == "" {
+					return "", err
+				}
+				return strings.TrimSpace(line), nil
+			}
+			var creds *providers.OpenAICredentials
+			var loginErr error
+			if headless {
+				creds, loginErr = providers.LoginOpenAIHeadless(onAuthURL, onPromptCode)
+			} else {
+				creds, loginErr = providers.LoginOpenAI(onAuthURL, onPromptCode)
+			}
+			if loginErr != nil {
+				log.Fatalf("ChatGPT OAuth failed: %v", loginErr)
+			}
+			if err := providers.SaveOpenAICredentials(creds); err != nil {
+				log.Printf("[openai-oauth] warning: could not persist credentials: %v", err)
+			}
+			key = creds.Access
+			fmt.Println("Login successful (using ChatGPT subscription).")
+		} else {
+			key = oauthKey
+		}
+		// Export so secondary providers (routing / fallback / compaction /
+		// smart-routing) with provider=openai inherit the ChatGPT token,
+		// mirroring the Anthropic path above.
+		if key != "" {
+			os.Setenv("OPENAI_API_KEY", key)
+		}
+	}
 	if key == "" {
-		fmt.Fprintln(os.Stderr, "No API key. Set OPENROUTER_API_KEY or ANTHROPIC_API_KEY.")
+		fmt.Fprintln(os.Stderr, "No API key. Set OPENROUTER_API_KEY or ANTHROPIC_API_KEY, or select the openai provider to Sign in with ChatGPT.")
 		os.Exit(1)
 	}
 
 	// Create provider
 	prov := makeProvider(cfg.Agent.Provider, key, cfg.Agent.Model, &cfg.Agent)
 
-	// Wire weighted routing + fallback if configured
-	router := providers.NewRouter(prov)
+	// Resolve the agent's primary provider and the router that weighted routing /
+	// fallback should target. ResolveRouter avoids double-wrapping when prov is
+	// already a *Router (nvidia/free) or *RewardRouter — otherwise cfg.Routing /
+	// FallbackOrder would attach to an inert outer shell. (audit #4)
+	agentProv, router := providers.ResolveRouter(prov)
 	if len(cfg.Agent.Routing) > 0 {
 		var entries []providers.RoutingEntry
 		for _, r := range cfg.Agent.Routing {
@@ -237,7 +296,10 @@ func main() {
 	})
 
 	// Inject live DAG state per turn (static schema now in TORUS.md).
-	hooks.Register(core.HookBeforeContextBuild, "dag-context", func(ctx context.Context, d *core.HookData) error {
+	// Priority 100 (> compression's 50) so this runs AFTER unified-compression /
+	// zone-budget: the live [DAG state] line is appended post-compression and is
+	// never itself compressed away. (audit #5)
+	hooks.RegisterPriority(core.HookBeforeContextBuild, "dag-context", func(ctx context.Context, d *core.HookData) error {
 		brID, brName, headNode, msgCount, err := dag.CurrentBranchInfo()
 		if err != nil {
 			return nil // skip context injection on error
@@ -249,7 +311,7 @@ func main() {
 		}
 		d.Messages = append([]types.Message{state}, d.Messages...)
 		return nil
-	})
+	}, 100)
 
 	// Inject SCHEMA.md as first DAG node on branch start (survives compaction).
 	injectSchema := func() {
@@ -296,6 +358,23 @@ func main() {
 			return nil
 		}, 50)
 		log.Printf("[main] unified compression enabled (keepFirst: %d, keepLast: %d, archive: %d%%)", compressCfg.KeepFirst, compressCfg.KeepLast, archivePct)
+	} else if cfg.Agent.ZoneBudgeting {
+		// Legacy zone-budgeting strategy, used only when the unified pipeline is
+		// off — so the config comment "applied only when continuousCompression is
+		// false" is now accurate instead of the flag being a no-op. (audit #2)
+		archivePct := cfg.Agent.ZoneArchivePercent
+		if archivePct <= 0 {
+			archivePct = 25
+		}
+		zb := core.ZoneBudgetV2{
+			ContextWindow:    cfg.Agent.ContextWindow,
+			SystemArchivePct: archivePct,
+		}
+		hooks.RegisterPriority(core.HookBeforeContextBuild, "zone-budget", func(ctx context.Context, d *core.HookData) error {
+			d.Messages = core.ApplyZoneBudgetV2(d.Messages, zb, nil)
+			return nil
+		}, 50)
+		log.Printf("[main] zone budgeting enabled (archive: %d%%)", archivePct)
 	}
 
 	// Build tools: default 6 + MCP tools
@@ -343,7 +422,7 @@ func main() {
 		PersistThinking:   cfg.Agent.PersistThinking,
 		ParallelTools:     cfg.Agent.ParallelTools,
 		ForceStream:       cfg.Agent.ForceStream,
-	}, router, hooks, dag)
+	}, agentProv, hooks, dag)
 
 	// Hot-reload: watch all discovered instruction files.
 	var watchPaths []string
@@ -370,7 +449,9 @@ func main() {
 			if features.IsSimpleMessage(userMessage) {
 				return smartProv
 			}
-			return prov
+			// Complex messages use the agent's full provider (weighted routing +
+			// fallback + reward scoring), not the bare base provider. (audit #1)
+			return agentProv
 		}
 		log.Printf("[main] smart routing enabled: simple → %s", cfg.Agent.SmartRoutingModel)
 	}
@@ -778,6 +859,11 @@ func makeProvider(providerName, apiKey, model string, agentCfg *config.AgentConf
 		}
 		return p
 	case "openai":
+		// A ChatGPT OAuth token (JWT) routes through the subscription backend
+		// (Responses API); a standard sk- key uses the API-billed path.
+		if providers.IsOpenAIOAuthToken(apiKey) {
+			return providers.NewOpenAIChatGPTProvider(apiKey, providers.OpenAIAccountID(), model)
+		}
 		p := providers.NewOpenAIProvider(apiKey, model)
 		if agentCfg != nil && agentCfg.BaseURL != "" {
 			p.BaseURL = agentCfg.BaseURL
@@ -785,6 +871,12 @@ func makeProvider(providerName, apiKey, model string, agentCfg *config.AgentConf
 		return p
 	case "grok":
 		p := providers.NewGrokProvider(apiKey, model)
+		if agentCfg != nil && agentCfg.BaseURL != "" {
+			p.BaseURL = agentCfg.BaseURL
+		}
+		return p
+	case "deepseek":
+		p := providers.NewDeepSeekProvider(apiKey, model)
 		if agentCfg != nil && agentCfg.BaseURL != "" {
 			p.BaseURL = agentCfg.BaseURL
 		}

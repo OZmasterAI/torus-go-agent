@@ -8,6 +8,7 @@ import (
 )
 
 func TestViewContainsHeader(t *testing.T) {
+	t.Parallel()
 	m := NewModel(nil, "test-model", config.AgentConfig{}, nil, nil)
 	m.width, m.height, m.ready = 80, 24, true
 	view := m.View()
@@ -17,6 +18,7 @@ func TestViewContainsHeader(t *testing.T) {
 }
 
 func TestViewShowsLoading(t *testing.T) {
+	t.Parallel()
 	m := NewModel(nil, "test", config.AgentConfig{}, nil, nil)
 	// Not ready yet
 	view := m.View()
@@ -26,6 +28,7 @@ func TestViewShowsLoading(t *testing.T) {
 }
 
 func TestViewWithOverlay(t *testing.T) {
+	t.Parallel()
 	m := NewModel(nil, "test", config.AgentConfig{}, nil, nil)
 	m.width, m.height, m.ready = 80, 24, true
 	m.overlay.Open("help", nil)

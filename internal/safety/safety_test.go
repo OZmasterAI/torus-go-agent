@@ -6,6 +6,7 @@ import (
 
 // TestScanSecrets_CleanText tests that clean text passes without detection.
 func TestScanSecrets_CleanText(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name    string
 		content string
@@ -47,6 +48,7 @@ func TestScanSecrets_CleanText(t *testing.T) {
 
 // TestScanSecrets_APIKey tests detection of API key patterns.
 func TestScanSecrets_APIKey(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name    string
 		content string
@@ -89,6 +91,7 @@ func TestScanSecrets_APIKey(t *testing.T) {
 
 // TestScanSecrets_AWSKey tests detection of AWS key patterns.
 func TestScanSecrets_AWSKey(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name    string
 		content string
@@ -126,6 +129,7 @@ func TestScanSecrets_AWSKey(t *testing.T) {
 
 // TestScanSecrets_SecretKey tests detection of secret key patterns (e.g., OpenAI sk-* keys).
 func TestScanSecrets_SecretKey(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name    string
 		content string
@@ -158,6 +162,7 @@ func TestScanSecrets_SecretKey(t *testing.T) {
 
 // TestScanSecrets_Credential tests detection of password/token/secret patterns.
 func TestScanSecrets_Credential(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name    string
 		content string
@@ -200,6 +205,7 @@ func TestScanSecrets_Credential(t *testing.T) {
 
 // TestScanSecrets_PrivateKey tests detection of private key PEM headers.
 func TestScanSecrets_PrivateKey(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name    string
 		content string
@@ -244,6 +250,7 @@ MIIEowIBAAKCAQEA1234567890abcdefg...
 
 // TestScanSecrets_GitHubPAT tests detection of GitHub Personal Access Token patterns.
 func TestScanSecrets_GitHubPAT(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name    string
 		content string
@@ -271,6 +278,7 @@ func TestScanSecrets_GitHubPAT(t *testing.T) {
 
 // TestScanSecrets_Truncation tests that long matches are truncated to 12 chars + "...".
 func TestScanSecrets_Truncation(t *testing.T) {
+	t.Parallel()
 	content := `aws_key = "AKIA0123456789ABCDEFGHIJKLMNOPQRSTUV"`
 	msg, found := ScanSecrets(content)
 	if !found {
@@ -294,6 +302,7 @@ func TestScanSecrets_Truncation(t *testing.T) {
 
 // TestCheckSafety_SafeInput tests that normal commands pass safety checks.
 func TestCheckSafety_SafeInput(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name string
 		cmd  string
@@ -347,6 +356,7 @@ func TestCheckSafety_SafeInput(t *testing.T) {
 
 // TestCheckSafety_RmRfRoot tests detection of rm -rf / patterns.
 func TestCheckSafety_RmRfRoot(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name string
 		cmd  string
@@ -384,6 +394,7 @@ func TestCheckSafety_RmRfRoot(t *testing.T) {
 
 // TestCheckSafety_NoPreserveRoot tests detection of rm --no-preserve-root patterns.
 func TestCheckSafety_NoPreserveRoot(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name string
 		cmd  string
@@ -417,6 +428,7 @@ func TestCheckSafety_NoPreserveRoot(t *testing.T) {
 
 // TestCheckSafety_ForkBomb tests detection of fork bomb patterns.
 func TestCheckSafety_ForkBomb(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name string
 		cmd  string
@@ -446,6 +458,7 @@ func TestCheckSafety_ForkBomb(t *testing.T) {
 
 // TestCheckSafety_Mkfs tests detection of mkfs patterns.
 func TestCheckSafety_Mkfs(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name string
 		cmd  string
@@ -483,6 +496,7 @@ func TestCheckSafety_Mkfs(t *testing.T) {
 
 // TestCheckSafety_Sysrq tests detection of sysrq-trigger patterns.
 func TestCheckSafety_Sysrq(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name string
 		cmd  string
@@ -516,6 +530,7 @@ func TestCheckSafety_Sysrq(t *testing.T) {
 
 // TestCheckSafety_BlockedInput tests that various dangerous inputs are blocked.
 func TestCheckSafety_BlockedInput(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name          string
 		cmd           string

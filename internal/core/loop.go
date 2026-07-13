@@ -16,20 +16,34 @@ import (
 // Agent is the DAG-based ReAct agent loop.
 type Agent struct {
 	config          t.AgentConfig
+	configMu        sync.RWMutex // guards mutable config fields (SystemPrompt, Tools)
 	provider        t.Provider
 	hooks           *HookRegistry
 	dag             *DAG
 	compaction      CompactionConfig
-	lastInputTokens int // actual input tokens from most recent API call
-	steeringMode  string // "mild" (default) or "aggressive"
-	activeFiles   []string       // recently-touched file paths from tool calls
-	activeFilesMu sync.RWMutex   // guards activeFiles
-	Summarize     func(string) (string, error)
-	OnStreamDelta func(delta string)
-	OnToolUse     func(name string, args map[string]any, result *t.ToolResult)
+	lastInputTokens int          // actual input tokens from most recent API call
+	steeringMode    string       // "mild" (default) or "aggressive"
+	activeFiles     []string     // recently-touched file paths from tool calls
+	activeFilesMu   sync.RWMutex // guards activeFiles
+
+	// promptCache is an incremental cache of the built context, keyed by head node
+	// ID, so a turn only fetches/parses nodes appended since the last build instead
+	// of re-walking and re-unmarshaling every ancestor (guarded by promptCacheMu).
+	promptCacheMu    sync.Mutex
+	promptCacheHead  string
+	promptCacheNodes []Node
+
+	// toolToken caches the token estimate of the (static) tool schemas so they are
+	// not re-marshaled every turn; keyed by tool count (guarded by toolTokenMu).
+	toolTokenMu    sync.Mutex
+	toolTokenEst   int
+	toolTokenLen   int
+	Summarize      func(string) (string, error)
+	OnStreamDelta  func(delta string)
+	OnToolUse      func(name string, args map[string]any, result *t.ToolResult)
 	OnStatusUpdate func(hookName string)
-	Steering      chan t.Message
-	RouteProvider func(userMessage string) t.Provider
+	Steering       chan t.Message
+	RouteProvider  func(userMessage string) t.Provider
 }
 
 // NewAgent creates a new agent.
@@ -49,7 +63,7 @@ func NewAgent(config t.AgentConfig, provider t.Provider, hooks *HookRegistry, da
 }
 
 func (a *Agent) SetCompaction(cfg CompactionConfig) { a.compaction = cfg }
-func (a *Agent) GetCompaction() CompactionConfig     { return a.compaction }
+func (a *Agent) GetCompaction() CompactionConfig    { return a.compaction }
 
 // Notify fires the on_notification hook with the given message and metadata.
 func (a *Agent) Notify(ctx context.Context, message string, meta map[string]any) {
@@ -150,11 +164,15 @@ func (a *Agent) runLoop(ctx context.Context, userMessage string, ch chan<- Agent
 		emit(AgentEvent{Type: EventAgentTurnStart, Turn: turn})
 		a.hooks.Fire(ctx, HookOnTurnStart, &HookData{AgentID: "main", Meta: map[string]any{"turn": turn}})
 
+		// Snapshot the system prompt once per turn; the reload goroutine may
+		// rewrite a.config.SystemPrompt concurrently.
+		sysPrompt := a.systemPrompt()
+
 		currentHead, chErr := a.dag.GetHead()
 		if chErr != nil {
 			log.Printf("[dag] GetHead error: %v", chErr)
 		}
-		messages, err := a.dag.PromptFrom(currentHead)
+		messages, err := a.buildPrompt(currentHead)
 		if err != nil {
 			emit(AgentEvent{Type: EventAgentError, Error: fmt.Errorf("build context: %w", err)})
 			return
@@ -191,12 +209,13 @@ func (a *Agent) runLoop(ctx context.Context, userMessage string, ch chan<- Agent
 						messages = compacted
 					}
 				}
+				messages = sanitizeMessages(messages)
 			} else {
 				currentHead, compHeadErr := a.dag.GetHead()
 				if compHeadErr != nil {
 					log.Printf("[dag] GetHead error after compaction: %v", compHeadErr)
 				}
-				messages, err = a.dag.PromptFrom(currentHead)
+				messages, err = a.buildPrompt(currentHead)
 				if err != nil {
 					emit(AgentEvent{Type: EventAgentError, Error: fmt.Errorf("reload after compaction: %w", err)})
 					return
@@ -205,13 +224,15 @@ func (a *Agent) runLoop(ctx context.Context, userMessage string, ch chan<- Agent
 			}
 			a.hooks.Fire(ctx, HookPostCompact, &HookData{
 				AgentID: "main",
-				Meta: map[string]any{"mode": string(a.compaction.Mode), "messages_before": preCount, "messages_after": len(messages), "persistent": true},
+				Meta:    map[string]any{"mode": string(a.compaction.Mode), "messages_before": preCount, "messages_after": len(messages), "persistent": true},
 			})
 			emit(AgentEvent{Type: EventStatusUpdate, StatusHook: "post_compact"})
 		}
 
-		tokenEst := EstimateTokens(messages)
-		a.hooks.Fire(ctx, HookOnTokenCount, &HookData{AgentID: "main", TokensIn: tokenEst, Meta: map[string]any{"estimated": true}})
+		// Estimate the message tokens once and reuse it below (token-count hook and
+		// prompt-cost budget), instead of re-marshaling the full history each time.
+		msgTokens := EstimateTokens(messages)
+		a.hooks.Fire(ctx, HookOnTokenCount, &HookData{AgentID: "main", TokensIn: msgTokens, Meta: map[string]any{"estimated": true}})
 
 		llmData := &HookData{AgentID: "main", Messages: messages, Meta: map[string]any{}}
 		a.hooks.Fire(ctx, HookBeforeLLMCall, llmData)
@@ -220,9 +241,16 @@ func (a *Agent) runLoop(ctx context.Context, userMessage string, ch chan<- Agent
 			log.Printf("[loop] LLM call blocked: %s", llmData.BlockReason)
 			break
 		}
+		// If a before-LLM hook swapped the message slice, the cached estimate is
+		// stale — recompute so the budget below stays exact.
+		if !sameMessageSlice(llmData.Messages, messages) {
+			msgTokens = EstimateTokens(llmData.Messages)
+		}
 		messages = llmData.Messages
 
+		a.configMu.RLock()
 		toolDefs := append([]t.Tool(nil), a.config.Tools...)
+		a.configMu.RUnlock()
 
 		activeProvider := a.provider
 		if a.RouteProvider != nil {
@@ -234,7 +262,13 @@ func (a *Agent) runLoop(ctx context.Context, userMessage string, ch chan<- Agent
 		// max_completion_tokens == context_window (common with free OpenRouter models).
 		maxTokens := a.config.Provider.MaxTokens
 		if a.config.ContextWindow > 0 {
-			inputCost := EstimatePromptCost(a.config.SystemPrompt, messages, toolDefs)
+			// Equivalent to EstimatePromptCost(sysPrompt, messages, toolDefs) but
+			// reuses the message estimate computed above and the cached tool-schema
+			// estimate instead of re-marshaling both every turn.
+			inputCost := EstimateTokensForText(sysPrompt) + msgTokens
+			if len(toolDefs) > 0 {
+				inputCost += a.estimateToolTokensCached(toolDefs)
+			}
 			available := a.config.ContextWindow - inputCost
 			if available < 1024 {
 				available = 1024 // absolute floor so we always get some output
@@ -270,7 +304,7 @@ func (a *Agent) runLoop(ctx context.Context, userMessage string, ch chan<- Agent
 				log.Printf("[loop] retrying LLM call (attempt %d/4) after transient error", attempt+1)
 			}
 			if streaming {
-				streamCh, streamErr := activeProvider.StreamComplete(ctx, a.config.SystemPrompt, messages, toolDefs, maxTokens)
+				streamCh, streamErr := activeProvider.StreamComplete(ctx, sysPrompt, messages, toolDefs, maxTokens)
 				if streamErr != nil {
 					llmErr = streamErr
 					var te *t.TransientError
@@ -286,7 +320,7 @@ func (a *Agent) runLoop(ctx context.Context, userMessage string, ch chan<- Agent
 				}
 			} else {
 				var completeErr error
-				resp, completeErr = activeProvider.Complete(ctx, a.config.SystemPrompt, messages, toolDefs, maxTokens)
+				resp, completeErr = activeProvider.Complete(ctx, sysPrompt, messages, toolDefs, maxTokens)
 				if completeErr != nil {
 					llmErr = completeErr
 					var te *t.TransientError
@@ -344,11 +378,16 @@ func (a *Agent) runLoop(ctx context.Context, userMessage string, ch chan<- Agent
 			}
 		}
 
-		if !HasToolUse(resp) {
-			// Auto-continue when the model hit its token limit mid-response.
-			if resp.StopReason == "length" || resp.StopReason == "max_tokens" {
+		// Auto-continue when the model hit its token limit mid-response. Handle this
+		// before the tool-use branch so a truncated response mid-tool-call also
+		// triggers continuation rather than executing a partial tool call. Capped at
+		// maxContinuations consecutive continuations to prevent an infinite spin.
+		if resp.StopReason == "length" || resp.StopReason == "max_tokens" {
+			if continuations >= maxContinuations {
+				log.Printf("[loop] continuation cap reached (%d consecutive truncations, stop_reason=%q); not auto-continuing further", maxContinuations, resp.StopReason)
+			} else {
 				continuations++
-				log.Printf("[loop] response truncated (stop_reason=%q), auto-continuing (%d)", resp.StopReason, continuations)
+				log.Printf("[loop] response truncated (stop_reason=%q), auto-continuing (%d/%d)", resp.StopReason, continuations, maxContinuations)
 				contHead, _ := a.dag.GetHead()
 				contContent := []t.ContentBlock{{Type: "text", Text: "Continue."}}
 				if _, contErr := a.dag.AddNode(contHead, t.RoleUser, contContent, "", "", 0); contErr != nil {
@@ -358,6 +397,13 @@ func (a *Agent) runLoop(ctx context.Context, userMessage string, ch chan<- Agent
 				a.hooks.Fire(ctx, HookOnTurnEnd, &HookData{AgentID: "main", Response: resp})
 				continue
 			}
+		} else {
+			// Reset the consecutive-continuation counter once a full (non-truncated)
+			// response arrives.
+			continuations = 0
+		}
+
+		if !HasToolUse(resp) {
 			finalText = ExtractText(resp)
 			// HookOnStop: can override stop decision via Block.
 			stopData := &HookData{AgentID: "main", Response: resp, Meta: map[string]any{"final_text": finalText}}
@@ -442,11 +488,129 @@ func (a *Agent) runLoop(ctx context.Context, userMessage string, ch chan<- Agent
 	emit(AgentEvent{Type: EventAgentDone, Text: finalText})
 }
 
+// promptCacheWalkLimit bounds the incremental parent-walk. Beyond this many
+// newly-appended nodes we fall back to a full rebuild rather than issuing one
+// GetNode query per node.
+const promptCacheWalkLimit = 256
+
+// buildPrompt returns the message context ending at head, using an incremental
+// cache keyed by the head node ID.
+//
+// Common case (head advanced by appending descendants of the previously-cached
+// head): it walks parent pointers from head back to the cached head and only
+// fetches/parses the newly-appended nodes, reusing the cached ancestor slice.
+//
+// Any other change (empty cache, branch switch, compaction fork, head rewind,
+// or a walk longer than promptCacheWalkLimit) falls back to a full GetAncestors
+// rebuild, which is identical to the previous a.dag.PromptFrom(head) behaviour.
+// Because the incremental path only activates after literally reaching the cached
+// head via parent links, the cached prefix is always a valid prefix of head's
+// ancestor chain; every other case rebuilds fully, so the result is always
+// correct without any explicit cache invalidation.
+func (a *Agent) buildPrompt(head string) ([]t.Message, error) {
+	if head == "" {
+		return nil, nil
+	}
+
+	a.promptCacheMu.Lock()
+	cachedHead := a.promptCacheHead
+	cachedNodes := a.promptCacheNodes
+	a.promptCacheMu.Unlock()
+
+	if head == cachedHead && cachedNodes != nil {
+		return nodesToMessagesCopy(cachedNodes), nil
+	}
+
+	// Try the incremental path: walk back from head until we reach cachedHead.
+	if cachedHead != "" && cachedNodes != nil {
+		var suffix []Node // collected newest-first
+		cur := head
+		reached := false
+		for i := 0; cur != "" && i < promptCacheWalkLimit; i++ {
+			if cur == cachedHead {
+				reached = true
+				break
+			}
+			n, err := a.dag.GetNode(cur)
+			if err != nil {
+				break
+			}
+			suffix = append(suffix, *n)
+			cur = n.ParentID
+		}
+		if reached {
+			full := make([]Node, 0, len(cachedNodes)+len(suffix))
+			full = append(full, cachedNodes...)
+			for j := len(suffix) - 1; j >= 0; j-- { // reverse into oldest-first
+				full = append(full, suffix[j])
+			}
+			a.promptCacheMu.Lock()
+			a.promptCacheHead = head
+			a.promptCacheNodes = full
+			a.promptCacheMu.Unlock()
+			return nodesToMessagesCopy(full), nil
+		}
+	}
+
+	// Full rebuild.
+	nodes, err := a.dag.GetAncestors(head)
+	if err != nil {
+		return nil, err
+	}
+	a.promptCacheMu.Lock()
+	a.promptCacheHead = head
+	a.promptCacheNodes = nodes
+	a.promptCacheMu.Unlock()
+	return nodesToMessagesCopy(nodes), nil
+}
+
+// nodesToMessagesCopy converts DAG nodes to messages, giving each message a
+// fresh Content slice so that in-place mutation by the caller (e.g. sanitize's
+// trailing-whitespace trim) can never corrupt the cached ancestor nodes.
+func nodesToMessagesCopy(nodes []Node) []t.Message {
+	msgs := make([]t.Message, len(nodes))
+	for i, n := range nodes {
+		c := make([]t.ContentBlock, len(n.Content))
+		copy(c, n.Content)
+		msgs[i] = t.Message{Role: t.Role(n.Role), Content: c}
+	}
+	return msgs
+}
+
+// sameMessageSlice reports whether a and b are the same underlying slice (same
+// length and backing array), i.e. an in-place hook did not replace it. Used to
+// decide whether a cached token estimate is still valid.
+func sameMessageSlice(a, b []t.Message) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	if len(a) == 0 {
+		return true
+	}
+	return &a[0] == &b[0]
+}
+
+// estimateToolTokensCached returns the token estimate for the tool schemas,
+// caching it keyed by tool count. Tool schemas are static within a session, so
+// this avoids re-marshaling them every turn. AddTool changes the count, which
+// invalidates the cache naturally.
+func (a *Agent) estimateToolTokensCached(tools []t.Tool) int {
+	a.toolTokenMu.Lock()
+	defer a.toolTokenMu.Unlock()
+	if a.toolTokenLen != len(tools) {
+		a.toolTokenEst = estimateToolTokens(tools)
+		a.toolTokenLen = len(tools)
+	}
+	return a.toolTokenEst
+}
+
 func consumeStreamEmit(streamCh <-chan t.StreamEvent, emit func(AgentEvent)) (*t.AssistantMessage, error) {
 	var resp *t.AssistantMessage
+	var textBuf strings.Builder
 	for ev := range streamCh {
 		switch ev.Type {
 		case t.EventTextDelta:
+			textBuf.WriteString(ev.Text)
 			emit(AgentEvent{Type: EventAgentTextDelta, Text: ev.Text})
 		case t.EventThinkingDelta:
 			emit(AgentEvent{Type: EventAgentThinkingDelta, Text: ev.Text})
@@ -457,12 +621,22 @@ func consumeStreamEmit(streamCh <-chan t.StreamEvent, emit func(AgentEvent)) (*t
 		}
 	}
 	if resp == nil {
+		// Stream closed without an explicit stop event. If we accumulated any text,
+		// synthesize a completed assistant message rather than failing the whole turn.
+		if textBuf.Len() > 0 {
+			return &t.AssistantMessage{
+				Message:    t.Message{Content: []t.ContentBlock{{Type: "text", Text: textBuf.String()}}},
+				StopReason: "end_turn",
+			}, nil
+		}
 		return nil, fmt.Errorf("stream ended without response")
 	}
 	return resp, nil
 }
 
 func (a *Agent) findTool(name string) *t.Tool {
+	a.configMu.RLock()
+	defer a.configMu.RUnlock()
 	for i := range a.config.Tools {
 		if a.config.Tools[i].Name == name {
 			return &a.config.Tools[i]
@@ -471,11 +645,19 @@ func (a *Agent) findTool(name string) *t.Tool {
 	return nil
 }
 
-func (a *Agent) DAG() *DAG                { return a.dag }
-func (a *Agent) Hooks() *HookRegistry     { return a.hooks }
-func (a *Agent) Provider() t.Provider     { return a.provider }
-func (a *Agent) SystemPrompt() string     { return a.config.SystemPrompt }
-func (a *Agent) AddTool(tool t.Tool)        { a.config.Tools = append(a.config.Tools, tool) }
+func (a *Agent) DAG() *DAG            { return a.dag }
+func (a *Agent) Hooks() *HookRegistry { return a.hooks }
+func (a *Agent) Provider() t.Provider { return a.provider }
+func (a *Agent) SystemPrompt() string { return a.systemPrompt() }
+func (a *Agent) AddTool(tool t.Tool) {
+	a.configMu.Lock()
+	a.config.Tools = append(a.config.Tools, tool)
+	a.configMu.Unlock()
+}
+
+// maxContinuations caps consecutive auto-"Continue." injections triggered by a
+// truncated (length/max_tokens) response, preventing an infinite continuation spin.
+const maxContinuations = 10
 
 // maxActiveFiles caps the number of tracked file paths.
 const maxActiveFiles = 50
@@ -530,7 +712,17 @@ func (a *Agent) ReloadSystemPrompt(ctx context.Context, newPrompt string) {
 	if data.AdditionalContext != "" {
 		newPrompt = newPrompt + "\n\n" + data.AdditionalContext
 	}
+	a.configMu.Lock()
 	a.config.SystemPrompt = newPrompt
+	a.configMu.Unlock()
+}
+
+// systemPrompt returns the current system prompt under a read lock. The reload
+// goroutine (ReloadSystemPrompt) may rewrite it concurrently with the loop.
+func (a *Agent) systemPrompt() string {
+	a.configMu.RLock()
+	defer a.configMu.RUnlock()
+	return a.config.SystemPrompt
 }
 func (a *Agent) SetSteeringMode(mode string) { a.steeringMode = mode }
 func (a *Agent) GetSteeringMode() string {
@@ -739,6 +931,7 @@ type eagerResult struct {
 // Returns the AssistantMessage, a map of eager results keyed by tool_use ID, and any error.
 func (a *Agent) consumeStreamEager(ctx context.Context, streamCh <-chan t.StreamEvent, emit func(AgentEvent)) (*t.AssistantMessage, map[string]*eagerResult, error) {
 	var resp *t.AssistantMessage
+	var textBuf strings.Builder
 	type pendingTool struct {
 		id   string
 		name string
@@ -751,6 +944,7 @@ func (a *Agent) consumeStreamEager(ctx context.Context, streamCh <-chan t.Stream
 	for ev := range streamCh {
 		switch ev.Type {
 		case t.EventTextDelta:
+			textBuf.WriteString(ev.Text)
 			emit(AgentEvent{Type: EventAgentTextDelta, Text: ev.Text})
 		case t.EventThinkingDelta:
 			emit(AgentEvent{Type: EventAgentThinkingDelta, Text: ev.Text})
@@ -847,6 +1041,14 @@ func (a *Agent) consumeStreamEager(ctx context.Context, streamCh <-chan t.Stream
 	}
 
 	if resp == nil {
+		// Stream closed without an explicit stop event. If we accumulated any text,
+		// synthesize a completed assistant message rather than failing the whole turn.
+		if textBuf.Len() > 0 {
+			return &t.AssistantMessage{
+				Message:    t.Message{Content: []t.ContentBlock{{Type: "text", Text: textBuf.String()}}},
+				StopReason: "end_turn",
+			}, results, nil
+		}
 		return nil, nil, fmt.Errorf("stream ended without response")
 	}
 	return resp, results, nil

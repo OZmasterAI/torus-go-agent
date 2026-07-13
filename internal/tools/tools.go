@@ -51,7 +51,9 @@ func bashTool() t.Tool {
 				}
 				return &t.ToolResult{Content: s, IsError: cmdErr != nil}, nil
 			case <-time.After(BashTimeout):
-				cmd.Process.Kill()
+				if p := cmd.Process; p != nil {
+					p.Kill()
+				}
 				return &t.ToolResult{Content: BashTimeoutMsg, IsError: true}, nil
 			}
 		},
@@ -90,6 +92,9 @@ func readTool() t.Tool {
 			}
 			lines := strings.Split(string(data), "\n")
 			off := int(GetFloat(args, "offset", 0))
+			if off < 0 {
+				off = 0
+			}
 			lim := int(GetFloat(args, "limit", float64(len(lines))))
 			end := off + lim
 			if end > len(lines) {
@@ -120,7 +125,13 @@ func writeTool() t.Tool {
 			fp, _ := args["file_path"].(string)
 			c, _ := args["content"].(string)
 			os.MkdirAll(filepath.Dir(fp), DirPerm)
-			if err := os.WriteFile(fp, []byte(c), FilePerm); err != nil {
+			// Agent-written files may contain secrets or config; write them
+			// owner-only (0600) instead of the package-wide FilePerm (0644,
+			// world-readable). Note: this does not tighten already-existing
+			// files (os.WriteFile only applies the mode on creation).
+			// Follow-up: workdir confinement for file paths is intentionally
+			// not implemented here — it needs config plumbing outside this file.
+			if err := os.WriteFile(fp, []byte(c), os.FileMode(0600)); err != nil {
 				return &t.ToolResult{Content: "Error: " + err.Error(), IsError: true}, nil
 			}
 			return &t.ToolResult{Content: fmt.Sprintf("Wrote %d lines to %s", strings.Count(c, "\n")+1, fp)}, nil
@@ -160,7 +171,9 @@ func editTool() t.Tool {
 			} else {
 				c = strings.Replace(c, old, nw, 1)
 			}
-			if err := os.WriteFile(fp, []byte(c), FilePerm); err != nil {
+			// 0600 for the same reason as the write tool: the mode only takes
+			// effect if the file is (re)created; existing files keep theirs.
+			if err := os.WriteFile(fp, []byte(c), os.FileMode(0600)); err != nil {
 				return &t.ToolResult{Content: "Error: " + err.Error(), IsError: true}, nil
 			}
 			return &t.ToolResult{Content: "Edited " + fp}, nil
@@ -225,8 +238,17 @@ func grepTool() t.Tool {
 			}
 			cmdArgs = append(cmdArgs, pat, path)
 			out, err := osexec.Command("rg", cmdArgs...).CombinedOutput()
-			if err != nil && len(out) == 0 {
-				return &t.ToolResult{Content: NoMatchesMsg}, nil
+			if err != nil {
+				// ripgrep exits 1 when there are simply no matches (not an
+				// error); 2 signals a real error and 127 means rg is missing.
+				if ee, ok := err.(*osexec.ExitError); ok && ee.ExitCode() == 1 {
+					return &t.ToolResult{Content: NoMatchesMsg}, nil
+				}
+				msg := "Error: " + err.Error()
+				if len(out) > 0 {
+					msg += "\n" + string(out)
+				}
+				return &t.ToolResult{Content: msg, IsError: true}, nil
 			}
 			return &t.ToolResult{Content: string(out)}, nil
 		},

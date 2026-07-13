@@ -8,6 +8,7 @@ import (
 )
 
 func TestGroupOperations_BasicTwoOps(t *testing.T) {
+	t.Parallel()
 	messages := []types.Message{
 		{Role: types.RoleAssistant, Content: textContent("You are a helpful agent.")}, // messages[0] system
 		{Role: types.RoleUser, Content: textContent("fix the auth bug")},
@@ -46,6 +47,7 @@ func TestGroupOperations_BasicTwoOps(t *testing.T) {
 }
 
 func TestGroupOperations_SkipsToolResultUserMessages(t *testing.T) {
+	t.Parallel()
 	messages := []types.Message{
 		{Role: types.RoleAssistant, Content: textContent("system")},
 		{Role: types.RoleUser, Content: textContent("do something")},
@@ -65,6 +67,7 @@ func TestGroupOperations_SkipsToolResultUserMessages(t *testing.T) {
 }
 
 func TestGroupOperations_EmptyMessages(t *testing.T) {
+	t.Parallel()
 	ops := GroupOperations(nil)
 	if len(ops) != 0 {
 		t.Fatalf("expected 0 operations for nil, got %d", len(ops))
@@ -72,6 +75,7 @@ func TestGroupOperations_EmptyMessages(t *testing.T) {
 }
 
 func TestGroupOperations_ExtractsMultipleFiles(t *testing.T) {
+	t.Parallel()
 	messages := []types.Message{
 		{Role: types.RoleAssistant, Content: textContent("system")},
 		{Role: types.RoleUser, Content: textContent("refactor the code")},
@@ -96,6 +100,7 @@ func TestGroupOperations_ExtractsMultipleFiles(t *testing.T) {
 }
 
 func TestGroupOperations_ExtractsToolNames(t *testing.T) {
+	t.Parallel()
 	messages := []types.Message{
 		{Role: types.RoleAssistant, Content: textContent("system")},
 		{Role: types.RoleUser, Content: textContent("check something")},
@@ -117,12 +122,13 @@ func TestGroupOperations_ExtractsToolNames(t *testing.T) {
 }
 
 func TestGroupOperations_StartAndEndIndices(t *testing.T) {
+	t.Parallel()
 	messages := []types.Message{
-		{Role: types.RoleAssistant, Content: textContent("system")},       // 0
-		{Role: types.RoleUser, Content: textContent("task one")},           // 1
-		{Role: types.RoleAssistant, Content: textContent("done one")},      // 2
-		{Role: types.RoleUser, Content: textContent("task two")},           // 3
-		{Role: types.RoleAssistant, Content: textContent("done two")},      // 4
+		{Role: types.RoleAssistant, Content: textContent("system")},   // 0
+		{Role: types.RoleUser, Content: textContent("task one")},      // 1
+		{Role: types.RoleAssistant, Content: textContent("done one")}, // 2
+		{Role: types.RoleUser, Content: textContent("task two")},      // 3
+		{Role: types.RoleAssistant, Content: textContent("done two")}, // 4
 	}
 
 	ops := GroupOperations(messages)
@@ -139,6 +145,7 @@ func TestGroupOperations_StartAndEndIndices(t *testing.T) {
 }
 
 func TestGroupOperations_MessagesSliceContents(t *testing.T) {
+	t.Parallel()
 	messages := []types.Message{
 		{Role: types.RoleAssistant, Content: textContent("system")},
 		{Role: types.RoleUser, Content: textContent("hello")},
@@ -155,6 +162,7 @@ func TestGroupOperations_MessagesSliceContents(t *testing.T) {
 }
 
 func TestGroupOperations_DeduplicatesFiles(t *testing.T) {
+	t.Parallel()
 	messages := []types.Message{
 		{Role: types.RoleAssistant, Content: textContent("system")},
 		{Role: types.RoleUser, Content: textContent("edit the file")},
@@ -176,6 +184,7 @@ func TestGroupOperations_DeduplicatesFiles(t *testing.T) {
 }
 
 func TestGroupOperations_OnlySystemMessage(t *testing.T) {
+	t.Parallel()
 	messages := []types.Message{
 		{Role: types.RoleAssistant, Content: textContent("system")},
 	}
@@ -187,6 +196,7 @@ func TestGroupOperations_OnlySystemMessage(t *testing.T) {
 }
 
 func TestRenderOperationTemplate_Basic(t *testing.T) {
+	t.Parallel()
 	op := Operation{
 		Intent:  "fix the auth bug",
 		Files:   []string{"auth.go", "auth_test.go"},
@@ -209,6 +219,7 @@ func TestRenderOperationTemplate_Basic(t *testing.T) {
 }
 
 func TestRenderOperationTemplate_NoTools(t *testing.T) {
+	t.Parallel()
 	op := Operation{
 		Intent:  "explain the code",
 		Outcome: "The code does X.",
@@ -224,6 +235,7 @@ func TestRenderOperationTemplate_NoTools(t *testing.T) {
 }
 
 func TestOperationToMessage(t *testing.T) {
+	t.Parallel()
 	op := Operation{
 		Intent:  "fix bug",
 		Tools:   []string{"read"},
@@ -245,6 +257,7 @@ func TestOperationToMessage(t *testing.T) {
 // --- ScoreOperation tests ---
 
 func TestScoreOperation_RecentHighFileOverlap(t *testing.T) {
+	t.Parallel()
 	op := Operation{
 		Files: []string{"auth.go", "main.go"},
 		Tools: []string{"edit", "read"},
@@ -260,6 +273,7 @@ func TestScoreOperation_RecentHighFileOverlap(t *testing.T) {
 }
 
 func TestScoreOperation_OldNoFileOverlap(t *testing.T) {
+	t.Parallel()
 	op := Operation{
 		Files: []string{"readme.md"},
 		Tools: []string{"read"},
@@ -272,6 +286,7 @@ func TestScoreOperation_OldNoFileOverlap(t *testing.T) {
 }
 
 func TestScoreOperation_MutationBoost(t *testing.T) {
+	t.Parallel()
 	editOp := Operation{Tools: []string{"edit", "write"}}
 	readOp := Operation{Tools: []string{"read", "glob"}}
 	activeFiles := []string{}
@@ -283,6 +298,7 @@ func TestScoreOperation_MutationBoost(t *testing.T) {
 }
 
 func TestScoreOperation_DecayIsExponential(t *testing.T) {
+	t.Parallel()
 	// Use an operation with zero non-recency signals to isolate decay behavior.
 	// No files, no tools, no outcome => only recency contributes to score.
 	op := Operation{}
@@ -303,6 +319,7 @@ func TestScoreOperation_DecayIsExponential(t *testing.T) {
 }
 
 func TestScoreOperation_JaccardFileOverlap(t *testing.T) {
+	t.Parallel()
 	op := Operation{Files: []string{"a.go", "b.go", "c.go"}}
 	// 2 out of 4 unique files overlap
 	activeFiles := []string{"a.go", "b.go", "d.go"}
@@ -319,6 +336,7 @@ func TestScoreOperation_JaccardFileOverlap(t *testing.T) {
 // --- Working Memory tests ---
 
 func TestAppendWorkingMemory_Basic(t *testing.T) {
+	t.Parallel()
 	sysMsg := types.Message{
 		Role:    types.RoleAssistant,
 		Content: []types.ContentBlock{{Type: "text", Text: "You are a helpful agent."}},
@@ -347,6 +365,7 @@ func TestAppendWorkingMemory_Basic(t *testing.T) {
 }
 
 func TestAppendWorkingMemory_EmptyOps(t *testing.T) {
+	t.Parallel()
 	sysMsg := types.Message{
 		Role:    types.RoleAssistant,
 		Content: []types.ContentBlock{{Type: "text", Text: "System prompt."}},
@@ -358,6 +377,7 @@ func TestAppendWorkingMemory_EmptyOps(t *testing.T) {
 }
 
 func TestAppendWorkingMemory_DoesNotMutateOriginal(t *testing.T) {
+	t.Parallel()
 	sysMsg := types.Message{
 		Role:    types.RoleAssistant,
 		Content: []types.ContentBlock{{Type: "text", Text: "Original."}},
@@ -370,6 +390,7 @@ func TestAppendWorkingMemory_DoesNotMutateOriginal(t *testing.T) {
 }
 
 func TestAppendWorkingMemory_TruncatesLongOutcome(t *testing.T) {
+	t.Parallel()
 	sysMsg := types.Message{
 		Role:    types.RoleAssistant,
 		Content: []types.ContentBlock{{Type: "text", Text: "System."}},
@@ -384,6 +405,7 @@ func TestAppendWorkingMemory_TruncatesLongOutcome(t *testing.T) {
 }
 
 func TestRenderWorkingMemoryOneLiner_Full(t *testing.T) {
+	t.Parallel()
 	op := Operation{
 		Intent:  "fix auth bug",
 		Outcome: "Tests passing",
@@ -402,6 +424,7 @@ func TestRenderWorkingMemoryOneLiner_Full(t *testing.T) {
 }
 
 func TestRenderWorkingMemoryOneLiner_NoOutcome(t *testing.T) {
+	t.Parallel()
 	op := Operation{Intent: "explore code", Files: []string{"main.go"}}
 	line := RenderWorkingMemoryOneLiner(op)
 	if strings.Contains(line, "[]") {
@@ -413,6 +436,7 @@ func TestRenderWorkingMemoryOneLiner_NoOutcome(t *testing.T) {
 }
 
 func TestRenderWorkingMemoryOneLiner_TruncatesAt80(t *testing.T) {
+	t.Parallel()
 	longOutcome := strings.Repeat("x", 120)
 	op := Operation{Intent: "task", Outcome: longOutcome}
 	line := RenderWorkingMemoryOneLiner(op)
@@ -428,6 +452,7 @@ func TestRenderWorkingMemoryOneLiner_TruncatesAt80(t *testing.T) {
 // --- Boundary detection tests ---
 
 func TestGroupOperations_SameFilesSameOp(t *testing.T) {
+	t.Parallel()
 	// Two user messages working on the same files should stay in one operation
 	messages := []types.Message{
 		{Role: types.RoleAssistant, Content: textContent("system")},
@@ -458,6 +483,7 @@ func TestGroupOperations_SameFilesSameOp(t *testing.T) {
 }
 
 func TestGroupOperations_DifferentFilesNewOp(t *testing.T) {
+	t.Parallel()
 	// Two user messages working on completely different files should be separate operations
 	messages := []types.Message{
 		{Role: types.RoleAssistant, Content: textContent("system")},
@@ -486,6 +512,7 @@ func TestGroupOperations_DifferentFilesNewOp(t *testing.T) {
 }
 
 func TestGroupOperations_IntentSignalBoundary(t *testing.T) {
+	t.Parallel()
 	// Assistant says "now let's move on" → should trigger boundary
 	messages := []types.Message{
 		{Role: types.RoleAssistant, Content: textContent("system")},
@@ -504,6 +531,7 @@ func TestGroupOperations_IntentSignalBoundary(t *testing.T) {
 // --- Causal dependency scoring tests ---
 
 func TestScoreOperation_CausalDependencyBoost(t *testing.T) {
+	t.Parallel()
 	op := Operation{
 		Files: []string{"auth.go"},
 		Tools: []string{"read"},
@@ -522,6 +550,7 @@ func TestScoreOperation_CausalDependencyBoost(t *testing.T) {
 }
 
 func TestScoreOperation_NoCausalNoDifference(t *testing.T) {
+	t.Parallel()
 	op := Operation{
 		Files: []string{"readme.md"},
 		Tools: []string{"read"},

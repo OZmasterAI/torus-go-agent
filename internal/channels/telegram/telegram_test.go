@@ -11,6 +11,7 @@ import (
 
 // TestTelegramChannelName tests telegramChannel.Name()
 func TestTelegramChannelName(t *testing.T) {
+	t.Parallel()
 	ch := &telegramChannel{}
 	if ch.Name() != "telegram" {
 		t.Errorf("expected name 'telegram', got %q", ch.Name())
@@ -19,6 +20,7 @@ func TestTelegramChannelName(t *testing.T) {
 
 // TestTelegramChannelStart tests telegramChannel.Start()
 func TestTelegramChannelStart(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name      string
 		botToken  string
@@ -64,11 +66,12 @@ func TestTelegramChannelStart(t *testing.T) {
 
 // TestSplitChunksBasic tests splitChunks function with basic cases
 func TestSplitChunksBasic(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
-		name      string
-		text      string
-		maxLen    int
-		expected  []string
+		name     string
+		text     string
+		maxLen   int
+		expected []string
 	}{
 		{
 			name:     "short_text",
@@ -128,6 +131,7 @@ func TestSplitChunksBasic(t *testing.T) {
 
 // TestSplitChunksComplexCases tests splitChunks with complex scenarios
 func TestSplitChunksComplexCases(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name        string
 		text        string
@@ -201,6 +205,7 @@ func TestSplitChunksComplexCases(t *testing.T) {
 
 // TestPendingMsg tests the pendingMsg type
 func TestPendingMsg(t *testing.T) {
+	t.Parallel()
 	pm := pendingMsg{
 		text:      "test message",
 		messageID: 42,
@@ -216,6 +221,7 @@ func TestPendingMsg(t *testing.T) {
 
 // TestChatState tests the chatState type
 func TestChatState(t *testing.T) {
+	t.Parallel()
 	t.Run("initial_state", func(t *testing.T) {
 		cs := &chatState{}
 		if cs.running {
@@ -316,6 +322,7 @@ func TestChatState(t *testing.T) {
 
 // TestConstants tests the exported constants
 func TestConstants(t *testing.T) {
+	t.Parallel()
 	if tgChunkSize != 4000 {
 		t.Errorf("expected tgChunkSize=4000, got %d", tgChunkSize)
 	}
@@ -326,12 +333,13 @@ func TestConstants(t *testing.T) {
 
 // TestSessionKeyGeneration tests session key format for private/group chats
 func TestSessionKeyGeneration(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
-		name          string
-		chatID        int64
-		userID        int64
-		isPrivate     bool
-		expectedKey   string
+		name        string
+		chatID      int64
+		userID      int64
+		isPrivate   bool
+		expectedKey string
 	}{
 		{
 			name:        "private_chat",
@@ -381,6 +389,7 @@ func TestSessionKeyGeneration(t *testing.T) {
 
 // TestSplitChunksEdgeCases tests edge cases for chunking
 func TestSplitChunksEdgeCases(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name        string
 		text        string
@@ -439,6 +448,7 @@ func TestSplitChunksEdgeCases(t *testing.T) {
 
 // TestChunkBoundaryConditions tests boundary conditions in chunking algorithm
 func TestChunkBoundaryConditions(t *testing.T) {
+	t.Parallel()
 	t.Run("whitespace_at_boundary", func(t *testing.T) {
 		// Word ending exactly at maxLen
 		text := "hello world"

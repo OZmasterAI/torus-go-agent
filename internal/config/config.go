@@ -2,10 +2,12 @@ package config
 
 import (
 	"encoding/json"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"torus_go_agent/internal/constants"
 )
@@ -41,39 +43,39 @@ type RoutingEntry struct {
 
 // AgentConfig holds agent/model settings.
 type AgentConfig struct {
-	Provider          string         `json:"provider"`
-	Model             string         `json:"model"`
-	BaseURL           string         `json:"baseURL,omitempty"`
-	Routing           []RoutingEntry `json:"routing,omitempty"`       // weighted multi-provider routing
-	FallbackOrder     []string       `json:"fallbackOrder,omitempty"` // "provider:model" keys in fallback order
-	MaxTokens         int    `json:"maxTokens"`     // max output tokens per response
-	ContextWindow         int    `json:"contextWindow"`         // model's full context window size
-	Compaction            string `json:"compaction"`
-	CompactionModel       string `json:"compactionModel"`
-	CompactionTrigger     string `json:"compactionTrigger"`     // "tokens", "messages", or "both"
-	CompactionMaxMessages int    `json:"compactionMaxMessages"` // max messages before compaction (0 = disabled)
-	CompactionThreshold   int    `json:"compactionThreshold"`   // % of contextWindow that triggers compaction (default 80)
-	CompactionKeepLastN   int    `json:"compactionKeepLastN"`   // messages kept verbatim after compaction (default 10)
-	ContinuousCompression  bool   `json:"continuousCompression"`  // enable per-turn gradual message compression
-	CompressionKeepFirst   int    `json:"compressionKeepFirst"`   // messages after system prompt to always keep verbatim (default 0 = off)
-	CompressionKeepLast    int    `json:"compressionKeepLast"`    // messages always kept verbatim by continuous compression (default 10)
-	CompressionMinMessages int    `json:"compressionMinMessages"` // don't compress until this many messages (0 = compress from keepLast+1)
-	ZoneBudgeting         bool   `json:"zoneBudgeting"`         // ignored when continuousCompression is true (unified pipeline handles both)
-	ZoneArchivePercent    int    `json:"zoneArchivePercent"`    // % of usable budget for archive zone (default 30)
-	SmartRouting          bool   `json:"smartRouting"`
-	SmartRoutingModel string `json:"smartRoutingModel"`
-	SteeringMode      string `json:"steeringMode,omitempty"` // "mild" (default) or "aggressive"
-	PersistThinking   bool   `json:"persistThinking"`        // store thinking blocks as DAG nodes
-	ParallelTools     bool   `json:"parallelTools"`          // execute safe tool calls concurrently
-	Thinking          string `json:"thinking,omitempty"`      // thinking level: "", "low", "mid", "high", "max" (Anthropic only)
-	ThinkingBudget    int    `json:"thinkingBudget,omitempty"` // explicit budget_tokens override (takes precedence over thinking level)
-	AzureResource    string `json:"azureResource,omitempty"`   // Azure OpenAI resource name
-	AzureDeployment  string `json:"azureDeployment,omitempty"` // Azure OpenAI deployment name
-	AzureAPIVersion  string `json:"azureApiVersion,omitempty"` // Azure API version (default "2024-06-01")
-	VertexProject    string `json:"vertexProject,omitempty"`   // Google Cloud project ID
-	VertexRegion     string `json:"vertexRegion,omitempty"`    // Google Cloud region (e.g. "us-central1")
-	RewardScoring    bool   `json:"rewardScoring,omitempty"`   // enable async reward-model scoring for nvidia/free router
-	ForceStream      bool   `json:"forceStream,omitempty"`     // force streaming even for non-interactive (Run) calls
+	Provider               string         `json:"provider"`
+	Model                  string         `json:"model"`
+	BaseURL                string         `json:"baseURL,omitempty"`
+	Routing                []RoutingEntry `json:"routing,omitempty"`       // weighted multi-provider routing
+	FallbackOrder          []string       `json:"fallbackOrder,omitempty"` // "provider:model" keys in fallback order
+	MaxTokens              int            `json:"maxTokens"`               // max output tokens per response
+	ContextWindow          int            `json:"contextWindow"`           // model's full context window size
+	Compaction             string         `json:"compaction"`
+	CompactionModel        string         `json:"compactionModel"`
+	CompactionTrigger      string         `json:"compactionTrigger"`      // "tokens", "messages", or "both"
+	CompactionMaxMessages  int            `json:"compactionMaxMessages"`  // max messages before compaction (0 = disabled)
+	CompactionThreshold    int            `json:"compactionThreshold"`    // % of contextWindow that triggers compaction (default 80)
+	CompactionKeepLastN    int            `json:"compactionKeepLastN"`    // messages kept verbatim after compaction (default 10)
+	ContinuousCompression  bool           `json:"continuousCompression"`  // enable per-turn gradual message compression
+	CompressionKeepFirst   int            `json:"compressionKeepFirst"`   // messages after system prompt to always keep verbatim (default 0 = off)
+	CompressionKeepLast    int            `json:"compressionKeepLast"`    // messages always kept verbatim by continuous compression (default 10)
+	CompressionMinMessages int            `json:"compressionMinMessages"` // don't compress until this many messages (0 = compress from keepLast+1)
+	ZoneBudgeting          bool           `json:"zoneBudgeting"`          // legacy zone-budget compression; applied only when continuousCompression is false
+	ZoneArchivePercent     int            `json:"zoneArchivePercent"`     // % of usable budget for archive zone (default 30)
+	SmartRouting           bool           `json:"smartRouting"`
+	SmartRoutingModel      string         `json:"smartRoutingModel"`
+	SteeringMode           string         `json:"steeringMode,omitempty"`    // "mild" (default) or "aggressive"
+	PersistThinking        bool           `json:"persistThinking"`           // store thinking blocks as DAG nodes
+	ParallelTools          bool           `json:"parallelTools"`             // execute safe tool calls concurrently
+	Thinking               string         `json:"thinking,omitempty"`        // thinking level: "", "low", "mid", "high", "max" (Anthropic only)
+	ThinkingBudget         int            `json:"thinkingBudget,omitempty"`  // explicit budget_tokens override (takes precedence over thinking level)
+	AzureResource          string         `json:"azureResource,omitempty"`   // Azure OpenAI resource name
+	AzureDeployment        string         `json:"azureDeployment,omitempty"` // Azure OpenAI deployment name
+	AzureAPIVersion        string         `json:"azureApiVersion,omitempty"` // Azure API version (default "2024-06-01")
+	VertexProject          string         `json:"vertexProject,omitempty"`   // Google Cloud project ID
+	VertexRegion           string         `json:"vertexRegion,omitempty"`    // Google Cloud region (e.g. "us-central1")
+	RewardScoring          bool           `json:"rewardScoring,omitempty"`   // enable async reward-model scoring for nvidia/free router
+	ForceStream            bool           `json:"forceStream,omitempty"`     // force streaming even for non-interactive (Run) calls
 }
 
 // DataConfig holds data directory settings.
@@ -178,7 +180,7 @@ func ResolveModelInfo(modelID, provider string, models map[string]ModelInfo, con
 	// 1. Local cache
 	if models != nil {
 		if info, ok := models[modelID]; ok {
-			return info
+			return clampModelInfo(info)
 		}
 	}
 
@@ -191,10 +193,24 @@ func ResolveModelInfo(modelID, provider string, models map[string]ModelInfo, con
 			models[modelID] = info
 			saveModelsCache(configDir, models)
 		}
-		return info
+		return clampModelInfo(info)
 	}
 
+	// 3. Not found anywhere — caller falls back to generic code defaults
+	// (ContextWindow=128000, MaxTokens=8192). Warn so the operator knows the
+	// model specs are guessed, not authoritative.
+	log.Printf("config: model %q not found in cache or OpenRouter; using generic default specs (ContextWindow=128000, MaxTokens=8192)", modelID)
 	return ModelInfo{}
+}
+
+// clampModelInfo guards against a nonsensical MaxTokens that meets or exceeds
+// the context window. When that happens the max output tokens are pinned to a
+// quarter of the context window, leaving room for input.
+func clampModelInfo(info ModelInfo) ModelInfo {
+	if info.ContextWindow > 0 && info.MaxTokens >= info.ContextWindow {
+		info.MaxTokens = info.ContextWindow / 4
+	}
+	return info
 }
 
 // openRouterPrefix maps our provider keys to OpenRouter ID prefixes.
@@ -202,6 +218,7 @@ var openRouterPrefix = map[string]string{
 	"anthropic": "anthropic",
 	"openai":    "openai",
 	"grok":      "x-ai",
+	"deepseek":  "deepseek",
 	"gemini":    "google",
 	"vertex":    "google",
 	"azure":     "openai",
@@ -225,7 +242,8 @@ func normalizeID(id string) string {
 // fetchOpenRouterModelInfo queries OpenRouter's /api/v1/models.
 // Tries exact match, then provider-prefixed, then normalized (hyphens/dots stripped).
 func fetchOpenRouterModelInfo(modelID, provider string) (ModelInfo, bool) {
-	resp, err := http.Get("https://openrouter.ai/api/v1/models")
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Get("https://openrouter.ai/api/v1/models")
 	if err != nil {
 		return ModelInfo{}, false
 	}
@@ -335,6 +353,8 @@ func APIKeyFor(provider string) string {
 		return os.Getenv("OPENAI_API_KEY")
 	case "grok":
 		return os.Getenv("XAI_API_KEY")
+	case "deepseek":
+		return os.Getenv("DEEPSEEK_API_KEY")
 	case "azure":
 		return os.Getenv("AZURE_OPENAI_API_KEY")
 	case "gemini":

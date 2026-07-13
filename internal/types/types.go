@@ -1,5 +1,6 @@
 // Package types holds shared type definitions used by core, providers, and other packages.
 package types
+
 import "context"
 
 // Role identifies the sender of a message.
@@ -14,13 +15,13 @@ const (
 
 // ContentBlock is a piece of content within a message.
 type ContentBlock struct {
-	Type      string         `json:"type"`                 // "text", "tool_use", "tool_result"
+	Type      string         `json:"type"` // "text", "tool_use", "tool_result", "thinking"
 	Text      string         `json:"text,omitempty"`
-	ID        string         `json:"id,omitempty"`         // tool_use ID
-	Name      string         `json:"name,omitempty"`       // tool name
-	Input     map[string]any `json:"input,omitempty"`      // tool arguments
-	ToolUseID string         `json:"tool_use_id,omitempty"`// for tool_result
-	Content   string         `json:"content,omitempty"`    // tool result text
+	ID        string         `json:"id,omitempty"`          // tool_use ID
+	Name      string         `json:"name,omitempty"`        // tool name
+	Input     map[string]any `json:"input,omitempty"`       // tool arguments
+	ToolUseID string         `json:"tool_use_id,omitempty"` // for tool_result
+	Content   string         `json:"content,omitempty"`     // tool result text
 	IsError   bool           `json:"is_error,omitempty"`
 }
 
@@ -94,10 +95,10 @@ type ToolResult struct {
 
 // Tool defines an executable tool the agent can call.
 type Tool struct {
-	Name        string                                           `json:"name"`
-	Description string                                           `json:"description"`
-	InputSchema map[string]any                                   `json:"input_schema"`
-	Execute     func(args map[string]any) (*ToolResult, error)   `json:"-"`
+	Name        string                                         `json:"name"`
+	Description string                                         `json:"description"`
+	InputSchema map[string]any                                 `json:"input_schema"`
+	Execute     func(args map[string]any) (*ToolResult, error) `json:"-"`
 }
 
 // ProviderConfig holds connection details for an LLM provider.

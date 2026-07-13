@@ -10,6 +10,7 @@ import (
 
 // TestFmtTok tests the token count formatter.
 func TestFmtTok(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name string
 		n    int
@@ -46,6 +47,7 @@ func TestFmtTok(t *testing.T) {
 
 // TestTruncStr tests string truncation.
 func TestTruncStr(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name   string
 		s      string
@@ -82,6 +84,7 @@ func TestTruncStr(t *testing.T) {
 
 // TestTruncPath tests path truncation with smart handling of directory and base names.
 func TestTruncPath(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name   string
 		path   string
@@ -120,6 +123,7 @@ func TestTruncPath(t *testing.T) {
 
 // TestWrapText tests word wrapping with ANSI sequence preservation.
 func TestWrapText(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		text     string
@@ -195,6 +199,7 @@ func TestWrapText(t *testing.T) {
 
 // TestIndentBlock tests indenting text blocks.
 func TestIndentBlock(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name   string
 		text   string
@@ -262,6 +267,7 @@ func TestIndentBlock(t *testing.T) {
 
 // TestFmtTimestamp tests timestamp formatting.
 func TestFmtTimestamp(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name string
 		t    time.Time
@@ -309,6 +315,7 @@ func TestFmtTimestamp(t *testing.T) {
 
 // TestFmtDuration tests duration formatting for display.
 func TestFmtDuration(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name string
 		d    time.Duration
@@ -400,11 +407,12 @@ func TestFmtDuration(t *testing.T) {
 
 // TestNewDisplayMsg tests creation of display messages with timestamp.
 func TestNewDisplayMsg(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
-		name     string
-		role     string
-		text     string
-		checkTs  bool
+		name    string
+		role    string
+		text    string
+		checkTs bool
 	}{
 		{
 			name:    "user message",
@@ -448,6 +456,7 @@ func TestNewDisplayMsg(t *testing.T) {
 
 // TestEdgeCasesAndIntegration tests combinations and edge cases.
 func TestEdgeCasesAndIntegration(t *testing.T) {
+	t.Parallel()
 	t.Run("truncStr and truncPath with unicode", func(t *testing.T) {
 		// Test with emoji/unicode
 		s := "hello💫world"
@@ -510,6 +519,7 @@ func TestEdgeCasesAndIntegration(t *testing.T) {
 
 // TestResizeViewportWithWrappedInput tests viewport shrinks when input wraps.
 func TestResizeViewportWithWrappedInput(t *testing.T) {
+	t.Parallel()
 	m := Model{width: 20, height: 30, ready: true}
 	m.viewport = viewport.Model{}
 
@@ -530,6 +540,7 @@ func TestResizeViewportWithWrappedInput(t *testing.T) {
 
 // TestRenderInputLineWrapping tests that long input visually wraps.
 func TestRenderInputLineWrapping(t *testing.T) {
+	t.Parallel()
 	m := Model{width: 20}
 	promptWidth := 2 // "❯ "
 

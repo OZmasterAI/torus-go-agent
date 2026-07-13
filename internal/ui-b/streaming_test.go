@@ -3,6 +3,7 @@ package uib
 import "testing"
 
 func TestStreamEventChannel(t *testing.T) {
+	t.Parallel()
 	ch := make(chan StreamEventMsg, 16)
 	ch <- StreamEventMsg{Type: StreamTextDelta, Delta: "hello"}
 	ev := <-ch
@@ -12,6 +13,7 @@ func TestStreamEventChannel(t *testing.T) {
 }
 
 func TestStreamEventChannelMultipleTypes(t *testing.T) {
+	t.Parallel()
 	ch := make(chan StreamEventMsg, 16)
 	ch <- StreamEventMsg{Type: StreamToolStart}
 	ch <- StreamEventMsg{Type: StreamToolEnd, Tool: ToolEvent{Name: "bash"}}
@@ -35,6 +37,7 @@ func TestStreamEventChannelMultipleTypes(t *testing.T) {
 }
 
 func TestStreamThinkingDeltaChannel(t *testing.T) {
+	t.Parallel()
 	ch := make(chan StreamEventMsg, 16)
 	ch <- StreamEventMsg{Type: StreamThinkingDelta, Thinking: "reasoning about it"}
 	ev := <-ch
@@ -47,6 +50,7 @@ func TestStreamThinkingDeltaChannel(t *testing.T) {
 }
 
 func TestWaitForStreamEventNilChannel(t *testing.T) {
+	t.Parallel()
 	cmd := waitForStreamEvent(nil)
 	if cmd != nil {
 		t.Fatal("nil channel should return nil cmd")

@@ -8,6 +8,7 @@ import (
 )
 
 func TestMicroCompact_TruncatesOldToolResults(tt *testing.T) {
+	tt.Parallel()
 	// 15 messages: system + 4 tool exchanges (user+assistant+tool each) + 2 recent
 	var msgs []t.Message
 	msgs = append(msgs, t.Message{Role: t.RoleSystem, Content: []t.ContentBlock{{Type: "text", Text: "system"}}})
@@ -62,6 +63,7 @@ func TestMicroCompact_TruncatesOldToolResults(tt *testing.T) {
 }
 
 func TestMicroCompact_SmallResultsUntouched(tt *testing.T) {
+	tt.Parallel()
 	msgs := []t.Message{
 		{Role: t.RoleSystem, Content: []t.ContentBlock{{Type: "text", Text: "sys"}}},
 		{Role: t.RoleUser, Content: []t.ContentBlock{{Type: "text", Text: "q"}}},
@@ -83,6 +85,7 @@ func TestMicroCompact_SmallResultsUntouched(tt *testing.T) {
 }
 
 func TestMicroCompact_PreservesToolName(tt *testing.T) {
+	tt.Parallel()
 	msgs := []t.Message{
 		{Role: t.RoleSystem, Content: []t.ContentBlock{{Type: "text", Text: "sys"}}},
 		{Role: t.RoleAssistant, Content: []t.ContentBlock{{Type: "tool_use", ID: "t1", Name: "grep"}}},
@@ -102,6 +105,7 @@ func TestMicroCompact_PreservesToolName(tt *testing.T) {
 }
 
 func TestMicroCompact_TooFewMessages(tt *testing.T) {
+	tt.Parallel()
 	msgs := []t.Message{
 		{Role: t.RoleSystem, Content: []t.ContentBlock{{Type: "text", Text: "sys"}}},
 		{Role: t.RoleUser, Content: []t.ContentBlock{{Type: "text", Text: "hi"}}},

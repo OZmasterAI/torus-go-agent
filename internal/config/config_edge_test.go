@@ -9,6 +9,7 @@ import (
 
 // TestConfigEdge_LoadConfigEmptyFile tests loading an empty JSON file.
 func TestConfigEdge_LoadConfigEmptyFile(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "config.json")
 	os.WriteFile(configPath, []byte("{}"), 0644)
@@ -32,6 +33,7 @@ func TestConfigEdge_LoadConfigEmptyFile(t *testing.T) {
 
 // TestConfigEdge_LoadConfigMalformedJSON tests various malformed JSON inputs.
 func TestConfigEdge_LoadConfigMalformedJSON(t *testing.T) {
+	t.Parallel()
 	testCases := []struct {
 		name    string
 		content string
@@ -102,6 +104,7 @@ func TestConfigEdge_EnvOverrideEmptyValue(t *testing.T) {
 
 // TestConfigEdge_MCPServersParsing tests loading MCPServers configuration.
 func TestConfigEdge_MCPServersParsing(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "config.json")
 
@@ -166,6 +169,7 @@ func TestConfigEdge_MCPServersParsing(t *testing.T) {
 
 // TestConfigEdge_SkillsDirParsing tests SkillsDir configuration.
 func TestConfigEdge_SkillsDirParsing(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "config.json")
 
@@ -192,6 +196,7 @@ func TestConfigEdge_SkillsDirParsing(t *testing.T) {
 
 // TestConfigEdge_DataDirRelativePath tests relative data directory resolution.
 func TestConfigEdge_DataDirRelativePath(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "config.json")
 	configDir := tmpDir
@@ -219,6 +224,7 @@ func TestConfigEdge_DataDirRelativePath(t *testing.T) {
 
 // TestConfigEdge_DataDirAbsolutePath tests absolute data directory.
 func TestConfigEdge_DataDirAbsolutePath(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "config.json")
 	configDir := tmpDir
@@ -325,6 +331,7 @@ func TestConfigEdge_APIKeyForAllProviders(t *testing.T) {
 		{"openai", "OPENAI_API_KEY"},
 		{"nvidia", "NVIDIA_API_KEY"},
 		{"grok", "XAI_API_KEY"},
+		{"deepseek", "DEEPSEEK_API_KEY"},
 		{"azure", "AZURE_OPENAI_API_KEY"},
 		{"gemini", "GEMINI_API_KEY"},
 		{"vertex", "VERTEX_ACCESS_TOKEN"},
@@ -398,6 +405,7 @@ func TestConfigEdge_APIKeyEmpty(t *testing.T) {
 
 // TestConfigEdge_TelegramAllowedUsers tests parsing of allowed users list.
 func TestConfigEdge_TelegramAllowedUsers(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "config.json")
 
@@ -434,6 +442,7 @@ func TestConfigEdge_TelegramAllowedUsers(t *testing.T) {
 
 // TestConfigEdge_CompactionSettings tests compaction-related configuration.
 func TestConfigEdge_CompactionSettings(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "config.json")
 
@@ -480,6 +489,7 @@ func TestConfigEdge_CompactionSettings(t *testing.T) {
 
 // TestConfigEdge_ContinuousCompressionSettings tests compression-related configuration.
 func TestConfigEdge_ContinuousCompressionSettings(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "config.json")
 
@@ -514,14 +524,15 @@ func TestConfigEdge_ContinuousCompressionSettings(t *testing.T) {
 
 // TestConfigEdge_ZoneBudgetingSettings tests zone-based budgeting configuration.
 func TestConfigEdge_ZoneBudgetingSettings(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "config.json")
 
 	cfg := Config{
 		Agent: AgentConfig{
-			Provider:          "anthropic",
-			Model:             "claude-3-sonnet-20250219",
-			ZoneBudgeting:     true,
+			Provider:           "anthropic",
+			Model:              "claude-3-sonnet-20250219",
+			ZoneBudgeting:      true,
 			ZoneArchivePercent: 40,
 		},
 	}
@@ -544,6 +555,7 @@ func TestConfigEdge_ZoneBudgetingSettings(t *testing.T) {
 
 // TestConfigEdge_SmartRoutingSettings tests smart routing configuration.
 func TestConfigEdge_SmartRoutingSettings(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "config.json")
 
@@ -574,6 +586,7 @@ func TestConfigEdge_SmartRoutingSettings(t *testing.T) {
 
 // TestConfigEdge_SteeringModeSettings tests steering mode configuration.
 func TestConfigEdge_SteeringModeSettings(t *testing.T) {
+	t.Parallel()
 	testCases := []string{"mild", "aggressive", ""}
 
 	for _, mode := range testCases {
@@ -583,9 +596,9 @@ func TestConfigEdge_SteeringModeSettings(t *testing.T) {
 
 			cfg := Config{
 				Agent: AgentConfig{
-					Provider:      "anthropic",
-					Model:         "claude-3-sonnet-20250219",
-					SteeringMode:  mode,
+					Provider:     "anthropic",
+					Model:        "claude-3-sonnet-20250219",
+					SteeringMode: mode,
 				},
 			}
 
@@ -606,14 +619,15 @@ func TestConfigEdge_SteeringModeSettings(t *testing.T) {
 
 // TestConfigEdge_AzureConfiguration tests Azure-specific configuration.
 func TestConfigEdge_AzureConfiguration(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "config.json")
 
 	cfg := Config{
 		Agent: AgentConfig{
-			Provider:       "azure",
-			Model:          "gpt-4",
-			AzureResource:  "my-resource",
+			Provider:        "azure",
+			Model:           "gpt-4",
+			AzureResource:   "my-resource",
 			AzureDeployment: "gpt4-deployment",
 			AzureAPIVersion: "2024-06-01",
 		},
@@ -640,13 +654,14 @@ func TestConfigEdge_AzureConfiguration(t *testing.T) {
 
 // TestConfigEdge_VertexConfiguration tests Google Vertex-specific configuration.
 func TestConfigEdge_VertexConfiguration(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "config.json")
 
 	cfg := Config{
 		Agent: AgentConfig{
-			Provider:    "vertex",
-			Model:       "gemini-pro",
+			Provider:      "vertex",
+			Model:         "gemini-pro",
 			VertexProject: "my-gcp-project",
 			VertexRegion:  "us-central1",
 		},
@@ -670,6 +685,7 @@ func TestConfigEdge_VertexConfiguration(t *testing.T) {
 
 // TestConfigEdge_ConfigWithAllFields tests a comprehensive config with all fields set.
 func TestConfigEdge_ConfigWithAllFields(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "config.json")
 
@@ -679,23 +695,23 @@ func TestConfigEdge_ConfigWithAllFields(t *testing.T) {
 			AllowedUsers: []int64{123, 456},
 		},
 		Agent: AgentConfig{
-			Provider:              "anthropic",
-			Model:                 "claude-3-sonnet-20250219",
-			MaxTokens:             4096,
-			ContextWindow:         200000,
-			Compaction:            "summarize",
-			CompactionModel:       "claude-3-haiku-20250219",
-			CompactionTrigger:     "both",
-			CompactionMaxMessages: 50,
-			CompactionThreshold:   85,
-			CompactionKeepLastN:   10,
+			Provider:               "anthropic",
+			Model:                  "claude-3-sonnet-20250219",
+			MaxTokens:              4096,
+			ContextWindow:          200000,
+			Compaction:             "summarize",
+			CompactionModel:        "claude-3-haiku-20250219",
+			CompactionTrigger:      "both",
+			CompactionMaxMessages:  50,
+			CompactionThreshold:    85,
+			CompactionKeepLastN:    10,
 			ContinuousCompression:  true,
 			CompressionKeepLast:    10,
 			CompressionMinMessages: 5,
-			ZoneBudgeting:         true,
-			ZoneArchivePercent:    30,
-			SmartRouting:          false,
-			SteeringMode:          "mild",
+			ZoneBudgeting:          true,
+			ZoneArchivePercent:     30,
+			SmartRouting:           false,
+			SteeringMode:           "mild",
 		},
 		Data: DataConfig{
 			Dir: "/var/data/torus",
@@ -744,6 +760,7 @@ func TestConfigEdge_ConfigWithAllFields(t *testing.T) {
 
 // TestConfigEdge_LoadTorusFileNotFound tests LoadTorus returns default when file missing.
 func TestConfigEdge_LoadTorusFileNotFound(t *testing.T) {
+	t.Parallel()
 	torus := LoadTorus("/nonexistent/path")
 	if torus != "You are an AI assistant with access to tools." {
 		t.Errorf("LoadTorus should return default text: got %q", torus)
@@ -752,6 +769,7 @@ func TestConfigEdge_LoadTorusFileNotFound(t *testing.T) {
 
 // TestConfigEdge_LoadTorusSuccess tests successful TORUS.md loading.
 func TestConfigEdge_LoadTorusSuccess(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	torusPath := filepath.Join(tmpDir, "TORUS.md")
 	torusContent := "Custom persona for TORUS AI"
@@ -765,6 +783,7 @@ func TestConfigEdge_LoadTorusSuccess(t *testing.T) {
 
 // TestConfigEdge_LoadSchemaFileNotFound tests LoadSchema returns empty when file missing.
 func TestConfigEdge_LoadSchemaFileNotFound(t *testing.T) {
+	t.Parallel()
 	schema := LoadSchema("/nonexistent/path")
 	if schema != "" {
 		t.Errorf("LoadSchema should return empty string: got %q", schema)
@@ -773,6 +792,7 @@ func TestConfigEdge_LoadSchemaFileNotFound(t *testing.T) {
 
 // TestConfigEdge_LoadSchemaSuccess tests successful SCHEMA.md loading.
 func TestConfigEdge_LoadSchemaSuccess(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	schemaPath := filepath.Join(tmpDir, "SCHEMA.md")
 	schemaContent := "# System Architecture\n\nThis is the schema."
@@ -786,6 +806,7 @@ func TestConfigEdge_LoadSchemaSuccess(t *testing.T) {
 
 // TestConfigEdge_ResolveModelInfoNil tests ResolveModelInfo with nil models map.
 func TestConfigEdge_ResolveModelInfoNil(t *testing.T) {
+	t.Parallel()
 	info := ResolveModelInfo("claude-3-sonnet-20250219", "anthropic", nil, "")
 	if info.ContextWindow != 0 || info.MaxTokens != 0 {
 		t.Errorf("ResolveModelInfo with nil maps should return empty: got %+v", info)
@@ -794,6 +815,7 @@ func TestConfigEdge_ResolveModelInfoNil(t *testing.T) {
 
 // TestConfigEdge_ResolveModelInfoEmpty tests ResolveModelInfo with empty models map.
 func TestConfigEdge_ResolveModelInfoEmpty(t *testing.T) {
+	t.Parallel()
 	models := make(map[string]ModelInfo)
 	info := ResolveModelInfo("unknown-model", "anthropic", models, "")
 	if info.ContextWindow != 0 || info.MaxTokens != 0 {
@@ -803,6 +825,7 @@ func TestConfigEdge_ResolveModelInfoEmpty(t *testing.T) {
 
 // TestConfigEdge_NegativeAndZeroValues tests that explicit values in JSON override defaults.
 func TestConfigEdge_NegativeAndZeroValues(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "config.json")
 
@@ -824,6 +847,7 @@ func TestConfigEdge_NegativeAndZeroValues(t *testing.T) {
 
 // TestConfigEdge_LargeNumberValues tests very large number values are preserved.
 func TestConfigEdge_LargeNumberValues(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "config.json")
 

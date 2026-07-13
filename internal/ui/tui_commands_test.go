@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"fmt"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -36,6 +37,7 @@ func addNode(t *testing.T, dag *core.DAG, parentID string, role types.Role, text
 // ---------------------------------------------------------------------------
 
 func TestFormatBranchList_Empty(t *testing.T) {
+	t.Parallel()
 	result := commands.FormatBranchList([]commands.BranchSummary{})
 	if result != "" {
 		t.Errorf("FormatBranchList with empty list should return empty string, got %q", result)
@@ -43,6 +45,7 @@ func TestFormatBranchList_Empty(t *testing.T) {
 }
 
 func TestFormatBranchList_SingleBranch(t *testing.T) {
+	t.Parallel()
 	branches := []commands.BranchSummary{
 		{
 			ID:        "br_abc123",
@@ -64,6 +67,7 @@ func TestFormatBranchList_SingleBranch(t *testing.T) {
 }
 
 func TestFormatBranchList_MultipleBranches(t *testing.T) {
+	t.Parallel()
 	branches := []commands.BranchSummary{
 		{
 			ID:        "br_abc123",
@@ -110,6 +114,7 @@ func TestFormatBranchList_MultipleBranches(t *testing.T) {
 }
 
 func TestFormatBranchList_LongBranchName(t *testing.T) {
+	t.Parallel()
 	branches := []commands.BranchSummary{
 		{
 			ID:        "br_abc123",
@@ -133,6 +138,7 @@ func TestFormatBranchList_LongBranchName(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestFormatMessageList_Empty(t *testing.T) {
+	t.Parallel()
 	result := commands.FormatMessageList([]commands.MessageSummary{})
 	if result != "" {
 		t.Errorf("FormatMessageList with empty list should return empty string, got %q", result)
@@ -140,6 +146,7 @@ func TestFormatMessageList_Empty(t *testing.T) {
 }
 
 func TestFormatMessageList_SingleMessage(t *testing.T) {
+	t.Parallel()
 	messages := []commands.MessageSummary{
 		{
 			NodeID:    "nd_abc123",
@@ -164,6 +171,7 @@ func TestFormatMessageList_SingleMessage(t *testing.T) {
 }
 
 func TestFormatMessageList_WithAliases(t *testing.T) {
+	t.Parallel()
 	messages := []commands.MessageSummary{
 		{
 			NodeID:    "nd_abc123",
@@ -188,6 +196,7 @@ func TestFormatMessageList_WithAliases(t *testing.T) {
 }
 
 func TestFormatMessageList_RoleTruncation(t *testing.T) {
+	t.Parallel()
 	messages := []commands.MessageSummary{
 		{
 			NodeID:    "nd_abc123",
@@ -210,6 +219,7 @@ func TestFormatMessageList_RoleTruncation(t *testing.T) {
 }
 
 func TestFormatMessageList_MultipleMessages(t *testing.T) {
+	t.Parallel()
 	messages := []commands.MessageSummary{
 		{
 			NodeID:  "nd_1",
@@ -256,47 +266,48 @@ func TestFormatMessageList_MultipleMessages(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestHandleAliasArgParsing(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
-		name      string
-		args      string
-		wantName  string
+		name       string
+		args       string
+		wantName   string
 		wantNodeID string
-		wantError bool
+		wantError  bool
 	}{
 		{
-			name:      "single arg (name only)",
-			args:      "my-alias",
-			wantName:  "my-alias",
+			name:       "single arg (name only)",
+			args:       "my-alias",
+			wantName:   "my-alias",
 			wantNodeID: "",
-			wantError: false,
+			wantError:  false,
 		},
 		{
-			name:      "two args (name and node ID)",
-			args:      "my-alias nd_abc123",
-			wantName:  "my-alias",
+			name:       "two args (name and node ID)",
+			args:       "my-alias nd_abc123",
+			wantName:   "my-alias",
 			wantNodeID: "nd_abc123",
-			wantError: false,
+			wantError:  false,
 		},
 		{
-			name:      "empty args",
-			args:      "",
-			wantName:  "",
+			name:       "empty args",
+			args:       "",
+			wantName:   "",
 			wantNodeID: "",
-			wantError: true,
+			wantError:  true,
 		},
 		{
-			name:      "whitespace only",
-			args:      "   ",
-			wantName:  "",
+			name:       "whitespace only",
+			args:       "   ",
+			wantName:   "",
 			wantNodeID: "",
-			wantError: true,
+			wantError:  true,
 		},
 		{
-			name:      "multiple spaces between args",
-			args:      "my-alias    nd_abc123",
-			wantName:  "my-alias",
+			name:       "multiple spaces between args",
+			args:       "my-alias    nd_abc123",
+			wantName:   "my-alias",
 			wantNodeID: "nd_abc123",
-			wantError: false,
+			wantError:  false,
 		},
 	}
 
@@ -333,6 +344,7 @@ func TestHandleAliasArgParsing(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestParseForkArgs_EmptyString(t *testing.T) {
+	t.Parallel()
 	action, value := commands.ParseForkArgs("")
 	if action != "head" || value != "" {
 		t.Errorf("empty fork args should default to 'head', got (%q, %q)", action, value)
@@ -340,6 +352,7 @@ func TestParseForkArgs_EmptyString(t *testing.T) {
 }
 
 func TestParseForkArgs_BackVariants(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		input      string
 		wantAction string
@@ -348,8 +361,8 @@ func TestParseForkArgs_BackVariants(t *testing.T) {
 		{"-back 3", "back", "3"},
 		{"-b 2", "back", "2"},
 		{"-b 1", "back", "1"},
-		{"-back", "node", "-back"},   // no space, treated as node ID
-		{"-b", "node", "-b"},         // no space, treated as node ID
+		{"-back", "node", "-back"}, // no space, treated as node ID
+		{"-b", "node", "-b"},       // no space, treated as node ID
 	}
 
 	for _, tt := range tests {
@@ -364,6 +377,7 @@ func TestParseForkArgs_BackVariants(t *testing.T) {
 }
 
 func TestParseForkArgs_BranchKeyword(t *testing.T) {
+	t.Parallel()
 	action, value := commands.ParseForkArgs("branch")
 	if action != "branch" || value != "" {
 		t.Errorf("'branch' should return ('branch', ''), got (%q, %q)", action, value)
@@ -371,6 +385,7 @@ func TestParseForkArgs_BranchKeyword(t *testing.T) {
 }
 
 func TestParseForkArgs_NodeID(t *testing.T) {
+	t.Parallel()
 	tests := []string{
 		"nd_abc123",
 		"some_node_id",
@@ -393,6 +408,7 @@ func TestParseForkArgs_NodeID(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestParseSwitchArgs_EmptyString(t *testing.T) {
+	t.Parallel()
 	mode, value := commands.ParseSwitchArgs("")
 	if mode != "list" || value != "" {
 		t.Errorf("empty switch args should default to 'list', got (%q, %q)", mode, value)
@@ -400,6 +416,7 @@ func TestParseSwitchArgs_EmptyString(t *testing.T) {
 }
 
 func TestParseSwitchArgs_IntegerIndex(t *testing.T) {
+	t.Parallel()
 	tests := []string{"0", "1", "42", "999"}
 
 	for _, idx := range tests {
@@ -414,6 +431,7 @@ func TestParseSwitchArgs_IntegerIndex(t *testing.T) {
 }
 
 func TestParseSwitchArgs_BranchID(t *testing.T) {
+	t.Parallel()
 	tests := []string{
 		"br_abc123",
 		"main",
@@ -437,6 +455,7 @@ func TestParseSwitchArgs_BranchID(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestDisplayMsg_Structure(t *testing.T) {
+	t.Parallel()
 	// Test that displayMsg can be created and used
 	msg := displayMsg{
 		role:    "assistant",
@@ -456,6 +475,7 @@ func TestDisplayMsg_Structure(t *testing.T) {
 }
 
 func TestDisplayMsg_ErrorMessage(t *testing.T) {
+	t.Parallel()
 	msg := displayMsg{
 		role:    "error",
 		text:    "Something went wrong",
@@ -475,6 +495,7 @@ func TestDisplayMsg_ErrorMessage(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestSteeringModeFormatting(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		mode     string
@@ -505,6 +526,7 @@ func TestSteeringModeFormatting(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestMessageListIntegration_WithDAG(t *testing.T) {
+	t.Parallel()
 	dag := newTestDAG(t)
 
 	// Add a chain of messages
@@ -533,10 +555,33 @@ func TestMessageListIntegration_WithDAG(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
+// handleStats tests
+// ---------------------------------------------------------------------------
+
+func TestHandleStats_ShowsCompressionRuns(t *testing.T) {
+	dag := newTestDAG(t)
+	agent := core.NewAgent(types.AgentConfig{}, nil, nil, dag)
+	m := &Model{agent: agent} // ready=false so rebuildContent no-ops
+
+	v := core.CompressionRuns.Load()
+	m.handleStats()
+
+	if len(m.messages) == 0 {
+		t.Fatal("handleStats should append a stats message")
+	}
+	last := m.messages[len(m.messages)-1]
+	want := fmt.Sprintf("Compression runs: %d", v)
+	if !strings.Contains(last.text, want) {
+		t.Errorf("stats output should contain %q, got %q", want, last.text)
+	}
+}
+
+// ---------------------------------------------------------------------------
 // Branch list integration tests with actual DAG
 // ---------------------------------------------------------------------------
 
 func TestBranchListIntegration_WithDAG(t *testing.T) {
+	t.Parallel()
 	dag := newTestDAG(t)
 
 	// Add some messages on the main branch

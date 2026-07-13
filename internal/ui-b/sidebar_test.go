@@ -8,6 +8,7 @@ import (
 )
 
 func TestSidebarRender(t *testing.T) {
+	t.Parallel()
 	s := newSidebarModel(DefaultTheme(), config.AgentConfig{})
 	s.modifiedFiles["main.go"] = 3
 	view := s.View(30)
@@ -17,6 +18,7 @@ func TestSidebarRender(t *testing.T) {
 }
 
 func TestSidebarTrackTool(t *testing.T) {
+	t.Parallel()
 	s := newSidebarModel(DefaultTheme(), config.AgentConfig{})
 	s.TrackTool(ToolEvent{Name: "write", FilePath: "/tmp/foo.go"})
 	s.TrackTool(ToolEvent{Name: "edit", FilePath: "/tmp/foo.go"})
@@ -30,6 +32,7 @@ func TestSidebarTrackTool(t *testing.T) {
 }
 
 func TestSidebarEmpty(t *testing.T) {
+	t.Parallel()
 	s := newSidebarModel(DefaultTheme(), config.AgentConfig{})
 	view := s.View(20)
 	if !strings.Contains(view, "Session") {
@@ -41,6 +44,7 @@ func TestSidebarEmpty(t *testing.T) {
 }
 
 func TestSidebarSteerPlusFlag(t *testing.T) {
+	t.Parallel()
 	s := newSidebarModel(DefaultTheme(), config.AgentConfig{})
 	// With steerAggressive = false, Steer+ should show with hollow dot.
 	s.steerAggressive = false
@@ -62,11 +66,12 @@ func TestSidebarSteerPlusFlag(t *testing.T) {
 }
 
 func TestSidebarFiveFlags(t *testing.T) {
+	t.Parallel()
 	s := newSidebarModel(DefaultTheme(), config.AgentConfig{
 		SmartRouting:          true,
 		ContinuousCompression: true,
 		ZoneBudgeting:         true,
-		Compaction:             "llm",
+		Compaction:            "llm",
 	})
 	s.steerAggressive = true
 	view := s.View(30)

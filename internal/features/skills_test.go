@@ -10,6 +10,7 @@ import (
 
 // TestNewSkillRegistry_EmptyDir tests creating a registry with a non-existent directory.
 func TestNewSkillRegistry_EmptyDir(t *testing.T) {
+	t.Parallel()
 	sr := NewSkillRegistry("/nonexistent/path")
 	if sr == nil {
 		t.Error("expected non-nil registry")
@@ -25,6 +26,7 @@ func TestNewSkillRegistry_EmptyDir(t *testing.T) {
 
 // TestNewSkillRegistry_ValidDir tests creating a registry with a valid directory.
 func TestNewSkillRegistry_ValidDir(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	defer os.RemoveAll(tmpDir)
 
@@ -54,14 +56,15 @@ func TestNewSkillRegistry_ValidDir(t *testing.T) {
 
 // TestLoad_MultipleSkills tests loading multiple skill files from a directory.
 func TestLoad_MultipleSkills(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	defer os.RemoveAll(tmpDir)
 
 	// Create several skill files
 	skills := map[string]string{
-		"brainstorm.md":  "# Brainstorm\nGenerate ideas for the task.",
-		"implement.md":   "# Implement\nWrite code to solve the problem.",
-		"review.md":      "# Review\nReview the implementation.",
+		"brainstorm.md":    "# Brainstorm\nGenerate ideas for the task.",
+		"implement.md":     "# Implement\nWrite code to solve the problem.",
+		"review.md":        "# Review\nReview the implementation.",
 		"not-markdown.txt": "This should be ignored",
 	}
 
@@ -100,6 +103,7 @@ func TestLoad_MultipleSkills(t *testing.T) {
 
 // TestLoad_EmptyDirectory tests loading from an empty directory.
 func TestLoad_EmptyDirectory(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	defer os.RemoveAll(tmpDir)
 
@@ -112,6 +116,7 @@ func TestLoad_EmptyDirectory(t *testing.T) {
 
 // TestLoad_SubdirectoryIgnored tests that subdirectories are ignored.
 func TestLoad_SubdirectoryIgnored(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	defer os.RemoveAll(tmpDir)
 
@@ -143,6 +148,7 @@ func TestLoad_SubdirectoryIgnored(t *testing.T) {
 
 // TestLoad_UnreadableFileSkipped tests that unreadable files are skipped.
 func TestLoad_UnreadableFileSkipped(t *testing.T) {
+	t.Parallel()
 	if os.Geteuid() == 0 {
 		t.Skip("skipping permission test when running as root")
 	}
@@ -182,6 +188,7 @@ func TestLoad_UnreadableFileSkipped(t *testing.T) {
 
 // TestLoad_Reload tests that calling Load() again replaces previous skills.
 func TestLoad_Reload(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	defer os.RemoveAll(tmpDir)
 
@@ -220,6 +227,7 @@ func TestLoad_Reload(t *testing.T) {
 
 // TestList_ReturnsCopy tests that List returns a snapshot, not a reference.
 func TestList_ReturnsCopy(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	defer os.RemoveAll(tmpDir)
 
@@ -249,6 +257,7 @@ func TestList_ReturnsCopy(t *testing.T) {
 
 // TestGet_Found tests retrieving a skill that exists.
 func TestGet_Found(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	defer os.RemoveAll(tmpDir)
 
@@ -277,6 +286,7 @@ func TestGet_Found(t *testing.T) {
 
 // TestGet_NotFound tests retrieving a skill that doesn't exist.
 func TestGet_NotFound(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	defer os.RemoveAll(tmpDir)
 
@@ -293,6 +303,7 @@ func TestGet_NotFound(t *testing.T) {
 
 // TestParseSkillFile_WithDescription tests parsing a skill file with a description.
 func TestParseSkillFile_WithDescription(t *testing.T) {
+	t.Parallel()
 	name := "test-skill"
 	filePath := "/tmp/test-skill.md"
 	raw := `# Test Skill Description
@@ -317,6 +328,7 @@ It can span multiple lines.`
 
 // TestParseSkillFile_MultipleHeadings tests parsing when there are multiple # headings.
 func TestParseSkillFile_MultipleHeadings(t *testing.T) {
+	t.Parallel()
 	name := "multi"
 	filePath := "/tmp/multi.md"
 	raw := `# First Heading
@@ -340,6 +352,7 @@ This should be in content.`
 
 // TestParseSkillFile_NoHeading tests parsing a file without a # heading.
 func TestParseSkillFile_NoHeading(t *testing.T) {
+	t.Parallel()
 	name := "no-heading"
 	filePath := "/tmp/no-heading.md"
 	raw := `This is content without a heading.
@@ -360,6 +373,7 @@ More content.`
 
 // TestParseSkillFile_EmptyFile tests parsing an empty file.
 func TestParseSkillFile_EmptyFile(t *testing.T) {
+	t.Parallel()
 	name := "empty"
 	filePath := "/tmp/empty.md"
 	raw := ""
@@ -379,6 +393,7 @@ func TestParseSkillFile_EmptyFile(t *testing.T) {
 
 // TestParseSkillFile_LeadingBlankLines tests that leading blank lines are trimmed from content.
 func TestParseSkillFile_LeadingBlankLines(t *testing.T) {
+	t.Parallel()
 	name := "blank-lines"
 	filePath := "/tmp/blank-lines.md"
 	raw := `# Heading
@@ -403,6 +418,7 @@ Real content here.`
 
 // TestParseSkillFile_WhitespaceInHeading tests heading with varying whitespace.
 func TestParseSkillFile_WhitespaceInHeading(t *testing.T) {
+	t.Parallel()
 	name := "space-heading"
 	filePath := "/tmp/space-heading.md"
 	raw := `###   Spaced Heading
@@ -418,6 +434,7 @@ Content here.`
 
 // TestIsSkillCommand_ValidCommand tests a valid slash command.
 func TestIsSkillCommand_ValidCommand(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	defer os.RemoveAll(tmpDir)
 
@@ -439,6 +456,7 @@ func TestIsSkillCommand_ValidCommand(t *testing.T) {
 
 // TestIsSkillCommand_WithArguments tests a command with arguments.
 func TestIsSkillCommand_WithArguments(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	defer os.RemoveAll(tmpDir)
 
@@ -460,6 +478,7 @@ func TestIsSkillCommand_WithArguments(t *testing.T) {
 
 // TestIsSkillCommand_NotFound tests a command that doesn't exist.
 func TestIsSkillCommand_NotFound(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	defer os.RemoveAll(tmpDir)
 
@@ -476,6 +495,7 @@ func TestIsSkillCommand_NotFound(t *testing.T) {
 
 // TestIsSkillCommand_NoSlash tests input without a slash.
 func TestIsSkillCommand_NoSlash(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	defer os.RemoveAll(tmpDir)
 
@@ -497,6 +517,7 @@ func TestIsSkillCommand_NoSlash(t *testing.T) {
 
 // TestIsSkillCommand_JustSlash tests input that's just a slash.
 func TestIsSkillCommand_JustSlash(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	defer os.RemoveAll(tmpDir)
 
@@ -513,6 +534,7 @@ func TestIsSkillCommand_JustSlash(t *testing.T) {
 
 // TestIsSkillCommand_WithWhitespace tests a command with leading/trailing whitespace.
 func TestIsSkillCommand_WithWhitespace(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	defer os.RemoveAll(tmpDir)
 
@@ -534,6 +556,7 @@ func TestIsSkillCommand_WithWhitespace(t *testing.T) {
 
 // TestFormatSkillPrompt_BasicFormat tests formatting skill prompt with content and user input.
 func TestFormatSkillPrompt_BasicFormat(t *testing.T) {
+	t.Parallel()
 	skill := &Skill{
 		Name:    "test",
 		Content: "This is the skill instruction.",
@@ -555,6 +578,7 @@ func TestFormatSkillPrompt_BasicFormat(t *testing.T) {
 
 // TestFormatSkillPrompt_NoTrailingNewline tests that a newline is added if content doesn't have one.
 func TestFormatSkillPrompt_NoTrailingNewline(t *testing.T) {
+	t.Parallel()
 	skill := &Skill{
 		Name:    "test",
 		Content: "Content without newline",
@@ -571,6 +595,7 @@ func TestFormatSkillPrompt_NoTrailingNewline(t *testing.T) {
 
 // TestFormatSkillPrompt_WithTrailingNewline tests content that already has a newline.
 func TestFormatSkillPrompt_WithTrailingNewline(t *testing.T) {
+	t.Parallel()
 	skill := &Skill{
 		Name:    "test",
 		Content: "Content with newline\n",
@@ -601,6 +626,7 @@ func TestFormatSkillPrompt_WithTrailingNewline(t *testing.T) {
 
 // TestFormatSkillPrompt_EmptyContent tests formatting with empty skill content.
 func TestFormatSkillPrompt_EmptyContent(t *testing.T) {
+	t.Parallel()
 	skill := &Skill{
 		Name:    "test",
 		Content: "",
@@ -619,6 +645,7 @@ func TestFormatSkillPrompt_EmptyContent(t *testing.T) {
 
 // TestFormatSkillPrompt_MultilineInput tests with multiline user input.
 func TestFormatSkillPrompt_MultilineInput(t *testing.T) {
+	t.Parallel()
 	skill := &Skill{
 		Name:    "test",
 		Content: "Instruction",
@@ -638,6 +665,7 @@ Line 3`
 
 // TestSkillRegistry_IntegrationFlow tests a complete workflow.
 func TestSkillRegistry_IntegrationFlow(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	defer os.RemoveAll(tmpDir)
 

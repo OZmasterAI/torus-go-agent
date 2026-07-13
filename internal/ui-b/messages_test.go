@@ -8,6 +8,7 @@ import (
 )
 
 func TestStreamEventTypes(t *testing.T) {
+	t.Parallel()
 	// Verify all event types are distinct integers.
 	types := []StreamEventType{StreamTextDelta, StreamThinkingDelta, StreamToolStart, StreamToolEnd, StreamStatusUpdate}
 	seen := map[StreamEventType]bool{}
@@ -20,6 +21,7 @@ func TestStreamEventTypes(t *testing.T) {
 }
 
 func TestStreamThinkingDeltaField(t *testing.T) {
+	t.Parallel()
 	msg := StreamEventMsg{Type: StreamThinkingDelta, Thinking: "let me reason"}
 	if msg.Type != StreamThinkingDelta {
 		t.Fatalf("expected StreamThinkingDelta, got %d", msg.Type)
@@ -30,6 +32,7 @@ func TestStreamThinkingDeltaField(t *testing.T) {
 }
 
 func TestAllMsgTypesSatisfyTeaMsg(t *testing.T) {
+	t.Parallel()
 	// Verify each custom message type can be used as a tea.Msg.
 	var msgs []tea.Msg
 	msgs = append(msgs, StreamEventMsg{})
@@ -43,6 +46,7 @@ func TestAllMsgTypesSatisfyTeaMsg(t *testing.T) {
 }
 
 func TestNewDisplayMsg(t *testing.T) {
+	t.Parallel()
 	dm := NewDisplayMsg("user", "hello")
 	if dm.Role != "user" {
 		t.Fatalf("expected role=user, got %q", dm.Role)
@@ -56,6 +60,7 @@ func TestNewDisplayMsg(t *testing.T) {
 }
 
 func TestToolEventFields(t *testing.T) {
+	t.Parallel()
 	ev := ToolEvent{
 		Name:     "bash",
 		Args:     map[string]any{"command": "ls"},

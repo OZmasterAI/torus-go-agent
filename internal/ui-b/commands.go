@@ -9,6 +9,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"torus_go_agent/internal/commands"
+	"torus_go_agent/internal/core"
 	"torus_go_agent/internal/features"
 	"torus_go_agent/internal/types"
 )
@@ -301,6 +302,7 @@ func (m Model) cmdStats() (tea.Model, tea.Cmd) {
 	if m.agent != nil {
 		sb.WriteString(fmt.Sprintf("- Branch: %s\n", m.agent.DAG().CurrentBranchID()))
 	}
+	sb.WriteString(fmt.Sprintf("- Compression runs: %d\n", core.CompressionRuns.Load()))
 	if m.telemetry != nil {
 		sb.WriteString(fmt.Sprintf("- Telemetry: %s\n", m.telemetry.Summary()))
 	}
@@ -436,9 +438,16 @@ func (m Model) executeWorkflow() (tea.Model, tea.Cmd) {
 }
 
 func (m Model) cmdSkillDispatch(cmd string) (tea.Model, tea.Cmd) {
-	if strings.HasPrefix(cmd, "/") && m.skills != nil {
-		// Try as skill.
-		m.input.SetValue(cmd)
+	if !strings.HasPrefix(cmd, "/") {
+		return m, nil
 	}
-	return m, nil
+	// Palette path: input does not hold the command yet — prefill it so the
+	// user can add arguments before submitting (main-TUI parity).
+	if m.input.Value() != cmd {
+		m.input.SetValue(cmd)
+		return m, nil
+	}
+	// Typed path: input already holds the command — submit to the agent
+	// (skill formatting and unknown-command fall-through happen there).
+	return m.submitToAgent(cmd)
 }

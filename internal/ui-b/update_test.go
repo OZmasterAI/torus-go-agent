@@ -9,6 +9,7 @@ import (
 )
 
 func TestUpdateWindowSize(t *testing.T) {
+	t.Parallel()
 	m := NewModel(nil, "test", config.AgentConfig{}, nil, nil)
 	newM, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
 	model := newM.(Model)
@@ -24,6 +25,7 @@ func TestUpdateWindowSize(t *testing.T) {
 }
 
 func TestUpdateRoutesToOverlay(t *testing.T) {
+	t.Parallel()
 	m := NewModel(nil, "test", config.AgentConfig{}, nil, nil)
 	m.width, m.height, m.ready = 80, 24, true
 	m.overlay.Open("help", nil)
@@ -35,6 +37,7 @@ func TestUpdateRoutesToOverlay(t *testing.T) {
 }
 
 func TestUpdateCtrlDQuits(t *testing.T) {
+	t.Parallel()
 	m := NewModel(nil, "test", config.AgentConfig{}, nil, nil)
 	m.width, m.height, m.ready = 80, 24, true
 	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlD})
@@ -44,6 +47,7 @@ func TestUpdateCtrlDQuits(t *testing.T) {
 }
 
 func TestUpdateTickMsg(t *testing.T) {
+	t.Parallel()
 	m := NewModel(nil, "test", config.AgentConfig{}, nil, nil)
 	m.width, m.height, m.ready = 80, 24, true
 	m.status.processing = true
@@ -54,7 +58,56 @@ func TestUpdateTickMsg(t *testing.T) {
 	_ = oldPos
 }
 
+func TestTypedSkillCommandEnterSubmits(t *testing.T) {
+	t.Parallel()
+	m := newSkillTestModel(t)
+	m.input.SetValue("/brainstorm topic")
+
+	newM, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	model := newM.(Model)
+
+	foundUser := false
+	for _, msg := range model.chat.messages {
+		if msg.Role == "user" {
+			foundUser = true
+			break
+		}
+	}
+	if !foundUser {
+		t.Error("Enter on typed skill command should append a user message")
+	}
+	if !model.status.processing {
+		t.Error("Enter on typed skill command should start processing")
+	}
+	if model.input.Value() != "" {
+		t.Errorf("input should be cleared after submit, got %q", model.input.Value())
+	}
+	if cmd == nil {
+		t.Error("Enter on typed skill command should return a non-nil tea.Cmd")
+	}
+}
+
+func TestSkillDispatchWhileProcessingIsNoop(t *testing.T) {
+	t.Parallel()
+	m := newSkillTestModel(t)
+	m.status.processing = true
+	m.input.SetValue("/brainstorm")
+	msgsBefore := len(m.chat.messages)
+
+	newM, _ := m.executeCommand("/brainstorm")
+	model := newM.(Model)
+
+	if len(model.chat.messages) != msgsBefore {
+		t.Errorf("skill dispatch while processing should not add messages: before=%d after=%d",
+			msgsBefore, len(model.chat.messages))
+	}
+	if model.turnCount != 0 {
+		t.Errorf("turnCount = %d, want 0 (no turn started while processing)", model.turnCount)
+	}
+}
+
 func TestStreamThinkingDeltaAppends(t *testing.T) {
+	t.Parallel()
 	m := NewModel(nil, "test", config.AgentConfig{}, nil, nil)
 	m.width, m.height, m.ready = 80, 24, true
 	m.chat.streaming = true
@@ -70,6 +123,7 @@ func TestStreamThinkingDeltaAppends(t *testing.T) {
 }
 
 func TestThinkingCollapseOnAgentDone(t *testing.T) {
+	t.Parallel()
 	m := NewModel(nil, "test", config.AgentConfig{}, nil, nil)
 	m.width, m.height, m.ready = 80, 24, true
 	m.chat.streaming = true
@@ -88,6 +142,7 @@ func TestThinkingCollapseOnAgentDone(t *testing.T) {
 }
 
 func TestCtrlOToggleThinking(t *testing.T) {
+	t.Parallel()
 	m := NewModel(nil, "test", config.AgentConfig{}, nil, nil)
 	m.width, m.height, m.ready = 80, 24, true
 

@@ -25,7 +25,11 @@
   },
   "minimax/minimax-m2.5:free": {
     "contextWindow": 196608,
-    "maxTokens": 196608
+    "maxTokens": 16384
+  },
+  "nex-agi/nex-n2-pro:free": {
+    "contextWindow": 262144,
+    "maxTokens": 16384
   },
   "nousresearch/hermes-3-llama-3.1-405b:free": {
     "contextWindow": 131072,
@@ -41,7 +45,7 @@
   },
   "nvidia/nemotron-3-super-120b-a12b:free": {
     "contextWindow": 262144,
-    "maxTokens": 262144
+    "maxTokens": 16384
   },
   "openai/gpt-5.4-nano": {
     "contextWindow": 400000,
@@ -55,9 +59,13 @@
     "contextWindow": 200000,
     "maxTokens": 8192
   },
+  "openrouter/owl-alpha": {
+    "contextWindow": 1048756,
+    "maxTokens": 262144
+  },
   "qwen/qwen3-coder:free": {
     "contextWindow": 262000,
-    "maxTokens": 262000
+    "maxTokens": 16384
   },
   "qwen/qwen3.5-122b-a10b": {
     "contextWindow": 262144,
@@ -69,7 +77,7 @@
   },
   "stepfun/step-3.5-flash:free": {
     "contextWindow": 256000,
-    "maxTokens": 256000
+    "maxTokens": 16384
   },
   "z-ai/glm4.7": {
     "contextWindow": 202752,

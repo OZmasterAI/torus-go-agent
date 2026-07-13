@@ -9,6 +9,7 @@ import (
 
 // TestRegistryBuildDefaultTools verifies that BuildDefaultTools returns all 6 expected tools.
 func TestRegistryBuildDefaultTools(t *testing.T) {
+	t.Parallel()
 	tools := BuildDefaultTools()
 
 	if tools == nil {
@@ -38,6 +39,7 @@ func TestRegistryBuildDefaultTools(t *testing.T) {
 
 // TestRegistryToolsHaveRequiredFields verifies that all tools have required fields.
 func TestRegistryToolsHaveRequiredFields(t *testing.T) {
+	t.Parallel()
 	tools := BuildDefaultTools()
 
 	for _, tool := range tools {
@@ -61,6 +63,7 @@ func TestRegistryToolsHaveRequiredFields(t *testing.T) {
 
 // TestToolsHaveInputSchemaType verifies that all tools have correct schema structure.
 func TestToolsHaveInputSchemaType(t *testing.T) {
+	t.Parallel()
 	tools := BuildDefaultTools()
 
 	for _, tool := range tools {
@@ -87,6 +90,7 @@ func TestToolsHaveInputSchemaType(t *testing.T) {
 
 // TestBashToolSchema verifies bash tool schema details.
 func TestBashToolSchema(t *testing.T) {
+	t.Parallel()
 	tool := bashTool()
 
 	if tool.Name != "bash" {
@@ -122,6 +126,7 @@ func TestBashToolSchema(t *testing.T) {
 
 // TestReadToolSchema verifies read tool schema details.
 func TestReadToolSchema(t *testing.T) {
+	t.Parallel()
 	tool := readTool()
 
 	if tool.Name != "read" {
@@ -160,6 +165,7 @@ func TestReadToolSchema(t *testing.T) {
 
 // TestWriteToolSchema verifies write tool schema details.
 func TestWriteToolSchema(t *testing.T) {
+	t.Parallel()
 	tool := writeTool()
 
 	if tool.Name != "write" {
@@ -205,6 +211,7 @@ func TestWriteToolSchema(t *testing.T) {
 
 // TestEditToolSchema verifies edit tool schema details.
 func TestEditToolSchema(t *testing.T) {
+	t.Parallel()
 	tool := editTool()
 
 	if tool.Name != "edit" {
@@ -229,6 +236,7 @@ func TestEditToolSchema(t *testing.T) {
 
 // TestGlobToolSchema verifies glob tool schema details.
 func TestGlobToolSchema(t *testing.T) {
+	t.Parallel()
 	tool := globTool()
 
 	if tool.Name != "glob" {
@@ -264,6 +272,7 @@ func TestGlobToolSchema(t *testing.T) {
 
 // TestGrepToolSchema verifies grep tool schema details.
 func TestGrepToolSchema(t *testing.T) {
+	t.Parallel()
 	tool := grepTool()
 
 	if tool.Name != "grep" {
@@ -303,6 +312,7 @@ func TestGrepToolSchema(t *testing.T) {
 // TestGFHelperFunction tests the GF (GetFloat) helper function.
 // TestGetFloatHelperFunction tests the GetFloat map extraction helper.
 func TestGetFloatHelperFunction(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		m        map[string]any
@@ -359,6 +369,7 @@ func TestGetFloatHelperFunction(t *testing.T) {
 
 // TestToolExecutableInterface verifies that Tool type properly implements execution.
 func TestToolExecutableInterface(t *testing.T) {
+	t.Parallel()
 	tools := BuildDefaultTools()
 
 	for _, tool := range tools {
@@ -380,6 +391,7 @@ func TestToolExecutableInterface(t *testing.T) {
 
 // TestToolDescriptionsNonEmpty verifies all tool descriptions are substantive.
 func TestToolDescriptionsNonEmpty(t *testing.T) {
+	t.Parallel()
 	tools := BuildDefaultTools()
 
 	for _, tool := range tools {
@@ -396,6 +408,7 @@ func TestToolDescriptionsNonEmpty(t *testing.T) {
 
 // TestToolPropertiesHaveDescriptions verifies that all schema properties have descriptions.
 func TestToolPropertiesHaveDescriptions(t *testing.T) {
+	t.Parallel()
 	tools := BuildDefaultTools()
 
 	for _, tool := range tools {
@@ -417,6 +430,7 @@ func TestToolPropertiesHaveDescriptions(t *testing.T) {
 
 // TestToolReturnTypes verifies that tool Execute returns *ToolResult and error.
 func TestToolReturnTypes(t *testing.T) {
+	t.Parallel()
 	tool := bashTool()
 	args := map[string]any{"command": "echo test"}
 
@@ -438,6 +452,7 @@ func TestToolReturnTypes(t *testing.T) {
 
 // TestReadToolOffsetAndLimit tests the read tool with offset and limit parameters.
 func TestReadToolOffsetAndLimit(t *testing.T) {
+	t.Parallel()
 	tool := readTool()
 
 	tests := []struct {
@@ -475,6 +490,7 @@ func TestReadToolOffsetAndLimit(t *testing.T) {
 
 // TestGlobPatternWithCwd tests the glob tool with a custom working directory.
 func TestGlobPatternWithCwd(t *testing.T) {
+	t.Parallel()
 	tool := globTool()
 
 	args := map[string]any{
@@ -499,6 +515,7 @@ func TestGlobPatternWithCwd(t *testing.T) {
 
 // TestGrepPatternRequired verifies that grep tool handles pattern argument correctly.
 func TestGrepPatternRequired(t *testing.T) {
+	t.Parallel()
 	tool := grepTool()
 
 	// Test with pattern
@@ -524,6 +541,7 @@ func TestGrepPatternRequired(t *testing.T) {
 
 // TestToolTypeInterface verifies the Tool type has all required fields.
 func TestToolTypeInterface(tt *testing.T) {
+	tt.Parallel()
 	tool := t.Tool{
 		Name:        "test",
 		Description: "test tool",
@@ -547,6 +565,7 @@ func TestToolTypeInterface(tt *testing.T) {
 
 // TestBuildDefaultToolsReturnsCopy verifies each call returns new instances.
 func TestBuildDefaultToolsReturnsCopy(t *testing.T) {
+	t.Parallel()
 	tools1 := BuildDefaultTools()
 	tools2 := BuildDefaultTools()
 
@@ -563,6 +582,7 @@ func TestBuildDefaultToolsReturnsCopy(t *testing.T) {
 
 // TestToolResultFields verifies ToolResult has the expected fields.
 func TestToolResultFields(tt *testing.T) {
+	tt.Parallel()
 	result := &t.ToolResult{
 		Content: "test content",
 		IsError: true,

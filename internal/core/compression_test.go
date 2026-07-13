@@ -49,6 +49,7 @@ func newToolUseMessage(id, name string) types.Message {
 
 // TestScoreMessage_EmptyMessage tests that empty messages get ScoreZero
 func TestScoreMessage_EmptyMessage(t *testing.T) {
+	t.Parallel()
 	msg := types.Message{Role: types.RoleUser}
 	score := ScoreMessage(msg)
 	if score != ScoreZero {
@@ -58,6 +59,7 @@ func TestScoreMessage_EmptyMessage(t *testing.T) {
 
 // TestScoreMessage_EmptyContentBlock tests message with empty content block
 func TestScoreMessage_EmptyContentBlock(t *testing.T) {
+	t.Parallel()
 	msg := types.Message{
 		Role: types.RoleUser,
 		Content: []types.ContentBlock{
@@ -72,6 +74,7 @@ func TestScoreMessage_EmptyContentBlock(t *testing.T) {
 
 // TestScoreMessage_ToolResultSmall tests small tool results get ScoreLow
 func TestScoreMessage_ToolResultSmall(t *testing.T) {
+	t.Parallel()
 	msg := newToolResultMessage("tool-1", "short", false)
 	score := ScoreMessage(msg)
 	if score != ScoreLow {
@@ -82,6 +85,7 @@ func TestScoreMessage_ToolResultSmall(t *testing.T) {
 // TestScoreMessage_ToolResultLarge tests large tool results get ScoreMedium
 // Note: tool_result blocks need accompanying text content to be scored based on textLen
 func TestScoreMessage_ToolResultLarge(t *testing.T) {
+	t.Parallel()
 	msg := types.Message{
 		Role: types.RoleAssistant,
 		Content: []types.ContentBlock{
@@ -97,6 +101,7 @@ func TestScoreMessage_ToolResultLarge(t *testing.T) {
 
 // TestScoreMessage_ToolUse tests tool invocations get ScoreLow
 func TestScoreMessage_ToolUse(t *testing.T) {
+	t.Parallel()
 	msg := newToolUseMessage("tool-1", "my_tool")
 	score := ScoreMessage(msg)
 	if score != ScoreLow {
@@ -106,6 +111,7 @@ func TestScoreMessage_ToolUse(t *testing.T) {
 
 // TestScoreMessage_Acknowledgments tests short acknowledgments get ScoreLow
 func TestScoreMessage_Acknowledgments(t *testing.T) {
+	t.Parallel()
 	acks := []string{"ok", "thanks", "got it", "sure", "yes", "no", "done", "good", "nice", "great"}
 	for _, ack := range acks {
 		msg := newTextMessage(types.RoleAssistant, ack)
@@ -118,6 +124,7 @@ func TestScoreMessage_Acknowledgments(t *testing.T) {
 
 // TestScoreMessage_UserQuestion tests user questions get ScoreHigh
 func TestScoreMessage_UserQuestion(t *testing.T) {
+	t.Parallel()
 	msg := newTextMessage(types.RoleUser, "How does this work?")
 	score := ScoreMessage(msg)
 	if score != ScoreHigh {
@@ -127,6 +134,7 @@ func TestScoreMessage_UserQuestion(t *testing.T) {
 
 // TestScoreMessage_LongAssistantMessage tests long assistant responses get ScoreHigh
 func TestScoreMessage_LongAssistantMessage(t *testing.T) {
+	t.Parallel()
 	longText := strings.Repeat("The answer is complex. ", 20)
 	msg := newTextMessage(types.RoleAssistant, longText)
 	score := ScoreMessage(msg)
@@ -137,6 +145,7 @@ func TestScoreMessage_LongAssistantMessage(t *testing.T) {
 
 // TestScoreMessage_LongUserMessage tests long user messages get ScoreHigh
 func TestScoreMessage_LongUserMessage(t *testing.T) {
+	t.Parallel()
 	longText := strings.Repeat("Please explain ", 10)
 	msg := newTextMessage(types.RoleUser, longText)
 	score := ScoreMessage(msg)
@@ -147,6 +156,7 @@ func TestScoreMessage_LongUserMessage(t *testing.T) {
 
 // TestScoreMessage_ShortAssistantMessage tests short assistant responses get ScoreMedium
 func TestScoreMessage_ShortAssistantMessage(t *testing.T) {
+	t.Parallel()
 	msg := newTextMessage(types.RoleAssistant, "Brief response")
 	score := ScoreMessage(msg)
 	if score != ScoreMedium {
@@ -157,6 +167,7 @@ func TestScoreMessage_ShortAssistantMessage(t *testing.T) {
 // TestScoreMessage_MixedContent tests messages with multiple content blocks
 // Short text alone is ScoreLow, but with tool_result present and no text >50 chars, tool_result logic applies
 func TestScoreMessage_MixedContent(t *testing.T) {
+	t.Parallel()
 	msg := types.Message{
 		Role: types.RoleAssistant,
 		Content: []types.ContentBlock{
@@ -172,6 +183,7 @@ func TestScoreMessage_MixedContent(t *testing.T) {
 
 // TestCompressMessage_TextOnly tests text-only message compression
 func TestCompressMessage_TextOnly(t *testing.T) {
+	t.Parallel()
 	longText := "This is a long message that should be compressed. " + strings.Repeat("x", 200)
 	msg := newTextMessage(types.RoleUser, longText)
 	compressed := CompressMessage(msg, 50)
@@ -189,6 +201,7 @@ func TestCompressMessage_TextOnly(t *testing.T) {
 
 // TestCompressMessage_TextWithinLimit tests text under limit is unchanged
 func TestCompressMessage_TextWithinLimit(t *testing.T) {
+	t.Parallel()
 	text := "Short message"
 	msg := newTextMessage(types.RoleUser, text)
 	compressed := CompressMessage(msg, 100)
@@ -203,6 +216,7 @@ func TestCompressMessage_TextWithinLimit(t *testing.T) {
 
 // TestCompressMessage_ToolResult tests tool result compression
 func TestCompressMessage_ToolResult(t *testing.T) {
+	t.Parallel()
 	longContent := "First line\n" + strings.Repeat("more content ", 50)
 	msg := newToolResultMessage("tool-1", longContent, false)
 	compressed := CompressMessage(msg, 30)
@@ -223,6 +237,7 @@ func TestCompressMessage_ToolResult(t *testing.T) {
 
 // TestCompressMessage_ToolResultPreservesFirstLine tests first line is preserved
 func TestCompressMessage_ToolResultPreservesFirstLine(t *testing.T) {
+	t.Parallel()
 	content := "Important first line\nOther stuff that gets truncated"
 	msg := newToolResultMessage("tool-1", content, false)
 	compressed := CompressMessage(msg, 30)
@@ -234,6 +249,7 @@ func TestCompressMessage_ToolResultPreservesFirstLine(t *testing.T) {
 
 // TestCompressMessage_PreservesRole tests role is preserved
 func TestCompressMessage_PreservesRole(t *testing.T) {
+	t.Parallel()
 	msg := newTextMessage(types.RoleUser, strings.Repeat("x", 500))
 	compressed := CompressMessage(msg, 50)
 
@@ -244,6 +260,7 @@ func TestCompressMessage_PreservesRole(t *testing.T) {
 
 // TestCompressMessage_MultipleBlocks tests compression of multiple content blocks
 func TestCompressMessage_MultipleBlocks(t *testing.T) {
+	t.Parallel()
 	msg := types.Message{
 		Role: types.RoleAssistant,
 		Content: []types.ContentBlock{
@@ -265,6 +282,7 @@ func TestCompressMessage_MultipleBlocks(t *testing.T) {
 
 // TestContinuousCompress_BelowThreshold tests messages below keepLast threshold are unchanged
 func TestContinuousCompress_BelowThreshold(t *testing.T) {
+	t.Parallel()
 	messages := []types.Message{
 		newTextMessage(types.RoleUser, "msg1"),
 		newTextMessage(types.RoleAssistant, "msg2"),
@@ -284,6 +302,7 @@ func TestContinuousCompress_BelowThreshold(t *testing.T) {
 
 // TestContinuousCompress_MinMessages prevents early compression
 func TestContinuousCompress_MinMessages(t *testing.T) {
+	t.Parallel()
 	messages := []types.Message{
 		newTextMessage(types.RoleUser, "msg1"),
 		newTextMessage(types.RoleAssistant, "msg2"),
@@ -299,6 +318,7 @@ func TestContinuousCompress_MinMessages(t *testing.T) {
 
 // TestContinuousCompress_CompressesOlderMessages tests older messages get compressed
 func TestContinuousCompress_CompressesOlderMessages(t *testing.T) {
+	t.Parallel()
 	messages := []types.Message{
 		newTextMessage(types.RoleUser, "schema"),
 		newTextMessage(types.RoleAssistant, strings.Repeat("x", 500)),
@@ -328,6 +348,7 @@ func TestContinuousCompress_CompressesOlderMessages(t *testing.T) {
 
 // TestContinuousCompress_DefaultKeepLast tests default keepLast value
 func TestContinuousCompress_DefaultKeepLast(t *testing.T) {
+	t.Parallel()
 	messages := make([]types.Message, 20)
 	for i := 0; i < 20; i++ {
 		messages[i] = newTextMessage(types.RoleUser, "msg")
@@ -341,9 +362,10 @@ func TestContinuousCompress_DefaultKeepLast(t *testing.T) {
 
 // TestContinuousCompress_ScoreBasedCompression tests high-score messages are preserved
 func TestContinuousCompress_ScoreBasedCompression(t *testing.T) {
+	t.Parallel()
 	messages := []types.Message{
 		newTextMessage(types.RoleUser, "schema"),
-		newTextMessage(types.RoleAssistant, "How to X?"), // ScoreLow (short, no question)
+		newTextMessage(types.RoleAssistant, "How to X?"),                                                    // ScoreLow (short, no question)
 		newTextMessage(types.RoleUser, "What is the best way to structure this? "+strings.Repeat("x", 150)), // ScoreHigh
 		newTextMessage(types.RoleUser, "recent"),
 	}
@@ -359,6 +381,7 @@ func TestContinuousCompress_ScoreBasedCompression(t *testing.T) {
 
 // TestApplyZoneBudget_NoMessages returns empty
 func TestApplyZoneBudget_NoMessages(t *testing.T) {
+	t.Parallel()
 	result := applyZoneBudget([]types.Message{}, zoneBudget{ContextWindow: 10000})
 	if len(result) != 0 {
 		t.Errorf("empty input should return empty output, got %d", len(result))
@@ -367,6 +390,7 @@ func TestApplyZoneBudget_NoMessages(t *testing.T) {
 
 // TestApplyZoneBudget_InvalidContextWindow returns messages unchanged
 func TestApplyZoneBudget_InvalidContextWindow(t *testing.T) {
+	t.Parallel()
 	messages := []types.Message{newTextMessage(types.RoleUser, "msg")}
 	result := applyZoneBudget(messages, zoneBudget{ContextWindow: 0})
 	if len(result) != len(messages) {
@@ -376,6 +400,7 @@ func TestApplyZoneBudget_InvalidContextWindow(t *testing.T) {
 
 // TestApplyZoneBudget_DefaultValues tests default values are applied
 func TestApplyZoneBudget_DefaultValues(t *testing.T) {
+	t.Parallel()
 	messages := []types.Message{
 		newTextMessage(types.RoleUser, "schema"),
 		newTextMessage(types.RoleAssistant, "msg1"),
@@ -394,6 +419,7 @@ func TestApplyZoneBudget_DefaultValues(t *testing.T) {
 
 // TestApplyZoneBudget_PreservesLastMessage tests current message is always preserved
 func TestApplyZoneBudget_PreservesLastMessage(t *testing.T) {
+	t.Parallel()
 	lastMsg := newTextMessage(types.RoleUser, "important current message")
 	messages := []types.Message{
 		newTextMessage(types.RoleUser, "schema"),
@@ -416,6 +442,7 @@ func TestApplyZoneBudget_PreservesLastMessage(t *testing.T) {
 
 // TestApplyZoneBudget_IncludesSchemaMessage tests schema message is always included
 func TestApplyZoneBudget_IncludesSchemaMessage(t *testing.T) {
+	t.Parallel()
 	schemaMsg := newTextMessage(types.RoleSystem, "system schema")
 	messages := []types.Message{
 		schemaMsg,
@@ -437,6 +464,7 @@ func TestApplyZoneBudget_IncludesSchemaMessage(t *testing.T) {
 
 // TestApplyZoneBudget_ZoneSplit tests archive and history zones are split correctly
 func TestApplyZoneBudget_ZoneSplit(t *testing.T) {
+	t.Parallel()
 	messages := []types.Message{
 		newTextMessage(types.RoleSystem, "schema"),
 		newTextMessage(types.RoleAssistant, "msg1"),
@@ -459,6 +487,7 @@ func TestApplyZoneBudget_ZoneSplit(t *testing.T) {
 
 // TestApplyZoneBudget_SingleMessage returns it
 func TestApplyZoneBudget_SingleMessage(t *testing.T) {
+	t.Parallel()
 	msg := newTextMessage(types.RoleUser, "only message")
 	budget := zoneBudget{ContextWindow: 10000}
 	result := applyZoneBudget([]types.Message{msg}, budget)
@@ -470,6 +499,7 @@ func TestApplyZoneBudget_SingleMessage(t *testing.T) {
 
 // TestMessageScoreConstants tests score constants have expected values
 func TestMessageScoreConstants(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		score    MessageScore
 		expected int
@@ -488,6 +518,7 @@ func TestMessageScoreConstants(t *testing.T) {
 
 // TestScoreMessage_CaseInsensitive tests scoring is case-insensitive
 func TestScoreMessage_CaseInsensitive(t *testing.T) {
+	t.Parallel()
 	msgLower := newTextMessage(types.RoleAssistant, "ok")
 	msgUpper := newTextMessage(types.RoleAssistant, "OK")
 
@@ -501,6 +532,7 @@ func TestScoreMessage_CaseInsensitive(t *testing.T) {
 
 // TestCompressMessage_ZeroMaxChars tests edge case with zero maxChars
 func TestCompressMessage_ZeroMaxChars(t *testing.T) {
+	t.Parallel()
 	msg := newTextMessage(types.RoleUser, "hello")
 	compressed := CompressMessage(msg, 0)
 
@@ -512,6 +544,7 @@ func TestCompressMessage_ZeroMaxChars(t *testing.T) {
 
 // TestContinuousCompress_EmptyMessages returns empty
 func TestContinuousCompress_EmptyMessages(t *testing.T) {
+	t.Parallel()
 	result := continuousCompress([]types.Message{}, 10, 0)
 	if len(result) != 0 {
 		t.Errorf("empty input should return empty output, got %d", len(result))
@@ -521,6 +554,7 @@ func TestContinuousCompress_EmptyMessages(t *testing.T) {
 // TestScoreMessage_ToolResultError tests error tool results still get scored
 // Tool result content doesn't count toward textLen; need text content or tool use for scoring
 func TestScoreMessage_ToolResultError(t *testing.T) {
+	t.Parallel()
 	msg := types.Message{
 		Role: types.RoleAssistant,
 		Content: []types.ContentBlock{
@@ -538,6 +572,7 @@ func TestScoreMessage_ToolResultError(t *testing.T) {
 
 // TestCompressMessage_ToolResultSingleLine tests tool result with no newline
 func TestCompressMessage_ToolResultSingleLine(t *testing.T) {
+	t.Parallel()
 	msg := newToolResultMessage("tool-1", strings.Repeat("x", 200), false)
 	compressed := CompressMessage(msg, 50)
 
@@ -552,6 +587,7 @@ func TestCompressMessage_ToolResultSingleLine(t *testing.T) {
 
 // TestApplyZoneBudget_HighArchivePercent tests high archive percentage works
 func TestApplyZoneBudget_HighArchivePercent(t *testing.T) {
+	t.Parallel()
 	messages := make([]types.Message, 0)
 	messages = append(messages, newTextMessage(types.RoleSystem, "schema"))
 	for i := 0; i < 20; i++ {
@@ -576,6 +612,7 @@ func TestApplyZoneBudget_HighArchivePercent(t *testing.T) {
 
 // TestScoreMessage_MixedWithEmptyBlocks tests scoring with mixed empty/non-empty blocks
 func TestScoreMessage_MixedWithEmptyBlocks(t *testing.T) {
+	t.Parallel()
 	msg := types.Message{
 		Role: types.RoleAssistant,
 		Content: []types.ContentBlock{
@@ -592,6 +629,7 @@ func TestScoreMessage_MixedWithEmptyBlocks(t *testing.T) {
 
 // TestCompressMessage_HeadTailToolResult tests head+tail preservation for tool results
 func TestCompressMessage_HeadTailToolResult(t *testing.T) {
+	t.Parallel()
 	// Build a 100-line tool result
 	var lines []string
 	for i := 0; i < 100; i++ {
@@ -622,6 +660,7 @@ func TestCompressMessage_HeadTailToolResult(t *testing.T) {
 
 // TestCompressMessage_HeadTailText tests head+tail preservation for text blocks
 func TestCompressMessage_HeadTailText(t *testing.T) {
+	t.Parallel()
 	// Build long text
 	text := strings.Repeat("A sentence of moderate length. ", 100)
 	m := types.Message{Role: types.RoleAssistant, Content: []types.ContentBlock{
@@ -647,6 +686,7 @@ func TestCompressMessage_HeadTailText(t *testing.T) {
 
 // TestCompressMessage_ShortContentUnchanged tests short content is not modified
 func TestCompressMessage_ShortContentUnchanged(t *testing.T) {
+	t.Parallel()
 	m := types.Message{Role: types.RoleUser, Content: []types.ContentBlock{
 		{Type: "tool_result", ToolUseID: "t1", Content: "short output"},
 	}}
@@ -708,6 +748,7 @@ func BenchmarkApplyZoneBudgetV1(b *testing.B) {
 // --- ZoneBudgetV2 tests ---
 
 func TestApplyZoneBudgetV2_Basic(t *testing.T) {
+	t.Parallel()
 	// Create 3 operations worth of messages
 	messages := []types.Message{
 		{Role: types.RoleAssistant, Content: []types.ContentBlock{{Type: "text", Text: "system prompt"}}},
@@ -746,6 +787,7 @@ func TestApplyZoneBudgetV2_Basic(t *testing.T) {
 }
 
 func TestApplyZoneBudgetV2_RebalancesUnusedBudget(t *testing.T) {
+	t.Parallel()
 	// Small system prompt = small archive zone usage
 	// The unused archive budget should flow to active zone
 	messages := []types.Message{
@@ -775,6 +817,7 @@ func TestApplyZoneBudgetV2_RebalancesUnusedBudget(t *testing.T) {
 }
 
 func TestApplyZoneBudgetV2_EmptyMessages(t *testing.T) {
+	t.Parallel()
 	budget := ZoneBudgetV2{ContextWindow: 10000}
 	result := ApplyZoneBudgetV2(nil, budget, nil)
 	if result != nil {
@@ -783,6 +826,7 @@ func TestApplyZoneBudgetV2_EmptyMessages(t *testing.T) {
 }
 
 func TestApplyZoneBudgetV2_PerOpCap(t *testing.T) {
+	t.Parallel()
 	// One huge operation shouldn't consume more than 50% of active zone
 	messages := []types.Message{
 		{Role: types.RoleAssistant, Content: []types.ContentBlock{{Type: "text", Text: "system"}}},
@@ -808,6 +852,7 @@ func TestApplyZoneBudgetV2_PerOpCap(t *testing.T) {
 // --- ContinuousCompressV2 tests ---
 
 func TestContinuousCompressV2_BasicPipeline(t *testing.T) {
+	t.Parallel()
 	// Build a conversation with 4 operations
 	messages := []types.Message{
 		{Role: types.RoleAssistant, Content: []types.ContentBlock{{Type: "text", Text: "You are a helpful agent."}}},
@@ -845,6 +890,7 @@ func TestContinuousCompressV2_BasicPipeline(t *testing.T) {
 }
 
 func TestContinuousCompressV2_BelowThreshold(t *testing.T) {
+	t.Parallel()
 	messages := []types.Message{
 		{Role: types.RoleAssistant, Content: []types.ContentBlock{{Type: "text", Text: "system"}}},
 		{Role: types.RoleUser, Content: []types.ContentBlock{{Type: "text", Text: "hello"}}},
@@ -857,6 +903,7 @@ func TestContinuousCompressV2_BelowThreshold(t *testing.T) {
 }
 
 func TestContinuousCompressV2_TemplatesInMessageArray(t *testing.T) {
+	t.Parallel()
 	// Build enough operations that middle ones should become templates
 	messages := []types.Message{
 		{Role: types.RoleAssistant, Content: []types.ContentBlock{{Type: "text", Text: "system"}}},
@@ -894,6 +941,7 @@ func TestContinuousCompressV2_TemplatesInMessageArray(t *testing.T) {
 // --- UnifiedCompress tests ---
 
 func TestUnifiedCompress_BasicPipeline(t *testing.T) {
+	t.Parallel()
 	// Build 5 operations with substantial content so budget forces compression
 	messages := []types.Message{
 		{Role: types.RoleAssistant, Content: []types.ContentBlock{{Type: "text", Text: "You are a helpful agent."}}},
@@ -932,6 +980,7 @@ func TestUnifiedCompress_BasicPipeline(t *testing.T) {
 }
 
 func TestUnifiedCompress_ScoresAllOps(t *testing.T) {
+	t.Parallel()
 	// 3 operations: oldest references same files as newest (high overlap → should survive)
 	messages := []types.Message{
 		{Role: types.RoleAssistant, Content: []types.ContentBlock{{Type: "text", Text: "system prompt"}}},
@@ -991,6 +1040,7 @@ func TestUnifiedCompress_ScoresAllOps(t *testing.T) {
 }
 
 func TestUnifiedCompress_BudgetFillsByScore(t *testing.T) {
+	t.Parallel()
 	// Build 6 operations totaling a lot of content, with tight budget
 	messages := []types.Message{
 		{Role: types.RoleAssistant, Content: []types.ContentBlock{{Type: "text", Text: "system"}}},
@@ -1011,7 +1061,7 @@ func TestUnifiedCompress_BudgetFillsByScore(t *testing.T) {
 	cfg := UnifiedCompressConfig{
 		KeepLast:      4,
 		MinMessages:   0,
-		ContextWindow: 8000,  // tight: ~8682 raw tokens, usable only ~5500
+		ContextWindow: 8000, // tight: ~8682 raw tokens, usable only ~5500
 		MaxTokens:     2500,
 		ArchivePct:    25,
 	}
@@ -1030,6 +1080,7 @@ func TestUnifiedCompress_BudgetFillsByScore(t *testing.T) {
 }
 
 func TestUnifiedCompress_ActiveOpNeverCompacted(t *testing.T) {
+	t.Parallel()
 	// Last operation is very large — should be truncated but present, never replaced with template
 	messages := []types.Message{
 		{Role: types.RoleAssistant, Content: []types.ContentBlock{{Type: "text", Text: "system"}}},
@@ -1081,6 +1132,7 @@ func TestUnifiedCompress_ActiveOpNeverCompacted(t *testing.T) {
 }
 
 func TestUnifiedCompress_LargeOpArchived(t *testing.T) {
+	t.Parallel()
 	// One massive non-active op + two small ops — massive should be archived
 	messages := []types.Message{
 		{Role: types.RoleAssistant, Content: []types.ContentBlock{{Type: "text", Text: "system"}}},
@@ -1145,6 +1197,7 @@ func TestUnifiedCompress_LargeOpArchived(t *testing.T) {
 }
 
 func TestUnifiedCompress_KeepFirstPreservesEarlyMessages(t *testing.T) {
+	t.Parallel()
 	// Simulate: system prompt + 2 "plan" messages + 6 operations
 	// KeepFirst=2 should always preserve the plan messages verbatim
 	messages := []types.Message{
@@ -1203,6 +1256,7 @@ func TestUnifiedCompress_KeepFirstPreservesEarlyMessages(t *testing.T) {
 }
 
 func TestUnifiedCompress_KeepFirstZeroDisabled(t *testing.T) {
+	t.Parallel()
 	// KeepFirst=0 (default) should behave identically to before
 	messages := []types.Message{
 		{Role: types.RoleAssistant, Content: []types.ContentBlock{{Type: "text", Text: "system"}}},
@@ -1232,6 +1286,7 @@ func TestUnifiedCompress_KeepFirstZeroDisabled(t *testing.T) {
 }
 
 func TestContinuousCompressV2_WorkingMemoryAppended(t *testing.T) {
+	t.Parallel()
 	// Build enough operations that oldest ones become working memory one-liners
 	messages := []types.Message{
 		{Role: types.RoleAssistant, Content: []types.ContentBlock{{Type: "text", Text: "system prompt"}}},
@@ -1256,5 +1311,45 @@ func TestContinuousCompressV2_WorkingMemoryAppended(t *testing.T) {
 	// Either way, result should be shorter than original
 	if len(result) >= len(messages) {
 		t.Errorf("should compress: got %d, original %d", len(result), len(messages))
+	}
+}
+
+func TestUnifiedCompress_CounterSemantics(t *testing.T) {
+	// CompressionRuns is process-global, so use delta assertions only —
+	// never Store/reset it (resets would race with other tests).
+
+	// (a) Early return (n <= KeepLast) must NOT increment the counter.
+	short := []types.Message{
+		newTextMessage(types.RoleAssistant, "system prompt"),
+		newTextMessage(types.RoleUser, "task 0"),
+		newTextMessage(types.RoleAssistant, "done 0"),
+	}
+	before := CompressionRuns.Load()
+	UnifiedCompress(short, UnifiedCompressConfig{KeepLast: 10})
+	if got := CompressionRuns.Load(); got != before {
+		t.Errorf("early return should not increment counter: got %d, want %d", got, before)
+	}
+
+	// (b) A full compression pass must increment the counter by exactly 1.
+	messages := []types.Message{
+		newTextMessage(types.RoleAssistant, "system prompt"),
+	}
+	for i := 0; i < 8; i++ {
+		messages = append(messages,
+			newTextMessage(types.RoleUser, fmt.Sprintf("task %d", i)),
+			newTextMessage(types.RoleAssistant, fmt.Sprintf("done %d", i)),
+		)
+	}
+	cfg := UnifiedCompressConfig{
+		KeepLast:      4,
+		MinMessages:   0,
+		ContextWindow: 128000,
+		MaxTokens:     8192,
+		ArchivePct:    25,
+	}
+	before2 := CompressionRuns.Load()
+	UnifiedCompress(messages, cfg)
+	if got := CompressionRuns.Load(); got != before2+1 {
+		t.Errorf("compression pass should increment counter by 1: got %d, want %d", got, before2+1)
 	}
 }

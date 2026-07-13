@@ -6,58 +6,59 @@ import (
 
 // TestSafetyEdge_SecretBypassAttempts tests obfuscation and encoding attempts to bypass secret detection.
 func TestSafetyEdge_SecretBypassAttempts(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
-		name    string
-		content string
-		want    string
+		name       string
+		content    string
+		want       string
 		shouldFind bool
 	}{
 		{
-			name:    "api_key with extra spaces",
-			content: `api_key   =    "abcdef1234567890"`,
-			want:    "API key",
+			name:       "api_key with extra spaces",
+			content:    `api_key   =    "abcdef1234567890"`,
+			want:       "API key",
 			shouldFind: true,
 		},
 		{
-			name:    "apikey with multiple colons",
-			content: `apikey :: "a1b2c3d4e5f6g7h8i9j0k1l2"`,
-			want:    "",
+			name:       "apikey with multiple colons",
+			content:    `apikey :: "a1b2c3d4e5f6g7h8i9j0k1l2"`,
+			want:       "",
 			shouldFind: false, // double-colon delimiter not matched by regex
 		},
 		{
-			name:    "API-key with no quotes or quotes with content",
-			content: `API-key = abcdef1234567890`,
-			want:    "API key",
+			name:       "API-key with no quotes or quotes with content",
+			content:    `API-key = abcdef1234567890`,
+			want:       "API key",
 			shouldFind: true,
 		},
 		{
-			name:    "sk- key with minimal valid length",
-			content: `secret=sk-aaaabbbbccccddddeeee`,
-			want:    "Secret key",
+			name:       "sk- key with minimal valid length",
+			content:    `secret=sk-aaaabbbbccccddddeeee`,
+			want:       "Secret key",
 			shouldFind: true,
 		},
 		{
-			name:    "password with minimum length",
-			content: `password = "123456"`,
-			want:    "Credential",
+			name:       "password with minimum length",
+			content:    `password = "123456"`,
+			want:       "Credential",
 			shouldFind: true,
 		},
 		{
-			name:    "short password under 6 chars - should not detect",
-			content: `password = "12345"`,
-			want:    "",
+			name:       "short password under 6 chars - should not detect",
+			content:    `password = "12345"`,
+			want:       "",
 			shouldFind: false,
 		},
 		{
-			name:    "AKIA key at boundary",
-			content: `key = AKIA0000000000AAAA`,
-			want:    "",
+			name:       "AKIA key at boundary",
+			content:    `key = AKIA0000000000AAAA`,
+			want:       "",
 			shouldFind: false, // AKIA pattern requires specific length/format
 		},
 		{
-			name:    "token with various delimiters",
-			content: `token:='bearer_token_secure_value'`,
-			want:    "",
+			name:       "token with various delimiters",
+			content:    `token:='bearer_token_secure_value'`,
+			want:       "",
 			shouldFind: false, // colon-equals-quote delimiter not matched
 		},
 	}
@@ -77,24 +78,25 @@ func TestSafetyEdge_SecretBypassAttempts(t *testing.T) {
 
 // TestSafetyEdge_UnicodedSecret tests unicode obfuscation attempts.
 func TestSafetyEdge_UnicodedSecret(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
-		name    string
-		content string
+		name       string
+		content    string
 		shouldFind bool
 	}{
 		{
-			name:    "api_key with normal ASCII - should detect",
-			content: `api_key = "abcd1234efgh5678ijkl"`,
+			name:       "api_key with normal ASCII - should detect",
+			content:    `api_key = "abcd1234efgh5678ijkl"`,
 			shouldFind: true,
 		},
 		{
-			name:    "api_key with unicode characters - still detectable if pattern holds",
-			content: `api_key = "abcd1234efgh5678ijkl"`,
+			name:       "api_key with unicode characters - still detectable if pattern holds",
+			content:    `api_key = "abcd1234efgh5678ijkl"`,
 			shouldFind: true,
 		},
 		{
-			name:    "AKIA with mixed case - only uppercase digits allowed",
-			content: `AKIA1234567890ABCDEF`,
+			name:       "AKIA with mixed case - only uppercase digits allowed",
+			content:    `AKIA1234567890ABCDEF`,
 			shouldFind: true,
 		},
 	}
@@ -111,65 +113,66 @@ func TestSafetyEdge_UnicodedSecret(t *testing.T) {
 
 // TestSafetyEdge_NestedDangerousCommands tests nested and piped dangerous commands.
 func TestSafetyEdge_NestedDangerousCommands(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
-		name string
-		cmd  string
+		name          string
+		cmd           string
 		expectedLabel string
-		shouldFind bool
+		shouldFind    bool
 	}{
 		{
-			name:           "rm -rf / in command substitution",
-			cmd:            `echo $(rm -rf /)`,
-			expectedLabel:  "rm-rf-root",
-			shouldFind:     true,
+			name:          "rm -rf / in command substitution",
+			cmd:           `echo $(rm -rf /)`,
+			expectedLabel: "rm-rf-root",
+			shouldFind:    true,
 		},
 		{
-			name:           "rm -rf / in backticks",
-			cmd:            `` + "`" + `rm -rf /` + "`",
-			expectedLabel:  "rm-rf-root",
-			shouldFind:     true,
+			name:          "rm -rf / in backticks",
+			cmd:           `` + "`" + `rm -rf /` + "`",
+			expectedLabel: "rm-rf-root",
+			shouldFind:    true,
 		},
 		{
-			name:           "mkfs after pipe",
-			cmd:            `cat /dev/zero | mkfs /dev/sda1`,
-			expectedLabel:  "mkfs",
-			shouldFind:     true,
+			name:          "mkfs after pipe",
+			cmd:           `cat /dev/zero | mkfs /dev/sda1`,
+			expectedLabel: "mkfs",
+			shouldFind:    true,
 		},
 		{
-			name:           "rm -rf / after semicolon",
-			cmd:            `cd /home; rm -rf /`,
-			expectedLabel:  "rm-rf-root",
-			shouldFind:     true,
+			name:          "rm -rf / after semicolon",
+			cmd:           `cd /home; rm -rf /`,
+			expectedLabel: "rm-rf-root",
+			shouldFind:    true,
 		},
 		{
-			name:           "rm -rf / after &&",
-			cmd:            `test -f /tmp/file && rm -rf /`,
-			expectedLabel:  "rm-rf-root",
-			shouldFind:     true,
+			name:          "rm -rf / after &&",
+			cmd:           `test -f /tmp/file && rm -rf /`,
+			expectedLabel: "rm-rf-root",
+			shouldFind:    true,
 		},
 		{
-			name:           "rm -rf / after ||",
-			cmd:            `false || rm -rf /`,
-			expectedLabel:  "rm-rf-root",
-			shouldFind:     true,
+			name:          "rm -rf / after ||",
+			cmd:           `false || rm -rf /`,
+			expectedLabel: "rm-rf-root",
+			shouldFind:    true,
 		},
 		{
-			name:           "fork bomb with extra whitespace",
-			cmd:            `:( )  {  :   |   : ; }`,
-			expectedLabel:  "",
-			shouldFind:     false, // regex requires specific spacing pattern
+			name:          "fork bomb with extra whitespace",
+			cmd:           `:( )  {  :   |   : ; }`,
+			expectedLabel: "",
+			shouldFind:    false, // regex requires specific spacing pattern
 		},
 		{
-			name:           "sysrq-trigger with redirection",
-			cmd:            `echo c > /proc/sysrq-trigger`,
-			expectedLabel:  "sysrq",
-			shouldFind:     true,
+			name:          "sysrq-trigger with redirection",
+			cmd:           `echo c > /proc/sysrq-trigger`,
+			expectedLabel: "sysrq",
+			shouldFind:    true,
 		},
 		{
-			name:           "mkfs in if statement",
-			cmd:            `if [ $? -eq 0 ]; then mkfs.ext4 /dev/sdb1; fi`,
-			expectedLabel:  "mkfs",
-			shouldFind:     true,
+			name:          "mkfs in if statement",
+			cmd:           `if [ $? -eq 0 ]; then mkfs.ext4 /dev/sdb1; fi`,
+			expectedLabel: "mkfs",
+			shouldFind:    true,
 		},
 	}
 
@@ -188,47 +191,48 @@ func TestSafetyEdge_NestedDangerousCommands(t *testing.T) {
 
 // TestSafetyEdge_PathTraversalBypass tests path traversal attempts to bypass rm detection.
 func TestSafetyEdge_PathTraversalBypass(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
-		name string
-		cmd  string
+		name          string
+		cmd           string
 		expectedLabel string
-		shouldFind bool
+		shouldFind    bool
 	}{
 		{
-			name:           "rm -rf with absolute path",
-			cmd:            `rm -rf /home/user/..`,
-			expectedLabel:  "rm-rf-root",
-			shouldFind:     true,
+			name:          "rm -rf with absolute path",
+			cmd:           `rm -rf /home/user/..`,
+			expectedLabel: "rm-rf-root",
+			shouldFind:    true,
 		},
 		{
-			name:           "rm -rf with dot-slash",
-			cmd:            `rm -rf /./home`,
-			expectedLabel:  "rm-rf-root",
-			shouldFind:     true,
+			name:          "rm -rf with dot-slash",
+			cmd:           `rm -rf /./home`,
+			expectedLabel: "rm-rf-root",
+			shouldFind:    true,
 		},
 		{
-			name:           "rm -rf with double-slash",
-			cmd:            `rm -rf //etc`,
-			expectedLabel:  "rm-rf-root",
-			shouldFind:     true,
+			name:          "rm -rf with double-slash",
+			cmd:           `rm -rf //etc`,
+			expectedLabel: "rm-rf-root",
+			shouldFind:    true,
 		},
 		{
-			name:           "rm -rf / hidden in variable",
-			cmd:            `rm -rf $dir where $dir=/`,
-			expectedLabel:  "",
-			shouldFind:     false, // variable expansion not tracked by regex
+			name:          "rm -rf / hidden in variable",
+			cmd:           `rm -rf $dir where $dir=/`,
+			expectedLabel: "",
+			shouldFind:    false, // variable expansion not tracked by regex
 		},
 		{
-			name:           "safe path traversal - should not detect",
-			cmd:            `rm -rf ./temp/../backup`,
-			expectedLabel:  "",
-			shouldFind:     false,
+			name:          "safe path traversal - should not detect",
+			cmd:           `rm -rf ./temp/../backup`,
+			expectedLabel: "",
+			shouldFind:    false,
 		},
 		{
-			name:           "rm -rf with /root/.. should detect / pattern",
-			cmd:            `rm -rf /root/..`,
-			expectedLabel:  "rm-rf-root",
-			shouldFind:     true,
+			name:          "rm -rf with /root/.. should detect / pattern",
+			cmd:           `rm -rf /root/..`,
+			expectedLabel: "rm-rf-root",
+			shouldFind:    true,
 		},
 	}
 
@@ -247,9 +251,10 @@ func TestSafetyEdge_PathTraversalBypass(t *testing.T) {
 
 // TestSafetyEdge_RmFlagsObfuscation tests various rm flag combinations.
 func TestSafetyEdge_RmFlagsObfuscation(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
-		name string
-		cmd  string
+		name       string
+		cmd        string
 		shouldFind bool
 	}{
 		{
@@ -260,12 +265,12 @@ func TestSafetyEdge_RmFlagsObfuscation(t *testing.T) {
 		{
 			name:       "rm with r and f separated",
 			cmd:        `rm -r -f /`,
-			shouldFind: false, // regex expects -rf combined
+			shouldFind: true, // order-independent detection catches -r and -f in any order
 		},
 		{
 			name:       "rm with flags: -fir",
 			cmd:        `rm -fir /var`,
-			shouldFind: false, // regex expects -rf pattern
+			shouldFind: true, // order-independent gate catches recursive+force on an absolute path
 		},
 		{
 			name:       "rm with flags: -riF",
@@ -301,9 +306,10 @@ func TestSafetyEdge_RmFlagsObfuscation(t *testing.T) {
 
 // TestSafetyEdge_NoPreserveRootBypass tests --no-preserve-root variations.
 func TestSafetyEdge_NoPreserveRootBypass(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
-		name string
-		cmd  string
+		name       string
+		cmd        string
 		shouldFind bool
 	}{
 		{
@@ -345,9 +351,10 @@ func TestSafetyEdge_NoPreserveRootBypass(t *testing.T) {
 
 // TestSafetyEdge_ForkBombVariations tests various fork bomb patterns.
 func TestSafetyEdge_ForkBombVariations(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
-		name string
-		cmd  string
+		name       string
+		cmd        string
 		shouldFind bool
 	}{
 		{
@@ -392,9 +399,10 @@ func TestSafetyEdge_ForkBombVariations(t *testing.T) {
 
 // TestSafetyEdge_MkfsVariations tests mkfs variations and edge cases.
 func TestSafetyEdge_MkfsVariations(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
-		name string
-		cmd  string
+		name       string
+		cmd        string
 		shouldFind bool
 	}{
 		{
@@ -454,9 +462,10 @@ func TestSafetyEdge_MkfsVariations(t *testing.T) {
 
 // TestSafetyEdge_SysrqVariations tests sysrq-trigger variations.
 func TestSafetyEdge_SysrqVariations(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
-		name string
-		cmd  string
+		name       string
+		cmd        string
 		shouldFind bool
 	}{
 		{
@@ -511,9 +520,10 @@ func TestSafetyEdge_SysrqVariations(t *testing.T) {
 
 // TestSafetyEdge_MultipleViolations tests commands with multiple dangerous patterns.
 func TestSafetyEdge_MultipleViolations(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
-		name string
-		cmd  string
+		name          string
+		cmd           string
 		expectedLabel string
 	}{
 		{
@@ -550,6 +560,7 @@ func TestSafetyEdge_MultipleViolations(t *testing.T) {
 
 // TestSafetyEdge_SecretEdgeCasesLengths tests edge cases around minimum lengths.
 func TestSafetyEdge_SecretEdgeCasesLengths(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name       string
 		content    string
@@ -599,6 +610,7 @@ func TestSafetyEdge_SecretEdgeCasesLengths(t *testing.T) {
 
 // TestSafetyEdge_PrivateKeyVariations tests different private key formats.
 func TestSafetyEdge_PrivateKeyVariations(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name       string
 		content    string
@@ -653,6 +665,7 @@ func TestSafetyEdge_PrivateKeyVariations(t *testing.T) {
 
 // TestSafetyEdge_CredentialVariations tests various credential patterns.
 func TestSafetyEdge_CredentialVariations(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name       string
 		content    string
@@ -707,6 +720,7 @@ func TestSafetyEdge_CredentialVariations(t *testing.T) {
 
 // TestSafetyEdge_EmptyAndWhitespace tests handling of empty and whitespace inputs.
 func TestSafetyEdge_EmptyAndWhitespace(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name       string
 		content    string
@@ -751,6 +765,7 @@ func TestSafetyEdge_EmptyAndWhitespace(t *testing.T) {
 
 // TestSafetyEdge_CheckSafetyEmptyAndWhitespace tests CheckSafety with empty/whitespace.
 func TestSafetyEdge_CheckSafetyEmptyAndWhitespace(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name       string
 		cmd        string
@@ -788,6 +803,7 @@ func TestSafetyEdge_CheckSafetyEmptyAndWhitespace(t *testing.T) {
 
 // TestSafetyEdge_LongInputs tests handling of very long inputs.
 func TestSafetyEdge_LongInputs(t *testing.T) {
+	t.Parallel()
 	// Create a long safe string
 	longSafeString := ""
 	for i := 0; i < 10000; i++ {
@@ -828,6 +844,7 @@ func TestSafetyEdge_LongInputs(t *testing.T) {
 
 // TestSafetyEdge_CheckSafetyLongInputs tests CheckSafety with very long commands.
 func TestSafetyEdge_CheckSafetyLongInputs(t *testing.T) {
+	t.Parallel()
 	longSafeCommand := ""
 	for i := 0; i < 5000; i++ {
 		longSafeCommand += "# comment\n"

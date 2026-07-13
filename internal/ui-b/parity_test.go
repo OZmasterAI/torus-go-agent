@@ -11,6 +11,7 @@ import (
 )
 
 func TestAllKeybindingsExist(t *testing.T) {
+	t.Parallel()
 	m := NewModel(nil, "test", config.AgentConfig{}, nil, nil)
 	m.width, m.height, m.ready = 80, 24, true
 
@@ -25,6 +26,7 @@ func TestAllKeybindingsExist(t *testing.T) {
 }
 
 func TestPgUpPgDownDoNotPanic(t *testing.T) {
+	t.Parallel()
 	m := NewModel(nil, "test", config.AgentConfig{}, nil, nil)
 	m.width, m.height, m.ready = 80, 24, true
 	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyPgUp})
@@ -32,6 +34,7 @@ func TestPgUpPgDownDoNotPanic(t *testing.T) {
 }
 
 func TestSlashOpenspalette(t *testing.T) {
+	t.Parallel()
 	m := NewModel(nil, "test", config.AgentConfig{}, nil, nil)
 	m.width, m.height, m.ready = 80, 24, true
 	newM, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("/")})
@@ -42,6 +45,7 @@ func TestSlashOpenspalette(t *testing.T) {
 }
 
 func TestQuestionMarkOpensHelp(t *testing.T) {
+	t.Parallel()
 	m := NewModel(nil, "test", config.AgentConfig{}, nil, nil)
 	m.width, m.height, m.ready = 80, 24, true
 	newM, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("?")})
@@ -55,6 +59,7 @@ func TestQuestionMarkOpensHelp(t *testing.T) {
 }
 
 func TestSkillsCommandInPalette(t *testing.T) {
+	t.Parallel()
 	// Verify /skills appears in the command palette.
 	items := DefaultPaletteCommands(nil)
 	found := false
@@ -70,6 +75,7 @@ func TestSkillsCommandInPalette(t *testing.T) {
 }
 
 func TestSkillsInPaletteWithRegistry(t *testing.T) {
+	t.Parallel()
 	// When skills are loaded, they should appear in the palette.
 	sr := features.NewSkillRegistry("/nonexistent") // empty registry, no error
 	items := DefaultPaletteCommands(sr)
@@ -88,6 +94,7 @@ func TestSkillsInPaletteWithRegistry(t *testing.T) {
 }
 
 func TestSkillsCommandRoute(t *testing.T) {
+	t.Parallel()
 	// Verify /skills routes correctly through executeCommand.
 	m := NewModel(nil, "test", config.AgentConfig{}, nil, nil)
 	m.width, m.height, m.ready = 80, 24, true
@@ -107,6 +114,7 @@ func TestSkillsCommandRoute(t *testing.T) {
 }
 
 func TestSteerPlusFlagParityWithOriginal(t *testing.T) {
+	t.Parallel()
 	// The original TUI shows 5 flags: Smart, Compress, Zones, Compact, Steer+.
 	// Verify TUI-B sidebar renders all 5.
 	s := newSidebarModel(DefaultTheme(), config.AgentConfig{})

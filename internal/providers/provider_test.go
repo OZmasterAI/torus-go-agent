@@ -55,6 +55,7 @@ func newFailingMock(name, model string) *mockProvider {
 // --- Tests ---
 
 func TestNewRouter(t *testing.T) {
+	t.Parallel()
 	p := newMock("openai", "gpt-4")
 	r := NewRouter(p)
 
@@ -74,6 +75,7 @@ func TestNewRouter(t *testing.T) {
 }
 
 func TestAddProvider(t *testing.T) {
+	t.Parallel()
 	p1 := newMock("openai", "gpt-4")
 	p2 := newMock("anthropic", "claude-4")
 	r := NewRouter(p1)
@@ -92,6 +94,7 @@ func TestAddProvider(t *testing.T) {
 }
 
 func TestSwitch(t *testing.T) {
+	t.Parallel()
 	p1 := newMock("openai", "gpt-4")
 	p2 := newMock("anthropic", "claude-4")
 	r := NewRouter(p1)
@@ -125,6 +128,7 @@ func TestSwitch(t *testing.T) {
 }
 
 func TestActive(t *testing.T) {
+	t.Parallel()
 	p := newMock("grok", "grok-3")
 	r := NewRouter(p)
 
@@ -138,6 +142,7 @@ func TestActive(t *testing.T) {
 }
 
 func TestSetWeightsAndIsWeighted(t *testing.T) {
+	t.Parallel()
 	p1 := newMock("openai", "gpt-4")
 	p2 := newMock("anthropic", "claude-4")
 	r := NewRouter(p1)
@@ -179,6 +184,7 @@ func TestSetWeightsAndIsWeighted(t *testing.T) {
 }
 
 func TestCompleteSuccess(t *testing.T) {
+	t.Parallel()
 	p := newMock("openai", "gpt-4")
 	r := NewRouter(p)
 
@@ -195,6 +201,7 @@ func TestCompleteSuccess(t *testing.T) {
 }
 
 func TestCompleteFallback(t *testing.T) {
+	t.Parallel()
 	failing := newFailingMock("openai", "gpt-4")
 	backup := newMock("anthropic", "claude-4")
 	r := NewRouter(failing)
@@ -217,6 +224,7 @@ func TestCompleteFallback(t *testing.T) {
 }
 
 func TestCompleteAllFail(t *testing.T) {
+	t.Parallel()
 	p1 := newFailingMock("openai", "gpt-4")
 	p2 := newFailingMock("anthropic", "claude-4")
 	r := NewRouter(p1)
@@ -234,6 +242,7 @@ func TestCompleteAllFail(t *testing.T) {
 }
 
 func TestStreamCompleteSuccess(t *testing.T) {
+	t.Parallel()
 	p := newMock("openai", "gpt-4")
 	r := NewRouter(p)
 
@@ -252,6 +261,7 @@ func TestStreamCompleteSuccess(t *testing.T) {
 }
 
 func TestStreamCompleteFallback(t *testing.T) {
+	t.Parallel()
 	failing := newFailingMock("openai", "gpt-4")
 	backup := newMock("anthropic", "claude-4")
 	r := NewRouter(failing)
@@ -276,6 +286,7 @@ func TestStreamCompleteFallback(t *testing.T) {
 }
 
 func TestStreamCompleteAllFail(t *testing.T) {
+	t.Parallel()
 	p1 := newFailingMock("openai", "gpt-4")
 	p2 := newFailingMock("anthropic", "claude-4")
 	r := NewRouter(p1)
@@ -292,6 +303,7 @@ func TestStreamCompleteAllFail(t *testing.T) {
 }
 
 func TestSetFallbackOrder(t *testing.T) {
+	t.Parallel()
 	p1 := newFailingMock("a", "1")
 	p2 := newFailingMock("b", "2")
 	p3 := newMock("c", "3")
@@ -323,6 +335,7 @@ func TestSetFallbackOrder(t *testing.T) {
 }
 
 func TestSetFallbackOrderNil(t *testing.T) {
+	t.Parallel()
 	failing := newFailingMock("openai", "gpt-4")
 	backup := newMock("anthropic", "claude-4")
 	r := NewRouter(failing)
@@ -345,6 +358,7 @@ func TestSetFallbackOrderNil(t *testing.T) {
 }
 
 func TestCompleteNoFallbackOnSuccess(t *testing.T) {
+	t.Parallel()
 	primary := newMock("openai", "gpt-4")
 	backup := newMock("anthropic", "claude-4")
 	r := NewRouter(primary)

@@ -7,6 +7,7 @@ import (
 )
 
 func TestStatusModelProgressBar(t *testing.T) {
+	t.Parallel()
 	s := newStatusModel(DefaultTheme())
 	s.processing = true
 	s.startTime = time.Now().Add(-3 * time.Second)
@@ -17,6 +18,7 @@ func TestStatusModelProgressBar(t *testing.T) {
 }
 
 func TestStatusModelCompletion(t *testing.T) {
+	t.Parallel()
 	s := newStatusModel(DefaultTheme())
 	s.lastElapsed = 1200 * time.Millisecond
 	view := s.renderCompletion()
@@ -26,6 +28,7 @@ func TestStatusModelCompletion(t *testing.T) {
 }
 
 func TestStatusModelRenderStatusBar(t *testing.T) {
+	t.Parallel()
 	s := newStatusModel(DefaultTheme())
 	bar := s.renderStatusBar(StatusBarData{
 		Width:     80,
@@ -41,6 +44,7 @@ func TestStatusModelRenderStatusBar(t *testing.T) {
 }
 
 func TestStatusModelProcessingOrCompletion(t *testing.T) {
+	t.Parallel()
 	s := newStatusModel(DefaultTheme())
 
 	// Not processing, no elapsed -> empty
@@ -69,6 +73,7 @@ func TestStatusModelProcessingOrCompletion(t *testing.T) {
 // ── Feature #17: lastInputTokens tracking ────────────────────────────────────
 
 func TestStatusBarCtxPercentage(t *testing.T) {
+	t.Parallel()
 	s := newStatusModel(DefaultTheme())
 	bar := s.renderStatusBar(StatusBarData{
 		Width:           120,
@@ -87,6 +92,7 @@ func TestStatusBarCtxPercentage(t *testing.T) {
 // ── Feature #1: CTX progress bar ─────────────────────────────────────────────
 
 func TestRenderCtxBar(t *testing.T) {
+	t.Parallel()
 	s := newStatusModel(DefaultTheme())
 	bar := s.renderCtxBar(50.0)
 	// Bar should be 12 characters of block elements.
@@ -99,6 +105,7 @@ func TestRenderCtxBar(t *testing.T) {
 }
 
 func TestRenderCtxBarZero(t *testing.T) {
+	t.Parallel()
 	s := newStatusModel(DefaultTheme())
 	bar := s.renderCtxBar(0.0)
 	if strings.ContainsRune(bar, '\u2588') {
@@ -107,6 +114,7 @@ func TestRenderCtxBarZero(t *testing.T) {
 }
 
 func TestRenderCtxBarFull(t *testing.T) {
+	t.Parallel()
 	s := newStatusModel(DefaultTheme())
 	bar := s.renderCtxBar(100.0)
 	if strings.ContainsRune(bar, '\u2591') {
@@ -117,6 +125,7 @@ func TestRenderCtxBarFull(t *testing.T) {
 // ── Feature #2: Turn count ──────────────────────────────────────────────────
 
 func TestStatusBarTurnCount(t *testing.T) {
+	t.Parallel()
 	s := newStatusModel(DefaultTheme())
 	bar := s.renderStatusBar(StatusBarData{
 		Width:     120,
@@ -131,6 +140,7 @@ func TestStatusBarTurnCount(t *testing.T) {
 }
 
 func TestStatusBarNoTurnCountWhenZeroTokens(t *testing.T) {
+	t.Parallel()
 	s := newStatusModel(DefaultTheme())
 	bar := s.renderStatusBar(StatusBarData{
 		Width:     120,
@@ -148,6 +158,7 @@ func TestStatusBarNoTurnCountWhenZeroTokens(t *testing.T) {
 // ── Feature #3: Session elapsed time ────────────────────────────────────────
 
 func TestStatusBarSessionElapsed(t *testing.T) {
+	t.Parallel()
 	s := newStatusModel(DefaultTheme())
 	bar := s.renderStatusBar(StatusBarData{
 		Width:        120,
@@ -176,6 +187,7 @@ func TestStatusBarSessionElapsedSeconds(t *testing.T) {
 // ── Feature #4: Next-prompt cost estimate ───────────────────────────────────
 
 func TestStatusBarNextEstimate(t *testing.T) {
+	t.Parallel()
 	s := newStatusModel(DefaultTheme())
 	bar := s.renderStatusBar(StatusBarData{
 		Width:        120,
@@ -192,6 +204,7 @@ func TestStatusBarNextEstimate(t *testing.T) {
 }
 
 func TestStatusBarNoNextEstimateWhileProcessing(t *testing.T) {
+	t.Parallel()
 	s := newStatusModel(DefaultTheme())
 	bar := s.renderStatusBar(StatusBarData{
 		Width:        120,
@@ -207,6 +220,7 @@ func TestStatusBarNoNextEstimateWhileProcessing(t *testing.T) {
 // ── Feature #6: Thinking verbosity indicator ────────────────────────────────
 
 func TestStatusBarVerbosityIndicator(t *testing.T) {
+	t.Parallel()
 	s := newStatusModel(DefaultTheme())
 	bar := s.renderStatusBar(StatusBarData{
 		Width:          120,
@@ -220,6 +234,7 @@ func TestStatusBarVerbosityIndicator(t *testing.T) {
 }
 
 func TestStatusBarNoVerbosityWhenCompact(t *testing.T) {
+	t.Parallel()
 	s := newStatusModel(DefaultTheme())
 	bar := s.renderStatusBar(StatusBarData{
 		Width:          120,
@@ -233,6 +248,7 @@ func TestStatusBarNoVerbosityWhenCompact(t *testing.T) {
 }
 
 func TestStatusBarFullVerbosity(t *testing.T) {
+	t.Parallel()
 	s := newStatusModel(DefaultTheme())
 	bar := s.renderStatusBar(StatusBarData{
 		Width:          120,
@@ -248,6 +264,7 @@ func TestStatusBarFullVerbosity(t *testing.T) {
 // ── Feature: Scroll hint ────────────────────────────────────────────────────
 
 func TestStatusBarScrollHint(t *testing.T) {
+	t.Parallel()
 	s := newStatusModel(DefaultTheme())
 	bar := s.renderStatusBar(StatusBarData{
 		Width:     80,

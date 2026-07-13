@@ -6,6 +6,7 @@ import (
 )
 
 func TestInputModelPlaceholder(t *testing.T) {
+	t.Parallel()
 	m := newInputModel(DefaultTheme(), 80)
 	view := m.View()
 	if !strings.Contains(view, "Type a message...") {
@@ -14,6 +15,7 @@ func TestInputModelPlaceholder(t *testing.T) {
 }
 
 func TestInputModelSetValue(t *testing.T) {
+	t.Parallel()
 	m := newInputModel(DefaultTheme(), 80)
 	m.SetValue("hello world")
 	if m.Value() != "hello world" {
@@ -25,6 +27,7 @@ func TestInputModelSetValue(t *testing.T) {
 }
 
 func TestInputModelClear(t *testing.T) {
+	t.Parallel()
 	m := newInputModel(DefaultTheme(), 80)
 	m.SetValue("some text")
 	m.Clear()
@@ -37,6 +40,7 @@ func TestInputModelClear(t *testing.T) {
 }
 
 func TestInputModelInsertAtCursor(t *testing.T) {
+	t.Parallel()
 	m := newInputModel(DefaultTheme(), 80)
 	m.insertAtCursor("abc")
 	if m.Value() != "abc" {
@@ -50,6 +54,7 @@ func TestInputModelInsertAtCursor(t *testing.T) {
 }
 
 func TestInputModelAutocomplete(t *testing.T) {
+	t.Parallel()
 	m := newInputModel(DefaultTheme(), 80)
 	m.SetValue("@ma")
 	m.triggerAutocomplete([]string{"main.go", "Makefile", "README.md"})
@@ -59,6 +64,7 @@ func TestInputModelAutocomplete(t *testing.T) {
 }
 
 func TestInputModelResize(t *testing.T) {
+	t.Parallel()
 	m := newInputModel(DefaultTheme(), 80)
 	m.Resize(120)
 	if m.width != 120 {

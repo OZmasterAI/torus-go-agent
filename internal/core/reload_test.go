@@ -9,6 +9,7 @@ import (
 )
 
 func TestReloadSystemPrompt(t *testing.T) {
+	t.Parallel()
 	mp := &mockProvider{name: "mock", modelID: "m1", cannedText: "ok"}
 	agent, _ := newTestAgent(t, mp)
 	agent.config.SystemPrompt = "original prompt"
@@ -20,6 +21,7 @@ func TestReloadSystemPrompt(t *testing.T) {
 }
 
 func TestReloadSystemPrompt_HookInjectsContext(t *testing.T) {
+	t.Parallel()
 	mp := &mockProvider{name: "mock", modelID: "m1", cannedText: "ok"}
 	agent, _ := newTestAgent(t, mp)
 
@@ -36,6 +38,7 @@ func TestReloadSystemPrompt_HookInjectsContext(t *testing.T) {
 }
 
 func TestReloadSystemPrompt_HookFires(t *testing.T) {
+	t.Parallel()
 	mp := &mockProvider{name: "mock", modelID: "m1", cannedText: "ok"}
 	agent, _ := newTestAgent(t, mp)
 
@@ -82,12 +85,14 @@ func TestPromptReloader_DetectsChange(t *testing.T) {
 	// Wait for the reloader to pick it up.
 	time.Sleep(200 * time.Millisecond)
 
-	if agent.config.SystemPrompt != "reloaded prompt" {
-		t.Errorf("prompt = %q, want %q", agent.config.SystemPrompt, "reloaded prompt")
+	// Read via the locked getter — the reloader goroutine writes concurrently.
+	if got := agent.SystemPrompt(); got != "reloaded prompt" {
+		t.Errorf("prompt = %q, want %q", got, "reloaded prompt")
 	}
 }
 
 func TestPromptReloader_Stop(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	path := filepath.Join(dir, "prompt.txt")
 	os.WriteFile(path, []byte("initial"), 0644)
@@ -108,12 +113,13 @@ func TestPromptReloader_Stop(t *testing.T) {
 	time.Sleep(200 * time.Millisecond)
 
 	// Prompt should still be the original since we stopped before the change.
-	if agent.config.SystemPrompt == "should not load" {
+	if agent.SystemPrompt() == "should not load" {
 		t.Error("reloader should not have fired after Stop()")
 	}
 }
 
 func TestPromptReloader_MissingFile(t *testing.T) {
+	t.Parallel()
 	mp := &mockProvider{name: "mock", modelID: "m1", cannedText: "ok"}
 	agent, _ := newTestAgent(t, mp)
 	agent.config.SystemPrompt = "original"
@@ -126,7 +132,7 @@ func TestPromptReloader_MissingFile(t *testing.T) {
 	defer reloader.Stop()
 
 	time.Sleep(200 * time.Millisecond)
-	if agent.config.SystemPrompt != "original" {
+	if agent.SystemPrompt() != "original" {
 		t.Error("prompt should not change when watching non-existent file")
 	}
 }

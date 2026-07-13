@@ -9,6 +9,7 @@ import (
 
 // TestSkillsEdge_MissingSkillDirectory tests behavior with a missing skills directory.
 func TestSkillsEdge_MissingSkillDirectory(t *testing.T) {
+	t.Parallel()
 	nonexistent := "/nonexistent/skills/dir/that/does/not/exist"
 	sr := NewSkillRegistry(nonexistent)
 
@@ -32,6 +33,7 @@ func TestSkillsEdge_MissingSkillDirectory(t *testing.T) {
 
 // TestSkillsEdge_EmptySkillName tests handling of empty skill names.
 func TestSkillsEdge_EmptySkillName(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	defer os.RemoveAll(tmpDir)
 
@@ -56,6 +58,7 @@ func TestSkillsEdge_EmptySkillName(t *testing.T) {
 
 // TestSkillsEdge_SkillNameWithDots tests skill files with dots in their names.
 func TestSkillsEdge_SkillNameWithDots(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	defer os.RemoveAll(tmpDir)
 
@@ -81,6 +84,7 @@ func TestSkillsEdge_SkillNameWithDots(t *testing.T) {
 
 // TestSkillsEdge_SkillNameWithHyphens tests skill files with hyphens.
 func TestSkillsEdge_SkillNameWithHyphens(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	defer os.RemoveAll(tmpDir)
 
@@ -102,6 +106,7 @@ func TestSkillsEdge_SkillNameWithHyphens(t *testing.T) {
 
 // TestSkillsEdge_CaseSensitiveSkillNames tests that skill names are case-sensitive.
 func TestSkillsEdge_CaseSensitiveSkillNames(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	defer os.RemoveAll(tmpDir)
 
@@ -130,6 +135,7 @@ func TestSkillsEdge_CaseSensitiveSkillNames(t *testing.T) {
 
 // TestSkillsEdge_SkillCommandCaseSensitive tests that IsSkillCommand is case-sensitive.
 func TestSkillsEdge_SkillCommandCaseSensitive(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	defer os.RemoveAll(tmpDir)
 
@@ -158,6 +164,7 @@ func TestSkillsEdge_SkillCommandCaseSensitive(t *testing.T) {
 
 // TestSkillsEdge_DuplicateSkillFiles tests behavior when reloading with duplicate names (last one wins).
 func TestSkillsEdge_DuplicateSkillFiles(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	defer os.RemoveAll(tmpDir)
 
@@ -188,6 +195,7 @@ func TestSkillsEdge_DuplicateSkillFiles(t *testing.T) {
 
 // TestSkillsEdge_VeryLongSkillName tests handling of very long skill names.
 func TestSkillsEdge_VeryLongSkillName(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	defer os.RemoveAll(tmpDir)
 
@@ -211,6 +219,7 @@ func TestSkillsEdge_VeryLongSkillName(t *testing.T) {
 
 // TestSkillsEdge_SkillContentWithSpecialCharacters tests skills with special characters in content.
 func TestSkillsEdge_SkillContentWithSpecialCharacters(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	defer os.RemoveAll(tmpDir)
 
@@ -240,6 +249,7 @@ Escape sequences: \n \t \"quoted\"`
 
 // TestSkillsEdge_VeryLargeSkillContent tests handling of very large skill files.
 func TestSkillsEdge_VeryLargeSkillContent(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	defer os.RemoveAll(tmpDir)
 
@@ -266,6 +276,7 @@ func TestSkillsEdge_VeryLargeSkillContent(t *testing.T) {
 
 // TestSkillsEdge_SkillWithOnlyHeading tests skill that is just a heading.
 func TestSkillsEdge_SkillWithOnlyHeading(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	defer os.RemoveAll(tmpDir)
 
@@ -290,6 +301,7 @@ func TestSkillsEdge_SkillWithOnlyHeading(t *testing.T) {
 
 // TestSkillsEdge_MultipleHeadingLevels tests handling of different heading levels.
 func TestSkillsEdge_MultipleHeadingLevels(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	defer os.RemoveAll(tmpDir)
 
@@ -317,6 +329,7 @@ More content`
 
 // TestSkillsEdge_SkillWithBlankLinesInContent tests skill with many blank lines.
 func TestSkillsEdge_SkillWithBlankLinesInContent(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	defer os.RemoveAll(tmpDir)
 
@@ -348,6 +361,7 @@ Third paragraph.`
 
 // TestSkillsEdge_IsSkillCommand_MultipleSpaces tests command parsing with multiple spaces.
 func TestSkillsEdge_IsSkillCommand_MultipleSpaces(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	defer os.RemoveAll(tmpDir)
 
@@ -370,6 +384,7 @@ func TestSkillsEdge_IsSkillCommand_MultipleSpaces(t *testing.T) {
 
 // TestSkillsEdge_IsSkillCommand_TabsAndSpaces tests command with mixed whitespace.
 func TestSkillsEdge_IsSkillCommand_TabsAndSpaces(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	defer os.RemoveAll(tmpDir)
 
@@ -392,6 +407,7 @@ func TestSkillsEdge_IsSkillCommand_TabsAndSpaces(t *testing.T) {
 
 // TestSkillsEdge_FormatSkillPrompt_EmptyUserInput tests formatting with empty user input.
 func TestSkillsEdge_FormatSkillPrompt_EmptyUserInput(t *testing.T) {
+	t.Parallel()
 	skill := &Skill{
 		Name:    "test",
 		Content: "Instruction content",
@@ -414,6 +430,7 @@ func TestSkillsEdge_FormatSkillPrompt_EmptyUserInput(t *testing.T) {
 
 // TestSkillsEdge_FormatSkillPrompt_OnlyWhitespaceUserInput tests with whitespace-only input.
 func TestSkillsEdge_FormatSkillPrompt_OnlyWhitespaceUserInput(t *testing.T) {
+	t.Parallel()
 	skill := &Skill{
 		Name:    "test",
 		Content: "Instruction",
@@ -432,6 +449,7 @@ func TestSkillsEdge_FormatSkillPrompt_OnlyWhitespaceUserInput(t *testing.T) {
 
 // TestSkillsEdge_GetNilPointer tests that Get returns a pointer that can be safely used.
 func TestSkillsEdge_GetNilPointer(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	defer os.RemoveAll(tmpDir)
 
@@ -457,6 +475,7 @@ func TestSkillsEdge_GetNilPointer(t *testing.T) {
 
 // TestSkillsEdge_ListIsIndependent tests that List returns truly independent copies.
 func TestSkillsEdge_ListIsIndependent(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	defer os.RemoveAll(tmpDir)
 
@@ -488,6 +507,7 @@ func TestSkillsEdge_ListIsIndependent(t *testing.T) {
 
 // TestSkillsEdge_ReloadClearsOldSkills tests that Load() completely replaces old skills.
 func TestSkillsEdge_ReloadClearsOldSkills(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	defer os.RemoveAll(tmpDir)
 
@@ -535,6 +555,7 @@ func TestSkillsEdge_ReloadClearsOldSkills(t *testing.T) {
 
 // TestSkillsEdge_SkillFilepathPreserved tests that file path is correctly preserved.
 func TestSkillsEdge_SkillFilepathPreserved(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	defer os.RemoveAll(tmpDir)
 
@@ -556,6 +577,7 @@ func TestSkillsEdge_SkillFilepathPreserved(t *testing.T) {
 
 // TestSkillsEdge_RegistryWithEmptyDirString tests registry created with empty dir string.
 func TestSkillsEdge_RegistryWithEmptyDirString(t *testing.T) {
+	t.Parallel()
 	sr := NewSkillRegistry("")
 
 	if sr == nil {
@@ -578,15 +600,16 @@ func TestSkillsEdge_RegistryWithEmptyDirString(t *testing.T) {
 
 // TestSkillsEdge_MdFileWithoutExtension tests that files without .md are skipped.
 func TestSkillsEdge_SkipNonMarkdownFiles(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	defer os.RemoveAll(tmpDir)
 
 	files := map[string]string{
-		"skill.md":    "# Markdown\nContent",
-		"skill.txt":   "Not markdown",
-		"skill.MD":    "Wrong case",
-		"skill":       "No extension",
-		"skillmd":     "No dot",
+		"skill.md":     "# Markdown\nContent",
+		"skill.txt":    "Not markdown",
+		"skill.MD":     "Wrong case",
+		"skill":        "No extension",
+		"skillmd":      "No dot",
 		"skill.md.bak": "Backup file",
 	}
 
@@ -610,6 +633,7 @@ func TestSkillsEdge_SkipNonMarkdownFiles(t *testing.T) {
 
 // TestSkillsEdge_ParseSkillFile_OnlyNewlines tests parsing file with only newlines.
 func TestSkillsEdge_ParseSkillFile_OnlyNewlines(t *testing.T) {
+	t.Parallel()
 	name := "newlines"
 	filePath := "/tmp/newlines.md"
 	raw := "\n\n\n\n"
@@ -629,6 +653,7 @@ func TestSkillsEdge_ParseSkillFile_OnlyNewlines(t *testing.T) {
 
 // TestSkillsEdge_ParseSkillFile_WindowsLineEndings tests parsing with CRLF line endings.
 func TestSkillsEdge_ParseSkillFile_WindowsLineEndings(t *testing.T) {
+	t.Parallel()
 	name := "windows"
 	filePath := "/tmp/windows.md"
 	raw := "# Windows Heading\r\nContent line 1\r\nContent line 2"

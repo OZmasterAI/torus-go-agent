@@ -5,6 +5,7 @@ import (
 )
 
 func TestChatModelAddMessage(t *testing.T) {
+	t.Parallel()
 	c := newChatModel(DefaultTheme(), 80, 20)
 	c.AddMessage("user", "hello")
 	if len(c.messages) != 1 {
@@ -16,6 +17,7 @@ func TestChatModelAddMessage(t *testing.T) {
 }
 
 func TestChatModelAppendDelta(t *testing.T) {
+	t.Parallel()
 	c := newChatModel(DefaultTheme(), 80, 20)
 	c.AddMessage("assistant", "")
 	c.AppendDelta("hello ")
@@ -29,6 +31,7 @@ func TestChatModelAppendDelta(t *testing.T) {
 }
 
 func TestChatModelAddToolCard(t *testing.T) {
+	t.Parallel()
 	c := newChatModel(DefaultTheme(), 80, 20)
 	c.AddMessage("assistant", "")
 	c.AddToolCard(&ToolEvent{Name: "bash", Args: map[string]any{"command": "ls"}})
@@ -45,6 +48,7 @@ func TestChatModelAddToolCard(t *testing.T) {
 }
 
 func TestChatModelResize(t *testing.T) {
+	t.Parallel()
 	c := newChatModel(DefaultTheme(), 80, 20)
 	c.Resize(120, 30)
 	if c.viewport.Width != 120 {
@@ -53,6 +57,7 @@ func TestChatModelResize(t *testing.T) {
 }
 
 func TestChatModelThinkingEmbedded(t *testing.T) {
+	t.Parallel()
 	c := newChatModel(DefaultTheme(), 80, 20)
 	// Verify ThinkingModel is embedded and usable.
 	c.thinking.AppendDelta("hello thinking")
@@ -69,6 +74,7 @@ func TestChatModelThinkingEmbedded(t *testing.T) {
 }
 
 func TestChatModelRebuildWithThinking(t *testing.T) {
+	t.Parallel()
 	c := newChatModel(DefaultTheme(), 80, 20)
 	c.thinking.Verbosity = 1
 	c.thinking.AppendDelta("deep thought")
