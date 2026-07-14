@@ -19,8 +19,13 @@ const (
 	oauthClientID     = "9d1c250a-e61b-44d9-88ed-5944d1962f5e"
 	oauthAuthorizeURL = "https://claude.ai/oauth/authorize"
 	oauthTokenURL     = "https://console.anthropic.com/v1/oauth/token"
-	oauthRedirectURI  = "https://console.anthropic.com/oauth/code/callback"
-	oauthScopes       = "org:create_api_key user:profile user:inference"
+	oauthRedirectURI  = "https://platform.claude.com/oauth/code/callback"
+	// Current Claude Pro/Max subscription scopes. Anthropic rebranded
+	// console.anthropic.com -> platform.claude.com and dropped the
+	// org:create_api_key scope (Console-only) from the subscription flow;
+	// keeping the stale redirect_uri/scope made claude.ai reject the
+	// authorize request as "invalid request format". See coqu OAuth ref.
+	oauthScopes = "user:profile user:inference user:sessions:claude_code user:mcp_servers"
 
 	// tokenRefreshBuffer is the time before expiry to trigger a proactive refresh.
 	tokenRefreshBuffer = 5 * 60 * 1000 // 5 minutes in milliseconds
@@ -118,7 +123,13 @@ func buildAuthorizeURL(challenge, state string) string {
 		"code_challenge_method": {"S256"},
 		"state":                 {state},
 	}
-	return oauthAuthorizeURL + "?" + params.Encode()
+	// url.Values.Encode() encodes spaces in the scope as "+", but claude.ai's
+	// authorize *submit* handler parses scope strictly and reads "+" literally
+	// (one garbage scope instead of several) -> "invalid request format" after
+	// the user clicks Authorize. Anthropic requires "%20"-encoded spaces. None
+	// of our param values contain a literal "+" (state/challenge are
+	// RawURLEncoding, which uses -/_), so this replacement is safe.
+	return oauthAuthorizeURL + "?" + strings.ReplaceAll(params.Encode(), "+", "%20")
 }
 
 // parseCodeState splits a "code#state" string into its components.

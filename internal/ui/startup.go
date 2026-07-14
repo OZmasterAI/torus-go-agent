@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 	"torus_go_agent/internal/config"
+	"torus_go_agent/internal/providers"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -203,145 +204,33 @@ func modelsForAuthor(cats []ModelCategory, authorPrefix string) []ModelChoice {
 
 // ── NVIDIA NIM model fetching ────────────────────────────────────────────────
 
-type nvidiaNIMModelResp struct {
-	Data []nvidiaNIMModel `json:"data"`
-}
-
-type nvidiaNIMModel struct {
-	ID      string `json:"id"`
-	Object  string `json:"object"`
-	Created int64  `json:"created"`
-	OwnedBy string `json:"owned_by"`
-}
-
-// nvidiaNIMFreeModels lists model IDs confirmed free on build.nvidia.com.
-var nvidiaNIMFreeModels = map[string]bool{
-	"qwen/qwen3.5-122b-a10b":                         true,
-	"z-ai/glm4.7":                                    true,
-	"z-ai/glm5":                                      true,
-	"stepfun-ai/step-3.5-flash":                      true,
-	"minimaxai/minimax-m2.1":                         true,
-	"minimaxai/minimax-m2.5":                         true,
-	"deepseek-ai/deepseek-v3.2":                      true,
-	"deepseek-ai/deepseek-v3.1":                      true,
-	"deepseek-ai/deepseek-v3.1-terminus":             true,
-	"mistralai/devstral-2-123b-instruct-2512":        true,
-	"moonshotai/kimi-k2-thinking":                    true,
-	"moonshotai/kimi-k2-instruct":                    true,
-	"mistralai/mistral-large-3-675b-instruct-2512":   true,
-	"mistralai/magistral-small-2506":                 true,
-	"mistralai/mamba-codestral-7b-v01":               true,
-	"mistralai/mistral-nemo-minitron-8b-8k-instruct": true,
-	"bytedance/seed-oss-36b-instruct":                true,
-	"qwen/qwen3-coder-480b-a35b-instruct":            true,
-	"openai/gpt-oss-20b":                             true,
-	"openai/gpt-oss-120b":                            true,
-	"google/gemma-3-27b-it":                          true,
-	"google/gemma-2-2b-it":                           true,
-	"google/gemma-3n-e4b-it":                         true,
-	"google/shieldgemma-9b":                          true,
-	"igenius/colosseum_355b_instruct_16k":            true,
-	"tiiuae/falcon3-7b-instruct":                     true,
-	"igenius/italia_10b_instruct_16k":                true,
-	"nvidia/cosmos-nemotron-34b":                     true,
-	"nvidia/cosmos-reason2-8b":                       true,
-	"qwen/qwen2.5-coder-7b-instruct":                 true,
-	"qwen/qwen2-7b-instruct":                         true,
-	"abacusai/dracarys-llama-3.1-70b-instruct":       true,
-	"thudm/chatglm3-6b":                              true,
-	"baichuan-inc/baichuan2-13b-chat":                true,
-	"nvidia/nemotron-3-super-120b-a12b":              true,
-	"nvidia/nemotron-3-nano-30b-a3b":                 true,
-	"nvidia/nvidia-nemotron-nano-9b-v2":              true,
-	"nvidia/llama-3.3-nemotron-super-49b-v1":         true,
-	"nvidia/llama-3.3-nemotron-super-49b-v1.5":       true,
-	"nvidia/nemotron-content-safety-reasoning-4b":    true,
-	"nvidia/llama-3.1-nemotron-safety-guard-8b-v3":   true,
-	"nvidia/llama-3.1-nemotron-70b-reward":           true,
-	"marin/marin-8b-instruct":                        true,
-	"nv-mistralai/mistral-nemo-12b-instruct":         true,
-}
-
-// nvidiaNIMExcludeSubstrings lists substrings that identify non-chat models.
-var nvidiaNIMExcludeSubstrings = []string{
-	"embed", "bge", "nv-embed", "rerankqa", "reward", "neva", "nvclip",
-	"streampetr", "deplot", "paligemma", "kosmos", "nemoretriever",
-	"starcoder", "fuyu", "parse", "grounding-dino", "esm2", "diffdock",
-	"molmim", "genomics", "riva", "voicechat", "studiovoice", "eyecontact",
-	"parakeet", "canary", "vila", "cosmos-transfer", "genmol", "alphafold",
-	"openfold", "msa-search", "sparsedrive", "bevformer", "usdsearch",
-	"usdvalidate", "usdcode", "megatron-1b-nmt", "proteinmpnn",
-	"ai-generated-image", "stable-diffusion", "flux", "trellis",
-	"magpie-tts", "world-2", "arctic-embed",
-}
-
-// fetchNvidiaNIMModels fetches chat models from the NVIDIA NIM API and returns
-// them as categories: FREE MODELS first, then one category per owner.
-// Returns nil on error (caller falls back to hardcoded defaults).
+// fetchNvidiaNIMModels fetches chat models live from the NVIDIA NIM catalog and
+// returns them as categories: FREE MODELS first, then one category per owner.
+// NIM's /v1/models endpoint exposes no pricing/free flag, so every listed chat
+// model is treated as a free hosted endpoint — this is what makes the set
+// self-update as NVIDIA adds/removes models. Returns nil on error (caller falls
+// back to hardcoded defaults).
 func fetchNvidiaNIMModels() []ModelCategory {
-	client := &http.Client{Timeout: 8 * time.Second}
-	resp, err := client.Get("https://integrate.api.nvidia.com/v1/models")
-	if err != nil {
-		return nil
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != 200 {
+	chatModels := providers.FetchNvidiaNIMChatModels()
+	if len(chatModels) == 0 {
 		return nil
 	}
 
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil
-	}
-
-	var data nvidiaNIMModelResp
-	if json.Unmarshal(body, &data) != nil {
-		return nil
-	}
-
-	// Filter out non-chat models
-	var chatModels []nvidiaNIMModel
-	for _, m := range data.Data {
-		lower := strings.ToLower(m.ID)
-		excluded := false
-		for _, sub := range nvidiaNIMExcludeSubstrings {
-			if strings.Contains(lower, sub) {
-				excluded = true
-				break
-			}
-		}
-		if !excluded {
-			chatModels = append(chatModels, m)
-		}
-	}
-
-	// Sort by newest first
-	sort.Slice(chatModels, func(i, j int) bool {
-		return chatModels[i].Created > chatModels[j].Created
-	})
-
-	toChoice := func(m nvidiaNIMModel) ModelChoice {
-		tag := ""
-		if nvidiaNIMFreeModels[m.ID] {
-			tag = " [Free]"
-		}
+	toChoice := func(m providers.NvidiaNIMModel) ModelChoice {
 		return ModelChoice{
-			Name:          m.ID + tag,
+			Name:          m.ID + " [Free]",
 			ID:            m.ID,
 			ContextWindow: 0,
 			MaxTokens:     0,
 		}
 	}
 
-	// Build FREE MODELS category
+	// Build FREE MODELS category: router entry + every live chat model.
 	freeChoices := []ModelChoice{
 		{Name: "Free Models Router [Free]", ID: "nvidia/free", ContextWindow: 131072, MaxTokens: 8192},
 	}
 	for _, m := range chatModels {
-		if nvidiaNIMFreeModels[m.ID] {
-			freeChoices = append(freeChoices, toChoice(m))
-		}
+		freeChoices = append(freeChoices, toChoice(m))
 	}
 	freeChoices = append(freeChoices, ModelChoice{Name: "Custom model ID", ID: ""})
 
