@@ -87,17 +87,19 @@ type DataConfig struct {
 // Used by LoadConfig and the startup screen.
 func DefaultAgentConfig() AgentConfig {
 	return AgentConfig{
-		MaxTokens:             8192,
-		ContextWindow:         128000,
-		Compaction:            "llm",
-		CompactionTrigger:     "both",
-		CompactionThreshold:   65,
-		CompactionKeepLastN:   10,
-		ContinuousCompression: true,
-		CompressionKeepLast:   10,
-		ZoneBudgeting:         true,
-		ZoneArchivePercent:    25,
-		Thinking:              "high",
+		MaxTokens:              8192,
+		ContextWindow:          128000,
+		Compaction:             "llm",
+		CompactionTrigger:      "both",
+		CompactionThreshold:    85,
+		CompactionKeepLastN:    2,
+		ContinuousCompression:  true,
+		CompressionKeepFirst:   2,
+		CompressionKeepLast:    2,
+		CompressionMinMessages: 10,
+		ZoneBudgeting:          false,
+		ZoneArchivePercent:     25,
+		Thinking:               "high",
 	}
 }
 

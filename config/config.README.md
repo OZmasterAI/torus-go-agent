@@ -52,9 +52,9 @@ Compaction triggers when the conversation approaches the context window limit. I
 | `compaction` | string | `"llm"` | Compaction strategy. `"llm"` uses a language model to summarize |
 | `compactionModel` | string | `""` | Model used for LLM compaction. Empty = use the main model |
 | `compactionTrigger` | string | `"both"` | What triggers compaction: `"tokens"` (threshold %), `"messages"` (max count), or `"both"` (whichever fires first) |
-| `compactionThreshold` | int | `65` | Percentage of `contextWindow` that triggers token-based compaction |
+| `compactionThreshold` | int | `85` | Percentage of `contextWindow` that triggers token-based compaction |
 | `compactionMaxMessages` | int | `0` | Message count that triggers compaction. `0` = disabled (token-based only) |
-| `compactionKeepLastN` | int | `10` | Number of recent messages kept verbatim (not summarized) after compaction |
+| `compactionKeepLastN` | int | `2` | Number of recent messages kept verbatim (not summarized) after compaction |
 
 ### Continuous Compression (per-turn gradual)
 
@@ -63,8 +63,9 @@ Continuous compression runs every turn, gradually compressing older messages so 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
 | `continuousCompression` | bool | `true` | Enable per-turn gradual compression of older messages |
-| `compressionKeepLast` | int | `10` | Number of recent messages always kept verbatim by compression |
-| `compressionMinMessages` | int | `0` | Don't start compressing until this many messages exist. `0` = compress from `keepLast + 1` onward |
+| `compressionKeepFirst` | int | `2` | Number of messages after system prompt to always keep verbatim |
+| `compressionKeepLast` | int | `2` | Number of recent messages always kept verbatim by compression |
+| `compressionMinMessages.*10` | Don't start compressing until this many messages exist. `0` = compress from `keepLast + 1` onward |
 
 ### Zone Budgeting
 
@@ -72,7 +73,7 @@ Divides the usable context into zones (archive, working, recent) with configurab
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `zoneBudgeting` | bool | `true` | Enable zone-based token budget allocation |
+| `zoneBudgeting` | bool | `false` | Enable zone-based token budget allocation (superseded by unified compression) |
 | `zoneArchivePercent` | int | `25` | Percentage of usable budget allocated to the archive zone |
 
 ### Steering & Thinking
@@ -82,7 +83,7 @@ Divides the usable context into zones (archive, working, recent) with configurab
 | `steeringMode` | string | `""` | System prompt steering intensity. `"mild"` (default behavior) or `"aggressive"` |
 | `persistThinking` | bool | `false` | Store model thinking/reasoning blocks as DAG nodes for later inspection |
 | `thinking` | string | `""` | Extended thinking level (Anthropic only). `""` = off, `"low"` = 2048 budget, `"mid"` = 8192, `"high"` = 16384, `"max"` = 32768, `"ultra"` = 65536. Thinking tokens are billed as output tokens |
-| `thinkingBudget` | int | `0` | Explicit `budget_tokens` override. Takes precedence over `thinking` level if set. `0` = use level or disabled |
+| `thinkingBudget` | int | `30` | Explicit `budget_tokens` override. Takes precedence over `thinking` level if set. `0` = use level or disabled |
 
 ### Azure-Specific
 

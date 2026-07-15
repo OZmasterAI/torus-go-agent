@@ -462,6 +462,8 @@ func main() {
 		switch cfg.Agent.Compaction {
 		case "sliding":
 			compCfg.Mode = core.CompactionSliding
+		case "llm":
+			compCfg.Mode = core.CompactionLLM
 		case "off":
 			compCfg.Mode = core.CompactionOff
 		}
